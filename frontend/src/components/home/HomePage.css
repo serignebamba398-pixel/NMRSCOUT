@@ -1,0 +1,172 @@
+/* HomePage styles */
+.home-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.home-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.home-title {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.home-subtitle {
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+/* Warning box */
+.warning-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  background-color: #fef9e7;
+  border: 2px solid #f9e79f;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.warning-icon {
+  font-size: 2rem;
+}
+
+.warning-title {
+  font-weight: 600;
+  color: #856404;
+  margin-bottom: 0.5rem;
+}
+
+.warning-text {
+  color: #856404;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* Shortcuts grid */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.shortcut-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.5rem;
+  background-color: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.shortcut-card:not(.disabled):hover {
+  border-color: var(--blue-600);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.shortcut-card.disabled {
+  background-color: var(--surface-soft);
+  border-color: var(--gray-200);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.shortcut-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.shortcut-content {
+  flex: 1;
+}
+
+.shortcut-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.5rem;
+}
+
+.shortcut-card.disabled .shortcut-title {
+  color: var(--muted);
+}
+
+.shortcut-description {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.shortcut-card.disabled .shortcut-description {
+  color: var(--gray-300);
+}
+
+.shortcut-warning {
+  font-size: 0.75rem;
+  color: var(--red-600);
+  margin-top: 0.5rem;
+}
+
+/* Project info box */
+.project-info-box {
+  background-color: var(--green-100);
+  border: 1px solid var(--green-600);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 1.5rem;
+}
+
+.project-info-title {
+  font-weight: 600;
+  color: var(--green-700);
+  margin-bottom: 0.75rem;
+}
+
+.project-info-content {
+  font-size: 0.875rem;
+  color: var(--green-700);
+}
+
+.project-path {
+  font-family: monospace;
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.project-info-label {
+  font-size: 0.75rem;
+  color: var(--green-700);
+  margin-bottom: 0.25rem;
+}
+
+.project-folders {
+  list-style: none;
+  padding-left: 1rem;
+  margin: 0.5rem 0 0 0;
+}
+
+.project-folders li {
+  font-size: 0.75rem;
+  color: var(--green-700);
+  margin-bottom: 0.25rem;
+}
+
+.project-folders code {
+  background-color: rgba(22, 163, 74, 0.1);
+  padding: 0.125rem 0.25rem;
+  border-radius: 4px;
+  font-family: monospace;
+}

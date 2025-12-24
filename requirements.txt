@@ -1,0 +1,273 @@
+# requirements.txt - Dépendances complètes pour le système NMR ML
+# Mise à jour : Juillet 2025
+# Compatible Python 3.8+
+
+# ============================================================================
+# CORE ML FRAMEWORKS - Modèles de prédiction NMR
+# ============================================================================
+
+# PyTorch - Framework ML principal (CPU uniquement pour éviter les conflits CUDA)
+torch>=1.9.0,<2.1.0
+torchvision>=0.10.0,<0.16.0
+torchaudio>=0.9.0,<2.1.0
+
+# DGL - Deep Graph Library pour les réseaux de neurones graphiques
+dgl>=0.9.0,<1.2.0
+dgllife>=0.3.0,<0.4.0
+
+# ============================================================================
+# CHIMIE COMPUTATIONNELLE - RDKit et molécules
+# ============================================================================
+
+# RDKit - Chimie computationnelle et manipulation de molécules
+rdkit-pypi>=2022.3.5,<2024.1.0
+
+# Alternative si rdkit-pypi ne fonctionne pas (décommenter si nécessaire)
+# rdkit>=2022.03.5
+
+# ============================================================================
+# DATA SCIENCE & NUMERICAL COMPUTING
+# ============================================================================
+
+# NumPy - Calculs numériques
+numpy>=1.21.0,<1.26.0
+
+# Pandas - Manipulation de données et DataFrames
+pandas>=1.3.0,<2.2.0
+
+# SciPy - Fonctions scientifiques avancées
+scipy>=1.7.0,<1.12.0
+
+# Scikit-learn - Algorithmes ML complémentaires et métriques
+scikit-learn>=1.0.0,<1.4.0
+
+# ============================================================================
+# VISUALIZATION & PLOTTING
+# ============================================================================
+
+# Matplotlib - Graphiques et visualisations
+matplotlib>=3.5.0,<3.8.0
+
+# Seaborn - Visualisations statistiques
+seaborn>=0.11.0,<0.13.0
+
+# Plotly - Graphiques interactifs (optionnel)
+plotly>=5.0.0,<5.18.0
+
+# ============================================================================
+# FILE I/O & DATA FORMATS
+# ============================================================================
+
+# Openpyxl - Lecture/écriture fichiers Excel
+openpyxl>=3.0.0,<3.2.0
+
+# XlsxWriter - Écriture avancée fichiers Excel
+xlsxwriter>=3.0.0,<3.2.0
+
+# PyYAML - Fichiers de configuration YAML
+pyyaml>=6.0,<6.1
+
+# H5py - Fichiers HDF5 (pour certains datasets)
+h5py>=3.6.0,<3.10.0
+
+# ============================================================================
+# PROGRESS & LOGGING
+# ============================================================================
+
+# Tqdm - Barres de progression
+tqdm>=4.62.0,<4.67.0
+
+# Colorama - Couleurs dans le terminal
+colorama>=0.4.4,<0.5.0
+
+# Rich - Terminal enrichi et logs colorés
+rich>=12.0.0,<14.0.0
+
+# ============================================================================
+# NETWORK & API
+# ============================================================================
+
+# Requests - Requêtes HTTP
+requests>=2.25.0,<2.32.0
+
+# urllib3 - Gestion URLs (dépendance de requests)
+urllib3>=1.26.0,<2.1.0
+
+# ============================================================================
+# PERFORMANCE & OPTIMIZATION
+# ============================================================================
+
+# Numba - Compilation JIT pour accélération
+numba>=0.56.0,<0.59.0
+
+# Psutil - Monitoring système et ressources
+psutil>=5.8.0,<5.10.0
+
+# Memory-profiler - Profiling mémoire
+memory-profiler>=0.60.0,<0.62.0
+
+# ============================================================================
+# MOLECULAR DESCRIPTORS & FINGERPRINTS
+# ============================================================================
+
+# Mordred - Descripteurs moléculaires avancés (optionnel)
+# mordred>=1.2.0,<1.3.0
+
+# ============================================================================
+# SYSTEM & UTILITIES
+# ============================================================================
+
+# Pillow - Traitement d'images
+pillow>=8.3.0,<10.1.0
+
+# Imageio - I/O images
+imageio>=2.19.0,<2.32.0
+
+# ============================================================================
+# TESTING & DEVELOPMENT
+# ============================================================================
+
+# Pytest - Framework de tests
+pytest>=6.2.0,<7.5.0
+
+# Pytest-cov - Coverage des tests
+pytest-cov>=3.0.0,<4.2.0
+
+# Black - Formatage de code
+black>=22.0.0,<23.10.0
+
+# Flake8 - Linting
+flake8>=4.0.0,<6.2.0
+
+# ============================================================================
+# JUPYTER & NOTEBOOKS (optionnel pour développement)
+# ============================================================================
+
+# Jupyter - Notebooks interactifs
+jupyter>=1.0.0,<1.1.0
+
+# IPython - Shell interactif amélioré
+ipython>=8.0.0,<8.16.0
+
+# ============================================================================
+# MOLECULAR SIMULATION & ADVANCED CHEMISTRY (optionnel)
+# ============================================================================
+
+# OpenEye - Toolkit chimie (licence commerciale requise)
+# openeye-toolkits
+
+# ChemPy - Chimie computationnelle Python
+# chempy>=0.8.0,<0.9.0
+
+# PubChemPy - Interface PubChem
+pubchempy>=1.0.4,<1.1.0
+
+# ============================================================================
+# GRAPH PROCESSING & ADVANCED ML
+# ============================================================================
+
+# NetworkX - Analyse de graphes
+networkx>=2.6.0,<3.2.0
+
+# Graph-tool (installation complexe, décommenter si nécessaire)
+# graph-tool
+
+# ============================================================================
+# COMPATIBILITY & SYSTEM
+# ============================================================================
+
+# Six - Compatibilité Python 2/3
+six>=1.16.0,<1.17.0
+
+# Setuptools - Outils de packaging
+setuptools>=60.0.0,<69.0.0
+
+# Wheel - Format de distribution Python
+wheel>=0.37.0,<0.42.0
+
+# ============================================================================
+# SECURITY & HASHING
+# ============================================================================
+
+# Cryptography - Fonctions cryptographiques
+cryptography>=3.4.0,<41.1.0
+
+# Hashlib - Fonctions de hachage (inclus dans Python standard)
+
+# ============================================================================
+# CONFIGURATION SPÉCIFIQUE SELON L'OS
+# ============================================================================
+
+# Windows uniquement
+# pywin32>=227; sys_platform == "win32"
+
+# Linux uniquement  
+# python-magic>=0.4.24; sys_platform == "linux"
+
+# macOS uniquement
+# pyobjc-framework-Cocoa>=8.0; sys_platform == "darwin"
+
+# ============================================================================
+# VERSIONS ALTERNATIVES SI PROBLÈMES DE COMPATIBILITÉ
+# ============================================================================
+
+# Si torch 1.9.0 pose problème, essayer :
+# torch==1.12.1
+# torchvision==0.13.1
+
+# Si DGL pose problème, essayer :
+# dgl==0.6.1
+
+# Si RDKit pose problème, essayer installation via conda :
+# conda install -c conda-forge rdkit
+
+# ============================================================================
+# NOTES D'INSTALLATION
+# ============================================================================
+
+# 1. Installer dans un environnement virtuel :
+#    python -m venv venv_nmr
+#    source venv_nmr/bin/activate  # Linux/Mac
+#    venv_nmr\Scripts\activate     # Windows
+
+# 2. Mettre à jour pip avant installation :
+#    pip install --upgrade pip
+
+# 3. Installer les dépendances :
+#    pip install -r requirements.txt
+
+# 4. En cas de problème avec PyTorch, installer manuellement :
+#    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# 5. En cas de problème avec RDKit, utiliser conda :
+#    conda install -c conda-forge rdkit
+
+# 6. Pour installer DGL avec support CPU uniquement :
+#    pip install dgl -f https://data.dgl.ai/wheels/repo.html
+
+# 7. Vérifier l'installation :
+#    python -c "import torch; import rdkit; import dgl; print('Installation OK')"
+
+# ============================================================================
+# TAILLES APPROXIMATIVES
+# ============================================================================
+# PyTorch + torchvision + torchaudio : ~500MB
+# RDKit : ~50MB  
+# DGL + dgllife : ~100MB
+# Pandas + numpy + scipy : ~100MB
+# Matplotlib + seaborn : ~50MB
+# Autres dépendances : ~200MB
+# TOTAL APPROXIMATIF : ~1GB
+
+# ============================================================================
+# COMMANDES DE VERIFICATION POST-INSTALLATION
+# ============================================================================
+
+# Verification basique :
+# python -c "import torch, rdkit, dgl, pandas, numpy, matplotlib; print('[OK] Toutes les dependances principales sont installees')"
+
+# Verification ML :
+# python -c "import torch; from rdkit import Chem; print('[OK] PyTorch:', torch.__version__); print('[OK] RDKit OK')"
+
+# Test complet :
+# python test_ml_system.py

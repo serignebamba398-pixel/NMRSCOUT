@@ -1,0 +1,92 @@
+{
+  "name": "nmr-annotation-desktop",
+  "version": "1.0.0",
+  "description": "NMR Annotation Desktop App",
+  "author": "Serigne SECK",
+  "main": "main.js",
+  "scripts": {
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\" \"npm run electron:wait\"",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm start",
+    "electron:wait": "wait-on http://localhost:3000 && electron .",
+    "build:python": "cd backend && powershell -ExecutionPolicy Bypass -File build_bundle_complete.ps1",
+    "build:frontend": "cd frontend && npm run build",
+    "pre-dist": "npm run build:python && npm run build:frontend",
+    "build:production": "npm run pre-dist && npm run dist",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.unc.nmrannotation",
+    "productName": "NMRScout",
+    "npmRebuild": false,
+    "icon": "assets/icon.ico",
+    "files": [
+      "main.js",
+      "preload.js",
+      "node_modules/**/*",
+      "backend/**/*",
+      "!backend/__pycache__",
+      "!backend/**/__pycache__",
+      "!backend/build",
+      "!backend/dist",
+      "!backend/*.spec",
+      "!backend/package.json",
+      "frontend/build/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "R-Portable",
+        "to": "R-Portable"
+      },
+      {
+        "from": "backend/dist/nmr_engine_production",
+        "to": "python"
+      },
+      {
+        "from": "backend/scripts",
+        "to": "scripts",
+        "filter": [
+          "**/*.R",
+          "**/*.py"
+        ]
+      },
+      {
+        "from": "backend/models",
+        "to": "models"
+      }
+    ],
+    "asarUnpack": [
+      "backend/scripts/**/*",
+      "backend/ml_dependencies/**/*"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "async-mutex": "^0.5.0",
+    "cors": "^2.8.5",
+    "csv-parse": "^6.1.0",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "tree-kill": "^1.2.2",
+    "unzipper": "^0.12.3",
+    "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0",
+    "wait-on": "^7.0.0"
+  }
+}

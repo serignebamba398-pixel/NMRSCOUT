@@ -1,0 +1,110 @@
+# Node.js
+**/node_modules/
+**/npm-debug.log*
+**/yarn-error.log*
+**/yarn.lock
+**/pnpm-lock.yaml
+**/.npm/
+**/.yarn/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/.Python
+**/venv/
+**/ENV/
+**/env/
+**/.venv/
+**/*.egg-info/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# R
+**/.Rhistory
+**/.RData
+**/.Rproj.user/
+
+# Build / Cache
+**/build/
+**/dist/
+**/.cache/
+**/.parcel-cache/
+**/.next/
+**/out/
+**/.nuxt/
+**/.vuepress/dist/
+**/.docusaurus/
+
+frontend/node_modules/
+frontend/build/
+frontend/.cache/
+
+backend/node_modules/
+backend/.cache/
+
+# Données runtime
+**/uploads/
+**/outputs/
+**/cache/
+**/logs/
+**/*.log
+
+# Environnement
+# **/.env          <-- COMMENTÉ : autorise backend/.env
+**/.env.*
+!.env.example
+!backend/.env.docker
+**/*.pem
+**/*.key
+**/*.cert
+
+# Git
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# Docker
+**/Dockerfile*
+**/docker-compose*.yml
+**/.dockerignore
+
+# IDE
+**/.vscode/
+**/.idea/
+**/*.swp
+**/*.swo
+**/*~
+**/.DS_Store
+**/.project
+**/.classpath
+**/.settings/
+
+# Documentation
+**/README*.md
+**/CHANGELOG*.md
+**/LICENSE
+**/docs/
+**/*.md
+!**/node_modules/**/README.md
+**/tests/
+**/test/
+**/__tests__/
+**/*.test.js
+**/*.spec.js
+
+# CI/CD
+**/.travis.yml
+**/.gitlab-ci.yml
+**/.circleci/
+**/.github/
+
+# Divers
+**/.editorconfig
+**/.eslintrc*
+**/.prettierrc*
+**/.stylelintrc*
+**/tsconfig.json
+**/jest.config.js

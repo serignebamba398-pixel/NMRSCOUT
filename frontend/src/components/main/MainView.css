@@ -1,0 +1,293 @@
+/* MainView - SIRIUS style layout */
+.main-view {
+  display: flex;
+  height: calc(100vh - 70px);
+  background: #f5f5f5;
+  overflow: hidden; /* Empêcher le défilement global */
+}
+
+.main-view-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 70px);
+  background: #f5f5f5;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+}
+
+.empty-icon {
+  font-size: 64px;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.empty-icon-svg {
+  display: block;
+  margin: 0 auto 16px auto;
+}
+
+.placeholder-icon-svg {
+  display: block;
+  margin: 0 auto 16px auto;
+}
+
+.empty-state h3 {
+  margin: 0 0 12px 0;
+  color: #333;
+  font-size: 20px;
+}
+
+.empty-state p {
+  margin: 0 0 16px 0;
+  color: #666;
+}
+
+.empty-steps {
+  text-align: left;
+  margin: 16px 0 0 0;
+  padding: 16px 16px 16px 32px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  list-style: none;
+}
+
+.empty-steps li {
+  margin: 8px 0;
+  color: #555;
+}
+
+/* Panel liste molécules */
+.molecule-list-panel {
+  width: 180px;
+  min-width: 140px;
+  max-width: 180px;
+  background: white;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e0e0e0;
+  gap: 8px;
+}
+
+.panel-title {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+  flex: 1;
+}
+
+.molecule-count {
+  background: #4a90d9;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.view-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: #e9ecef;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #555;
+  transition: all 0.2s;
+}
+
+.view-toggle-btn:hover {
+  background: #4a90d9;
+  color: white;
+}
+
+.molecule-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.loading-state,
+.empty-list {
+  padding: 20px;
+  text-align: center;
+  color: #888;
+  font-style: italic;
+}
+
+.molecule-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  box-sizing: border-box;
+}
+
+.molecule-item:hover {
+  background: #f0f4f8;
+}
+
+.molecule-item.selected {
+  background: #e3f2fd;
+  box-shadow: inset 3px 0 0 #4a90d9;
+}
+
+.molecule-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.molecule-name {
+  font-weight: 500;
+  color: #333;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.molecule-types {
+  display: flex;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.type-badge {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.type-1h {
+  background: #e3f2fd;
+  color: #1976d2;
+}
+
+.type-13c {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.type-cosy {
+  background: #fff3e0;
+  color: #f57c00;
+}
+
+.type-hsqc {
+  background: #fce4ec;
+  color: #c2185b;
+}
+
+/* Panel viewer */
+.viewer-panel {
+  flex: 1;
+  padding: 16px;
+  overflow: hidden; /* Le Viewer gère son propre défilement */
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-panel > div {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Champ de filtre style SIRIUS */
+.filter-container {
+  position: relative;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.filter-input {
+  width: 100%;
+  padding: 8px 28px 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.filter-input:focus {
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.1);
+}
+
+.filter-input::placeholder {
+  color: #aaa;
+}
+
+.filter-clear {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.filter-clear:hover {
+  color: #666;
+}
+
+.viewer-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #888;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+/* Scrollbar styling */
+.molecule-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.molecule-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.molecule-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.molecule-list::-webkit-scrollbar-thumb:hover {
+  background: #a1a1a1;
+}
