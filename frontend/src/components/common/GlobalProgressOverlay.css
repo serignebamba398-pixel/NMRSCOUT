@@ -1,0 +1,359 @@
+/* Overlay de progression globale - fenêtre flottante sans backdrop */
+.global-progress-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+/* Nouvelle version: pas de backdrop, juste une fenêtre flottante */
+.global-progress-floating {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none; /* Laisser passer les clics vers la page */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.global-progress-card {
+  background: white;
+  border-radius: 12px;
+  padding: 28px 36px;
+  min-width: 400px;
+  max-width: 500px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  animation: slideIn 0.3s ease;
+  pointer-events: auto; /* Réactiver les clics sur la carte */
+  user-select: none;
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.global-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.minimize-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: #f0f0f0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.minimize-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.minimize-btn.expand {
+  background: #4a90d9;
+  color: white;
+}
+
+.minimize-btn.expand:hover {
+  background: #357abd;
+}
+
+.global-progress-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.global-progress-spinner {
+  width: 36px;
+  height: 36px;
+}
+
+.spinner-svg {
+  width: 100%;
+  height: 100%;
+  animation: rotate 1.5s linear infinite;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinner-circle {
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+@keyframes dash {
+  0% {
+    stroke-dashoffset: 125.6;
+  }
+  50% {
+    stroke-dashoffset: 31.4;
+  }
+  100% {
+    stroke-dashoffset: 125.6;
+  }
+}
+
+.global-progress-bar-container {
+  width: 100%;
+  height: 12px;
+  background: #e8e8e8;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.global-progress-bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.global-progress-bar.prediction {
+  background: linear-gradient(90deg, #4a90d9 0%, #357abd 100%);
+}
+
+.global-progress-bar.annotation {
+  background: linear-gradient(90deg, #28a745 0%, #20863a 100%);
+}
+
+.global-progress-bar.optimization {
+  background: linear-gradient(90deg, #fd7e14 0%, #e06600 100%);
+}
+
+.global-progress-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.global-progress-percent {
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+  min-width: 60px;
+}
+
+.global-progress-message {
+  font-size: 13px;
+  color: #666;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.global-progress-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  font-style: italic;
+}
+
+/* Barres de progression par méthode (pour les annotations) */
+.method-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.method-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.method-progress-label {
+  font-weight: 700;
+  font-size: 13px;
+  min-width: 45px;
+  text-align: right;
+}
+
+.method-progress-bar-container {
+  flex: 1;
+  height: 10px;
+  background: #e8e8e8;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.method-progress-bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.2s ease;
+}
+
+.method-progress-bar.complete {
+  opacity: 0.7;
+}
+
+.method-progress-percent {
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  min-width: 40px;
+  text-align: right;
+}
+
+.global-progress-message-text {
+  font-size: 12px;
+  color: #666;
+  text-align: center;
+  margin-bottom: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Vue minimisée - petite barre compacte */
+.global-progress-minimized {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 10px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  user-select: none;
+  box-sizing: border-box;
+  width: 260px;
+  min-width: 260px;
+  max-width: 260px;
+  animation: slideUp 0.2s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.minimized-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.minimized-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #333;
+  min-width: 88px;
+}
+
+.minimized-percent {
+  font-weight: 700;
+  font-size: 14px;
+  color: #333;
+  min-width: 40px;
+}
+
+.minimized-bar-container {
+  flex: 1;
+  height: 8px;
+  background: #e8e8e8;
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 80px;
+}
+
+.minimized-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.2s ease;
+}
+
+.minimized-bar.prediction {
+  background: linear-gradient(90deg, #4a90d9 0%, #357abd 100%);
+}
+
+.minimized-bar.annotation {
+  background: linear-gradient(90deg, #28a745 0%, #20863a 100%);
+}
+
+.minimized-bar.optimization {
+  background: linear-gradient(90deg, #fd7e14 0%, #e06600 100%);
+}
+
+.btn-cancel-small {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: #dc3545;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.btn-cancel-small:hover {
+  background: #c82333;
+}
+
+.btn-cancel-small:disabled {
+  background: #999;
+  cursor: not-allowed;
+}

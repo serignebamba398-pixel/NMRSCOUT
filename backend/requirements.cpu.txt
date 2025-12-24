@@ -1,0 +1,15 @@
+# Noyau scientifique
+numpy>=1.23
+pandas>=1.5
+tqdm
+cairosvg
+torch==2.2.2
+
+# DGL CPU (compatible torch 2.2.x)
+dgl==2.1.0
+# utilitaires chimie (si utilisés par certains scripts)
+# utilitaires chimie (si utilisés par certains scripts)
+dgllife==0.3.2
+
+# RDKit : roue pip (marche souvent sous Win/CPU ; sinon voir message serveur -> conda)
+rdkit-pypi>=2022.9

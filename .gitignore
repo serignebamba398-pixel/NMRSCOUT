@@ -1,0 +1,85 @@
+# ===== OS / Editor =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+.claude/
+.vscode/
+.idea/
+
+# Windows reserved device filenames
+nul
+
+# ===== Secrets / Env =====
+.env
+.env.*
+!.env.example
+
+# ===== Node / JS (root + backend + frontend) =====
+node_modules/
+**/node_modules/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== React build outputs =====
+frontend/build/
+
+# ===== Electron / Packaging outputs =====
+dist/
+**/win-unpacked/
+dist_build_*/
+recovered_dist/
+recovered_src/
+dist_final/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# virtual environments
+.venv/
+venv/
+ENV/
+
+# ===== Python/Node generated bundles (if present) =====
+backend/build/
+backend/dist/
+
+# ===== Runtime data (uploads/outputs/cache) =====
+cache/
+backend/cache/
+outputs/
+backend/outputs/
+uploads/
+backend/uploads/
+
+# keep placeholders if you use them
+!.gitkeep
+
+# ===== R / temporary =====
+.Rhistory
+.RData
+.Ruserdata
+
+# R Portable is a large vendored runtime; usually don't commit
+R-Portable/
+
+# ===== Misc large artifacts =====
+*.log
+*.tmp
+*.bak
+
+# icon generation backups
+assets/icon.backup_*.ico
+
+# If you intentionally want to version logs, remove *.log above.

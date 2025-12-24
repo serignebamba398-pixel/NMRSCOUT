@@ -1,0 +1,148 @@
+# ==========================================
+# Backend: Node.js + R + Python (RDKit + PyTorch CPU)
+# Multi-arch OK : versions adaptées à l’arch
+# ==========================================
+FROM mambaorg/micromamba:1.5.5 AS base
+
+ARG TARGETARCH
+ENV TARGETARCH=${TARGETARCH}
+
+USER root
+SHELL ["/bin/bash", "-lc"]
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ------------------------------------------
+# 1) Dépendances système (R + outils de build)
+# ------------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates gnupg build-essential git pkg-config \
+    openjdk-17-jre-headless \
+    r-base r-base-dev \
+    libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libxt6 \
+    libxml2-dev libssl-dev libcurl4-openssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------
+# 2) Node.js 18 LTS
+# ------------------------------------------
+RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ------------------------------------------
+# 3) Environnement Python (conda) — RDKit/Python selon l'arch
+#    amd64 : python=3.10, rdkit=2022.09.5
+#    arm64 : python=3.11, rdkit>=2024.03
+# ------------------------------------------
+RUN if [ "${TARGETARCH}" = "arm64" ]; then \
+    PYVER="3.11"; RDSPEC="rdkit>=2024.03"; \
+    else \
+    PYVER="3.10"; RDSPEC="rdkit=2022.09.5"; \
+    fi && \
+    echo ">>> TARGETARCH=${TARGETARCH}  python=${PYVER}  RDKit:${RDSPEC}" && \
+    micromamba create -y -n nmr -c conda-forge \
+    python=${PYVER} \
+    ${RDSPEC} \
+    numpy scipy pandas scikit-learn \
+    && micromamba clean --all --yes
+
+ENV PATH="/opt/conda/envs/nmr/bin:${PATH}"
+ENV CONDA_DEFAULT_ENV=nmr
+ENV CUDA_VISIBLE_DEVICES=""   
+ENV DGLBACKEND="pytorch"
+
+# ------------------------------------------
+# 4) Préparation app
+# ------------------------------------------
+WORKDIR /app
+COPY backend/.env ./backend/.env
+
+# Dépendances Node.js
+COPY backend/package*.json ./backend/
+RUN cd backend && npm ci --omit=dev && npm cache clean --force
+
+# Dépendances Python (requirements SANS torch/torchdata/dgl)
+COPY backend/requirements.cpu.txt ./backend/
+RUN if [ -f "backend/requirements.cpu.txt" ]; then \
+    sed -i '/^[[:space:]]*torch[^a-zA-Z0-9_-]*/Id' backend/requirements.cpu.txt; \
+    sed -i '/^[[:space:]]*torchdata[^a-zA-Z0-9_-]*/Id' backend/requirements.cpu.txt; \
+    sed -i '/^[[:space:]]*dgl[^a-zA-Z0-9_-]*/Id' backend/requirements.cpu.txt; \
+    /opt/conda/envs/nmr/bin/pip install --no-cache-dir -r backend/requirements.cpu.txt; \
+    fi
+
+# ------------------------------------------
+# 5) Stack ML CPU – PyTorch/torchdata/DGL conditionnels
+#    arm64: torch==2.2.2 (sans +cpu) ; amd64: torch==2.2.2+cpu
+# ------------------------------------------
+RUN if [ "${TARGETARCH}" = "arm64" ]; then \
+    TORCH_SPEC="torch==2.2.2"; \
+    else \
+    TORCH_SPEC="torch==2.2.2+cpu"; \
+    fi && \
+    echo ">>> TARGETARCH=${TARGETARCH}  TORCH:${TORCH_SPEC}" && \
+    /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    ${TORCH_SPEC}
+
+RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+    "torchdata>=0.7,<0.8" \
+    pyyaml \
+    "pydantic<2"
+
+# DGL 2.2.1 (compatible torch 2.2.x CPU)
+# Le repo DGL contient des roues pour plusieurs arch ; on réutilise la même URL.
+RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+    dgl==2.2.1 -f https://data.dgl.ai/wheels/torch-2.2/repo.html
+
+# Outils spectre
+RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+    nmrglue matplotlib pillow
+
+# Vérif rapide des versions
+RUN /opt/conda/envs/nmr/bin/python - <<'PY'
+import importlib, torch
+print("Torch:", torch.__version__)
+dgl = importlib.import_module("dgl"); print("DGL:", dgl.__version__)
+td = importlib.import_module("torchdata"); print("torchdata:", td.__version__)
+import nmrglue as ng; print("nmrglue:", getattr(ng, "__version__", "ok"))
+PY
+
+# ------------------------------------------
+# 6) Packages R
+# ------------------------------------------
+RUN Rscript -e "options(repos='https://cloud.r-project.org'); install.packages(c( \
+    'data.table','jsonlite','readr','dplyr','stringr','tidyr', \
+    'doSNOW','doParallel','foreach','iterators','snow' \
+    ))"
+
+# ------------------------------------------
+# 7) Code source
+# ------------------------------------------
+COPY backend ./backend
+
+# Dossiers de travail
+RUN mkdir -p /app/backend/uploads /app/backend/outputs /app/backend/cache \
+    /app/backend/models  /app/backend/ml_dependencies \
+    && chmod -R 755 /app/backend
+
+# ------------------------------------------
+# 8) Env & Exposition
+# ------------------------------------------
+ENV PORT=4000 \
+    NODE_ENV=production \
+    R_PATH=/usr/bin/Rscript \
+    PRED_PYTHON=/opt/conda/envs/nmr/bin/python \
+    PYTHONIOENCODING=utf-8 \
+    PYTHONUTF8=1 \
+    PYTHONUNBUFFERED=1 \
+    OMP_NUM_THREADS=4 \
+    MKL_NUM_THREADS=4
+
+EXPOSE 4000
+WORKDIR /app/backend
+
+# ------------------------------------------
+# 9) Démarrage
+# ------------------------------------------
+CMD ["node", "server.js"]
