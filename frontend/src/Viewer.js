@@ -1,4 +1,4 @@
-﻿// src/Viewer.js - CORRECTED VERSION with timeouts, global color management, forced remount, reliable 2D reset
+// src/Viewer.js - CORRECTED VERSION with timeouts, global color management, forced remount, reliable 2D reset
 // + "Show all molecules" button with paginated modal sorted by RANSY average
 // Combined view NMR + 2D/3D Molecules + sidebar
 // - Rect zoom, 2D relevel on scroll, state persistence
@@ -16,7 +16,6 @@ import React, {
 } from "react";
 
 import {
-  make1DMapper,
   interactive1H,
   interactive13C,
   interactiveCOSY,
@@ -32,7 +31,6 @@ import {
 
 // Color constants and styles
 import {
-  COLOR_OPTIONS,
   DEFAULT_COLORS,
   METHOD_LABELS_SHORT,
   TYPE_LABELS,
@@ -42,15 +40,15 @@ import {
 } from "./constants/colors";
 
 // Utilitaires
-import { debugLog, debugWarn, debugError } from "./utils/debug";
-import { buildImgSrc, fetchWithRetry } from "./utils/imageUtils";
-import { hexToRgb255, rgb255ToHex, rgb255ToFloat } from "./utils/colorUtils";
+import { debugLog, debugWarn } from "./utils/debug";
+import { fetchWithRetry } from "./utils/imageUtils";
+// colorUtils used only in sub-components
 
 // Composants viewer
 import { Pill, ColorPicker, StickChart, Scatter2D } from "./components/viewer";
 
 // Hook de mesure
-import { useMeasureWidth } from "./hooks/useMeasureWidth";
+// useMeasureWidth used only in sub-components
 
 // Enable debug by typing in console: window.DEBUG_NMR = true
 if (typeof window !== 'undefined' && !window.hasOwnProperty('DEBUG_NMR')) {
