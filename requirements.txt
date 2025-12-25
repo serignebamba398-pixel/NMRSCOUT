@@ -118,7 +118,7 @@ memory-profiler>=0.60.0,<0.62.0
 # ============================================================================
 
 # Pillow - Traitement d'images
-pillow>=8.3.0,<10.1.0
+pillow>=8.3.0,<12.1.0
 
 # Imageio - I/O images
 imageio>=2.19.0,<2.32.0
