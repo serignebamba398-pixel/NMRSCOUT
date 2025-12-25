@@ -33,7 +33,7 @@ rdkit-pypi>=2022.3.5,<2024.1.0
 numpy>=1.21.0,<1.26.0
 
 # Pandas - Manipulation de données et DataFrames
-pandas>=1.3.0,<2.2.0
+pandas>=1.3.0,<2.4.0
 
 # SciPy - Fonctions scientifiques avancées
 scipy>=1.7.0,<1.12.0
