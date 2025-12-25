@@ -39,6 +39,11 @@ jobs:
           python -m pip install -r backend/requirements.cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
           python -m pip install pyinstaller
 
+      - name: Sanity check Python deps
+        shell: powershell
+        run: |
+          python -c "import numpy as np; print('numpy', np.__version__)"
+
       - name: Install Node deps (root)
         run: npm ci
 
