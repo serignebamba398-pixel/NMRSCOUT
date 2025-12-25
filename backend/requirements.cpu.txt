@@ -13,7 +13,7 @@ nmrglue>=0.9
 matplotlib>=3.5
 
 # DGL CPU (compatible torch 2.1.x)
-dgl==2.0.0
+dgl==2.2.1
 # utilitaires chimie (si utilisés par certains scripts)
 dgllife==0.3.2
 
