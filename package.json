@@ -10,6 +10,7 @@
     "start:frontend": "cd frontend && npm start",
     "electron:wait": "wait-on http://localhost:3000 && electron .",
     "verify:assets": "node scripts/verify_assets.js",
+    "verify:assets:strict": "node scripts/verify_assets.js --strict",
     "build:python": "cd backend && powershell -ExecutionPolicy Bypass -File build_bundle_complete.ps1",
     "build:frontend": "cd frontend && npm run build",
     "pre-dist": "npm run build:python && npm run build:frontend",

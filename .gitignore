@@ -79,6 +79,9 @@ R-Portable/
 *.tmp
 *.bak
 
+# backend writes this when LOG_DIR is not set
+backend-startup.log.txt
+
 # icon generation backups
 assets/icon.backup_*.ico
 
