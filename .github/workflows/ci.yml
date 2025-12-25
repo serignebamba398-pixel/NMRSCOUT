@@ -29,7 +29,7 @@ jobs:
       - run: npm run build
 
   backend_node:
-    name: Backend Node (install)
+    name: Backend Node (install + smoke)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,6 +42,31 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - name: Smoke test /health
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PORT=4000
+          export LOG_DIR="$RUNNER_TEMP/backend-logs"
+          export NODE_ENV=production
+          mkdir -p "$LOG_DIR"
+          node server.js >"$RUNNER_TEMP/backend.stdout.log" 2>"$RUNNER_TEMP/backend.stderr.log" &
+          pid=$!
+          for i in {1..30}; do
+            if curl -fsS "http://127.0.0.1:${PORT}/health" >/dev/null; then
+              echo "Backend OK"
+              kill "$pid" || true
+              wait "$pid" || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Backend failed to become ready"
+          echo "--- backend stdout ---"; cat "$RUNNER_TEMP/backend.stdout.log" || true
+          echo "--- backend stderr ---"; cat "$RUNNER_TEMP/backend.stderr.log" || true
+          kill "$pid" || true
+          wait "$pid" || true
+          exit 1
 
   python_smoke:
     name: Python (syntax check)
