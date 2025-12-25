@@ -22,7 +22,7 @@
     "appId": "com.unc.nmrannotation",
     "productName": "NMRScout",
     "npmRebuild": false,
-    "publish": "never",
+    "publish": null,
     "icon": "assets/icon.ico",
     "files": [
       "main.js",
