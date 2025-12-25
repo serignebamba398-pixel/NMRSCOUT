@@ -146,10 +146,14 @@ export const GlobalProgressOverlay = () => {
     const selectedMethods = annotationState?.selectedMethods || [];
     const message = annotationState?.globalProgressMessage || 'Initializing...';
     
-    // Filter only methods that are running
-    const activeMethods = ['1H', '13C', 'COSY', 'HSQC'].filter(m => 
-      selectedMethods.includes(m) || progressByMethod[m] !== undefined
-    );
+    // DEBUG: Log to understand the issue
+    console.log('[GlobalProgressOverlay] selectedMethods:', selectedMethods, 'progressByMethod keys:', Object.keys(progressByMethod));
+    
+    // Always show all selected methods, even if progress is 0 or undefined
+    // Fallback to checking progressByMethod keys if selectedMethods is empty
+    const activeMethods = selectedMethods.length > 0 
+      ? selectedMethods.filter(m => ['1H', '13C', 'COSY', 'HSQC'].includes(m))
+      : ['1H', '13C', 'COSY', 'HSQC'].filter(m => Object.prototype.hasOwnProperty.call(progressByMethod, m));
 
     // Calculate overall progress
     const totalProgress = activeMethods.length > 0 
