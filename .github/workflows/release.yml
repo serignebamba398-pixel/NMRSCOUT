@@ -19,21 +19,70 @@ jobs:
         with:
           lfs: false
 
-      - name: Fetch LFS model files
+      - name: Download ML models
         shell: powershell
+        env:
+          MODELS_ZIP_URL: ${{ secrets.MODELS_ZIP_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          # Only fetch the .pt model files to avoid bandwidth issues with other LFS files
-          git lfs install
-          git lfs pull --include="backend/models/*.pt"
-          # Verify models are real files (not LFS pointers)
-          $models = Get-ChildItem "backend/models/*.pt"
+          $modelsDir = "backend/models"
+          if (-not (Test-Path $modelsDir)) { New-Item -ItemType Directory -Path $modelsDir -Force }
+
+          # Check if models already exist and are real (not LFS pointers)
+          $existingModels = Get-ChildItem "$modelsDir/*.pt" -ErrorAction SilentlyContinue
+          $needDownload = $false
+          if ($existingModels) {
+            foreach ($m in $existingModels) {
+              if ($m.Length -lt 1000000) {
+                Write-Host "$($m.Name) is only $($m.Length) bytes (LFS pointer) - need to download"
+                $needDownload = $true
+                break
+              }
+            }
+          } else {
+            $needDownload = $true
+          }
+
+          if (-not $needDownload) {
+            Write-Host "Models already present and valid"
+            exit 0
+          }
+
+          if (-not $env:MODELS_ZIP_URL) {
+            throw "Secret MODELS_ZIP_URL not set"
+          }
+
+          $zip = Join-Path $env:RUNNER_TEMP "models.zip"
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            "User-Agent" = "github-actions"
+          }
+
+          Write-Host "Downloading models from release assets..."
+          try {
+            Invoke-WebRequest -Uri $env:MODELS_ZIP_URL -OutFile $zip -Headers $headers -MaximumRedirection 10
+          } catch {
+            Write-Warning "Direct download failed, trying gh CLI..."
+            gh release download assets -p "models.zip" -D "$env:RUNNER_TEMP" -R "$env:GITHUB_REPOSITORY"
+          }
+
+          if (-not (Test-Path $zip)) {
+            throw "Failed to download models.zip"
+          }
+
+          Write-Host "Extracting models..."
+          Expand-Archive -Path $zip -DestinationPath $modelsDir -Force
+
+          # Verify
+          $models = Get-ChildItem "$modelsDir/*.pt"
           foreach ($m in $models) {
-            $size = $m.Length
-            Write-Host "$($m.Name): $([math]::Round($size/1MB, 2)) MB"
-            if ($size -lt 1000) {
-              throw "Model file $($m.Name) is only $size bytes - LFS pull failed!"
+            $sizeMB = [math]::Round($m.Length/1MB, 2)
+            Write-Host "$($m.Name): $sizeMB MB"
+            if ($m.Length -lt 1000000) {
+              throw "Model $($m.Name) is too small ($($m.Length) bytes)"
             }
           }
+          Write-Host "Models downloaded successfully!"
 
       - name: Setup Node
         uses: actions/setup-node@v4
