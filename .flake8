@@ -1,0 +1,19 @@
+[flake8]
+max-line-length = 100
+extend-ignore = E203,W503
+exclude =
+  .git,
+  __pycache__,
+  .venv,
+  venv,
+  ENV,
+  build,
+  dist,
+  frontend/build,
+  recovered_dist,
+  recovered_src,
+  dist_final,
+  dist_build_*,
+  backend/dist,
+  backend/build,
+  R-Portable

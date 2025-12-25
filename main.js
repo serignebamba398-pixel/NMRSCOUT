@@ -3,6 +3,7 @@ const path = require('path');
 const { fork } = require('child_process');
 const fs = require('fs');
 const archiver = require('archiver');
+const http = require('http');
 
 let mainWindow;
 let backendProcess;
@@ -10,7 +11,8 @@ let currentProjectPath = null;
 let hasLoadedProdUI = false;
 
 // Determine if we are in development or production
-const isDev = !app.isPackaged;
+const forceProdUI = process.env.ELECTRON_FORCE_PROD_UI === 'true';
+const isDev = forceProdUI ? false : !app.isPackaged;
 
 // Fichier de configuration pour stocker le dernier projet ouvert
 const getConfigPath = () => path.join(app.getPath('userData'), 'config.json');
@@ -306,6 +308,23 @@ function startBackend(projectPath = null) {
           logMain('INFO', 'Loading UI from backend', { uiUrl });
           mainWindow.loadURL(uiUrl);
           hasLoadedProdUI = true;
+
+          if (process.env.ELECTRON_SMOKE_TEST === 'true') {
+            const healthUrl = `${uiUrl}/health`;
+            logMain('INFO', 'Electron smoke test: checking /health', { healthUrl });
+            http
+              .get(healthUrl, (res) => {
+                const ok = res.statusCode && res.statusCode >= 200 && res.statusCode < 300;
+                logMain('INFO', 'Electron smoke test: /health result', { statusCode: res.statusCode, ok });
+                // Drain response
+                res.resume();
+                setTimeout(() => app.exit(ok ? 0 : 1), 250);
+              })
+              .on('error', (err) => {
+                logMain('ERROR', 'Electron smoke test: /health request failed', { error: err?.message });
+                setTimeout(() => app.exit(1), 250);
+              });
+          }
         }
         if (mainWindow) {
           mainWindow.webContents.send('backend-ready', { projectPath: currentProjectPath });
