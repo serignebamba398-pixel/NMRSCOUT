@@ -35,9 +35,19 @@ jobs:
       - name: Install Python build deps
         shell: powershell
         run: |
+          $ErrorActionPreference = "Stop"
+
           python -m pip install --upgrade pip
+          if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed ($LASTEXITCODE)" }
+
           python -m pip install -r backend/requirements.cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+          if ($LASTEXITCODE -ne 0) { throw "pip install requirements failed ($LASTEXITCODE)" }
+
           python -m pip install pyinstaller
+          if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller failed ($LASTEXITCODE)" }
+
+          python -m pip --version
+          python -m pip show numpy
 
       - name: Sanity check Python deps
         shell: powershell
