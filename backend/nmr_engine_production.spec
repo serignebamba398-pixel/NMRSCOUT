@@ -34,11 +34,24 @@ for subdir in ["scripts", "ml_dependencies", "models"]:
 
 # Collect NumPy (required by runtime + test_imports)
 try:
-    np_ret = collect_all('numpy')
-    datas.extend(np_ret[0])
-    binaries.extend(np_ret[1])
-    hiddenimports.extend(np_ret[2])
-    print("Collected numpy via collect_all")
+    import numpy as _np
+    from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files, collect_submodules
+
+    # Include numpy package directory explicitly (robust even when import graph misses it)
+    _numpy_dir = Path(_np.__file__).resolve().parent
+    datas.append((str(_numpy_dir), 'numpy'))
+
+    # Wheels often ship extra DLLs in a sibling folder (numpy.libs)
+    _numpy_libs = _numpy_dir.parent / 'numpy.libs'
+    if _numpy_libs.exists():
+        datas.append((str(_numpy_libs), 'numpy.libs'))
+
+    # Also collect using hooks to capture dynamic libs + hidden imports
+    datas.extend(collect_data_files('numpy'))
+    binaries.extend(collect_dynamic_libs('numpy'))
+    hiddenimports.extend(collect_submodules('numpy'))
+
+    print("Collected numpy (package dir + hooks)")
 except Exception as e:
     print(f"Warning: numpy collection failed: {e}")
 
