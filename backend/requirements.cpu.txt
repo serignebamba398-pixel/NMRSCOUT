@@ -6,7 +6,7 @@ cairosvg
 torch==2.2.2
 
 # DGL CPU (compatible torch 2.2.x)
-dgl==2.1.0
+dgl==2.0.0
 # utilitaires chimie (si utilisés par certains scripts)
 # utilitaires chimie (si utilisés par certains scripts)
 dgllife==0.3.2
