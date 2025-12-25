@@ -32,6 +32,16 @@ for subdir in ["scripts", "ml_dependencies", "models"]:
     if p.exists():
         datas.append((str(p), subdir))
 
+# Collect NumPy (required by runtime + test_imports)
+try:
+    np_ret = collect_all('numpy')
+    datas.extend(np_ret[0])
+    binaries.extend(np_ret[1])
+    hiddenimports.extend(np_ret[2])
+    print("Collected numpy via collect_all")
+except Exception as e:
+    print(f"Warning: numpy collection failed: {e}")
+
 # Collect torch COMPLETELY using collect_all
 try:
     tmp_ret = collect_all('torch')
