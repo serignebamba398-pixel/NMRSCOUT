@@ -67,13 +67,19 @@ jobs:
           Write-Host "Downloading R-Portable from: $env:R_ZIP_URL"
 
           try {
-            Invoke-WebRequest -Uri $env:R_ZIP_URL -OutFile $zip -Headers $headers
+            Invoke-WebRequest -Uri $env:R_ZIP_URL -OutFile $zip -Headers $headers -MaximumRedirection 10
           } catch {
             Write-Warning ("Download failed: " + $_.Exception.Message)
             if ($_.Exception.Response) {
               try { Write-Warning ("HTTP status: " + $_.Exception.Response.StatusCode.value__) } catch {}
             }
-            throw "Failed to download R-Portable.zip. If this repo/release is private, ensure the URL points to a published release asset."
+            Write-Warning "Falling back to GitHub CLI download (private-safe)..."
+            gh --version
+            # Download from the 'assets' release tag by pattern (requires the asset to be named R-Portable.zip)
+            gh release download assets -p "R-Portable.zip" -D "$env:RUNNER_TEMP" -R "$env:GITHUB_REPOSITORY"
+            if (-not (Test-Path $zip)) {
+              throw "Failed to download R-Portable.zip via URL and via gh. Ensure the release tag 'assets' exists and contains an asset named R-Portable.zip."
+            }
           }
           Expand-Archive -Path $zip -DestinationPath . -Force
           if (-not (Test-Path "R-Portable\bin\Rscript.exe")) {
