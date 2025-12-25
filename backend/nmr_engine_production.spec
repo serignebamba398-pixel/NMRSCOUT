@@ -82,6 +82,16 @@ try:
 except Exception as e:
     print(f"Warning: RDKit collection failed: {e}")
 
+# Collect nmrglue for Bruker NMR file reading
+try:
+    nmrglue_data = collect_data_files('nmrglue')
+    nmrglue_subs = collect_submodules('nmrglue')
+    datas.extend(nmrglue_data)
+    hiddenimports.extend(nmrglue_subs)
+    print(f"Collected nmrglue: {len(nmrglue_data)} data files, {len(nmrglue_subs)} submodules")
+except Exception as e:
+    print(f"Warning: nmrglue collection failed: {e}")
+
 # Filter binaries to remove problematic MKL/OpenMP libraries
 # AND normalize to TOC format (dest_name, src_path, 'BINARY')
 filtered_binaries = []

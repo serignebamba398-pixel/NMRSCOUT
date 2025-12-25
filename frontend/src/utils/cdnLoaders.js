@@ -1,5 +1,5 @@
 // src/utils/cdnLoaders.js
-// Loading CDN libraries (RDKit, 3Dmol)
+// Loading libraries (local first, then CDN fallback)
 
 // eslint-disable-next-line no-unused-vars
 import { debugLog, debugWarn, debugError } from "./debug";
@@ -8,7 +8,16 @@ let rdkitPromise = null;
 let mol3dPromise = null;
 
 /**
- * Loads RDKit from CDN
+ * Get base URL for local libs (works in both dev and production)
+ */
+function getLocalLibsBase() {
+  // In production (Electron), use relative path from the served content
+  // In dev, use the public folder path
+  return process.env.PUBLIC_URL || "";
+}
+
+/**
+ * Loads RDKit - tries local first, then CDN
  */
 export function loadRDKitFromCDN() {
   if (typeof window === "undefined") {
@@ -16,6 +25,13 @@ export function loadRDKitFromCDN() {
   }
   if (window.RDKit) return Promise.resolve(window.RDKit);
   if (rdkitPromise) return rdkitPromise;
+
+  // URLs to try: local first, then CDN
+  const localBase = getLocalLibsBase();
+  const urls = [
+    `${localBase}/libs/RDKit_minimal.js`,
+    "https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js",
+  ];
 
   rdkitPromise = new Promise((resolve, reject) => {
     const sel = 'script[data-rdkit="RDKit_minimal"]';
@@ -30,6 +46,7 @@ export function loadRDKitFromCDN() {
         .initRDKitModule()
         .then((RDKit) => {
           window.RDKit = RDKit;
+          debugLog("[OK] RDKit initialized successfully");
           resolve(RDKit);
         })
         .catch(reject);
@@ -45,14 +62,33 @@ export function loadRDKitFromCDN() {
       return;
     }
 
-    const s = document.createElement("script");
-    s.async = true;
-    s.defer = true;
-    s.dataset.rdkit = "RDKit_minimal";
-    s.src = "https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js";
-    s.onload = onReady;
-    s.onerror = () => reject(new Error("RDKit.js failed"));
-    document.head.appendChild(s);
+    // Try each URL in order
+    let urlIndex = 0;
+    const tryNextUrl = () => {
+      if (urlIndex >= urls.length) {
+        reject(new Error("RDKit.js failed - all sources exhausted"));
+        return;
+      }
+      const url = urls[urlIndex];
+      urlIndex++;
+      
+      debugLog(`[RDKIT] Trying to load from: ${url}`);
+      
+      const s = document.createElement("script");
+      s.async = true;
+      s.defer = true;
+      s.dataset.rdkit = "RDKit_minimal";
+      s.src = url;
+      s.onload = onReady;
+      s.onerror = () => {
+        debugWarn(`[RDKIT] Failed to load from ${url}, trying next...`);
+        document.head.removeChild(s);
+        tryNextUrl();
+      };
+      document.head.appendChild(s);
+    };
+    
+    tryNextUrl();
   });
 
   return rdkitPromise;
@@ -157,7 +193,7 @@ function patch3DmolForOffscreenCanvas() {
 }
 
 /**
- * Charge 3Dmol depuis le CDN
+ * Charge 3Dmol - local first, then CDN
  */
 export function load3DmolFromCDN() {
   if (typeof window === "undefined") {
@@ -168,7 +204,10 @@ export function load3DmolFromCDN() {
 
   disableOffscreenCanvasCompletely();
 
+  // URLs to try: local first, then CDN
+  const localBase = getLocalLibsBase();
   const urls = [
+    `${localBase}/libs/3Dmol-min.js`,
     "https://3dmol.org/build/3Dmol-min.js",
     "https://cdn.jsdelivr.net/npm/3dmol/build/3Dmol-min.js",
   ];

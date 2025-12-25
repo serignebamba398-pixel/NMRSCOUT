@@ -6,6 +6,9 @@ tqdm
 cairosvg
 torch==2.1.2
 
+# NMR processing (Bruker file reading)
+nmrglue>=0.9
+
 # DGL CPU (compatible torch 2.1.x)
 dgl==2.0.0
 # utilitaires chimie (si utilisés par certains scripts)
