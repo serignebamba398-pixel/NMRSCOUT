@@ -42,7 +42,7 @@ else {
     & $PythonExe -m PyInstaller --clean --noconfirm nmr_engine_production.spec
 }
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "PyInstaller failed with code $LASTEXITCODE"
+    throw "PyInstaller failed with code $LASTEXITCODE"
 }
 
 Write-Host "=== Step 3: Post-Build Cleanup (Ensuring no bad DLLs) ===" -ForegroundColor Cyan

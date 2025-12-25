@@ -11,7 +11,12 @@ from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files, co
 
 block_cipher = None
 APP_NAME = "nmr_engine_production"
-BACKEND_DIR = Path(__file__).resolve().parent
+try:
+    BACKEND_DIR = Path(__file__).resolve().parent
+except NameError:
+    # PyInstaller executes spec via exec() and may not define __file__.
+    # SPECPATH is usually injected by PyInstaller; fall back to current working directory.
+    BACKEND_DIR = Path(globals().get('SPECPATH', os.getcwd())).resolve()
 
 # Force CPU mode  
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
