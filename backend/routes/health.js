@@ -34,8 +34,17 @@ function checkPythonAvailable() {
 
 router.get('/health', (req, res) => {
   const memory = getSystemMemoryUsage();
-  const pythonPath = getPythonExe();
-  const pythonAvailable = checkPythonAvailable();
+  let pythonPath = null;
+  let pythonAvailable = false;
+  let pythonError = null;
+  try {
+    pythonPath = getPythonExe();
+    pythonAvailable = checkPythonAvailable();
+  } catch (e) {
+    pythonPath = null;
+    pythonAvailable = false;
+    pythonError = String(e?.message || e);
+  }
   
   let rPath = null;
   let rAvailable = false;
@@ -62,6 +71,7 @@ router.get('/health', (req, res) => {
       available: pythonAvailable,
       bundled: process.env.IS_ELECTRON_BUNDLED === 'true',
       scriptExists: fs.existsSync(PRED_SCRIPT),
+      error: pythonError,
     },
     r: {
       path: rPath,

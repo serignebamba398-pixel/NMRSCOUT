@@ -1,0 +1,9 @@
+[tool.black]
+line-length = 100
+target-version = ["py38"]
+include = "\\.pyi?$"
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["backend", "."]
+python_files = ["test_*.py"]
