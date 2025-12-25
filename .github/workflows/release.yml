@@ -19,6 +19,22 @@ jobs:
         with:
           lfs: false
 
+      - name: Fetch LFS model files
+        shell: powershell
+        run: |
+          # Only fetch the .pt model files to avoid bandwidth issues with other LFS files
+          git lfs install
+          git lfs pull --include="backend/models/*.pt"
+          # Verify models are real files (not LFS pointers)
+          $models = Get-ChildItem "backend/models/*.pt"
+          foreach ($m in $models) {
+            $size = $m.Length
+            Write-Host "$($m.Name): $([math]::Round($size/1MB, 2)) MB"
+            if ($size -lt 1000) {
+              throw "Model file $($m.Name) is only $size bytes - LFS pull failed!"
+            }
+          }
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
