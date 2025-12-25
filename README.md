@@ -62,17 +62,11 @@ npm run build:python
 ## Releases (GitHub Actions)
 
 - Pushing a tag like `v1.2.3` triggers `.github/workflows/release.yml`.
-- The Release publishes installers for **Windows** (Setup + Portable `.exe`), **Linux** (AppImage), and **macOS** (`.dmg` + `.zip`).
-- The workflow requires **bundled R and Python engine** per OS.  
-  Since they are not in Git, provide each via a repo secret (archive URLs):
+- The Release publishes installers for **Windows** (Setup + Portable `.exe`).
+- The workflow requires **bundled R** which is not in Git; provide it via a repo secret:
 
-| Secret name                   | OS      | Contents                                                       |
-| ----------------------------- | ------- | -------------------------------------------------------------- |
-| `R_PORTABLE_ZIP_URL_WIN`      | Windows | `R-Portable/` folder with `bin/Rscript.exe`                    |
-| `R_PORTABLE_ZIP_URL_LINUX`    | Linux   | `R-Portable/` folder with `bin/Rscript`                        |
-| `R_PORTABLE_ZIP_URL_MAC`      | macOS   | `R-Portable/` folder with `bin/Rscript`                        |
-| `PYTHON_ENGINE_ZIP_URL_WIN`   | Windows | `nmr_engine_production.exe` (or fallback to PyInstaller build) |
-| `PYTHON_ENGINE_ZIP_URL_LINUX` | Linux   | `nmr_engine_production` binary                                 |
-| `PYTHON_ENGINE_ZIP_URL_MAC`   | macOS   | `nmr_engine_production` binary                                 |
+| Secret name          | Contents                                               |
+| -------------------- | ------------------------------------------------------ |
+| `R_PORTABLE_ZIP_URL` | Archive of `R-Portable/` folder with `bin/Rscript.exe` |
 
-> If a Python engine secret is not set, CI falls back to building with PyInstaller on that runner (works for Windows; Linux/macOS need matching dependencies).
+> The Python engine is built in CI via PyInstaller. Alternatively, set `PYTHON_ENGINE_ZIP_URL` secret to skip PyInstaller build.

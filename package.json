@@ -74,16 +74,6 @@
         "nsis",
         "portable"
       ]
-    },
-    "linux": {
-      "target": "AppImage"
-    },
-    "mac": {
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "category": "public.app-category.education"
     }
   },
   "dependencies": {
