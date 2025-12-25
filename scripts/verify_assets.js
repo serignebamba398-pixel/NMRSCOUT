@@ -11,6 +11,7 @@ const fs = require('fs');
 const path = require('path');
 
 const strict = process.argv.includes('--strict');
+const release = process.argv.includes('--release');
 
 function exists(p) {
   try {
@@ -38,9 +39,15 @@ checks.push({
 });
 
 checks.push({
-  label: 'bundled python dist (PyInstaller output)',
+  label: 'bundled python (PyInstaller output or prebuilt)',
   requiredFor: 'packaging',
-  paths: [path.join(root, 'backend', 'dist', 'nmr_engine_production')],
+  paths: [
+    path.join(root, 'backend', 'dist', 'nmr_engine_production'),
+    path.join(root, 'resources', 'python', 'nmr_engine_production.exe'),
+    path.join(root, 'resources', 'python', 'nmr_engine_production'),
+    path.join(root, 'resources', 'python', 'nmr_engine.exe'),
+    path.join(root, 'resources', 'python', 'nmr_engine'),
+  ],
 });
 
 checks.push({
@@ -55,21 +62,21 @@ checks.push({
   paths: [path.join(root, 'backend', 'models')],
 });
 
-// R-Portable is optional for some workflows but required if you rely on R scripts.
+// In release mode we require bundled R-Portable (autonomous app). In dev, allow it to be missing.
 checks.push({
-  label: 'R-Portable (optional but recommended)',
-  requiredFor: 'runtime (if using R scripts)',
+  label: 'R-Portable',
+  requiredFor: release ? 'packaging + runtime' : 'runtime (recommended)',
   paths: [
     path.join(root, 'R-Portable', 'bin', 'Rscript.exe'),
     path.join(root, 'R-Portable', 'bin', 'Rscript'),
   ],
-  optional: true,
+  optional: !release,
 });
 
 let hasErrors = false;
 
 console.log('[verify-assets] repo:', root);
-console.log('[verify-assets] mode:', strict ? 'strict' : 'warn');
+console.log('[verify-assets] mode:', strict ? 'strict' : 'warn', release ? '(release)' : '');
 
 for (const c of checks) {
   const found = firstExisting(c.paths);
@@ -93,6 +100,10 @@ if (hasErrors) {
   console.log('  - Build frontend:   cd frontend && npm run build');
   console.log('  - Build python exe: cd backend && powershell -ExecutionPolicy Bypass -File build_bundle_complete.ps1');
   console.log('  - Then package:     npm run dist');
+
+  if (release) {
+    console.log('  - Release builds require R-Portable/ (or provide it via CI secret).');
+  }
 
   if (strict) process.exit(1);
 }

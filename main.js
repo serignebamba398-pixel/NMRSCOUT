@@ -182,12 +182,20 @@ function startBackend(projectPath = null) {
       env.SERVE_FRONTEND = 'true';
       env.FRONTEND_BUILD_DIR = path.join(__dirname, 'frontend', 'build');
       
-      // Check if bundled Python executable exists
-      const exeName = process.platform === 'win32' ? 'nmr_engine_production.exe' : 'nmr_engine_production';
-      // In package.json, we map backend/dist/nmr_engine_production to "python" folder in resources
-      const bundledPythonPath = path.join(process.resourcesPath, 'python', exeName);
-      
-      if (fs.existsSync(bundledPythonPath)) {
+      // Check if bundled Python executable exists (primary: nmr_engine_production, fallback: nmr_engine)
+      const exeCandidates =
+        process.platform === 'win32'
+          ? ['nmr_engine_production.exe', 'nmr_engine.exe']
+          : ['nmr_engine_production', 'nmr_engine'];
+
+      const pythonCandidates = [
+        ...exeCandidates.map((name) => path.join(process.resourcesPath, 'python', name)),
+        ...exeCandidates.map((name) => path.join(__dirname, 'resources', 'python', name)),
+      ];
+
+      const bundledPythonPath = pythonCandidates.find((p) => fs.existsSync(p)) || null;
+
+      if (bundledPythonPath) {
         env.IS_ELECTRON_BUNDLED = 'true';
         env.BUNDLED_PYTHON_PATH = bundledPythonPath;
         console.log('[Main] Using bundled Python:', bundledPythonPath);
@@ -195,7 +203,7 @@ function startBackend(projectPath = null) {
         // No bundled Python - will use system Python
         env.IS_ELECTRON_BUNDLED = 'false';
         console.log('[Main] No bundled Python found, using system Python');
-        console.log('[Main] Looked for:', bundledPythonPath);
+        console.log('[Main] Looked for:', pythonCandidates);
       }
       
       // Path to bundled R

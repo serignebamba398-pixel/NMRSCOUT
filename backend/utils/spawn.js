@@ -172,7 +172,10 @@ function buildREnv(memoryLimitMB, rscriptPath = null) {
 
 function getPythonExe(forML = false) {
   const isBundled = process.env.IS_ELECTRON_BUNDLED === 'true';
-  const exeName = process.platform === 'win32' ? 'nmr_engine_production.exe' : 'nmr_engine_production';
+  const exeNames =
+    process.platform === 'win32'
+      ? ['nmr_engine_production.exe', 'nmr_engine.exe']
+      : ['nmr_engine_production', 'nmr_engine'];
   
   // [DEBUG] Log Python resolution
   console.log('[getPythonExe] IS_ELECTRON_BUNDLED:', isBundled, 'forML:', forML);
@@ -186,26 +189,40 @@ function getPythonExe(forML = false) {
   
   // PRIORITY 2: Check RESOURCES_PATH for bundled Python (Electron packaged)
   if (process.env.RESOURCES_PATH) {
-    const candidate = path.join(process.env.RESOURCES_PATH, 'python', exeName);
-    if (fs.existsSync(candidate)) {
-      console.log('[getPythonExe] Found bundled Python at:', candidate);
-      return candidate;
+    for (const exeName of exeNames) {
+      const candidate = path.join(process.env.RESOURCES_PATH, 'python', exeName);
+      if (fs.existsSync(candidate)) {
+        console.log('[getPythonExe] Found bundled Python at:', candidate);
+        return candidate;
+      }
     }
   }
   
   // PRIORITY 3: Dev mode - look for bundled Python in backend/dist
-  const devBundledPython = path.join(__dirname, '..', 'dist', 'nmr_engine_production', exeName);
-  if (fs.existsSync(devBundledPython)) {
-    console.log('[getPythonExe] Found dev bundled Python at:', devBundledPython);
-    return devBundledPython;
+  for (const exeName of exeNames) {
+    const devBundledPython = path.join(__dirname, '..', 'dist', 'nmr_engine_production', exeName);
+    if (fs.existsSync(devBundledPython)) {
+      console.log('[getPythonExe] Found dev bundled Python at:', devBundledPython);
+      return devBundledPython;
+    }
+  }
+
+  // PRIORITY 4: Dev fallback - prebuilt binary under repo resources/python
+  for (const exeName of exeNames) {
+    const devPrebuiltPython = path.join(__dirname, '..', '..', 'resources', 'python', exeName);
+    if (fs.existsSync(devPrebuiltPython)) {
+      console.log('[getPythonExe] Found dev prebuilt Python at:', devPrebuiltPython);
+      return devPrebuiltPython;
+    }
   }
   
   // NO FALLBACK TO SYSTEM PYTHON - App must be autonomous
-  console.error('[getPythonExe] ERROR: Bundled Python not found! App requires bundled nmr_engine_production.');
+  console.error('[getPythonExe] ERROR: Bundled Python not found! App requires bundled nmr_engine.');
   console.error('[getPythonExe] Checked BUNDLED_PYTHON_PATH:', process.env.BUNDLED_PYTHON_PATH);
   console.error('[getPythonExe] Checked RESOURCES_PATH:', process.env.RESOURCES_PATH);
-  console.error('[getPythonExe] Checked dev path:', devBundledPython);
-  throw new Error('Bundled Python (nmr_engine_production) not found. The application requires the bundled Python to run predictions.');
+  console.error('[getPythonExe] Checked dev dist:', path.join(__dirname, '..', 'dist', 'nmr_engine_production'));
+  console.error('[getPythonExe] Checked dev prebuilt:', path.join(__dirname, '..', '..', 'resources', 'python'));
+  throw new Error('Bundled Python (nmr_engine) not found. The application requires the bundled Python to run predictions.');
 }
 
 function detectDatasetDir() {
