@@ -147,7 +147,7 @@ flake8>=4.0.0,<6.2.0
 jupyter>=1.0.0,<1.1.0
 
 # IPython - Shell interactif amélioré
-ipython>=8.0.0,<8.16.0
+ipython>=8.0.0,<9.9.0
 
 # ============================================================================
 # MOLECULAR SIMULATION & ADVANCED CHEMISTRY (optionnel)
