@@ -62,4 +62,5 @@ npm run build:python
 ## Releases (GitHub Actions)
 
 - Pushing a tag like `v1.2.3` triggers `.github/workflows/release.yml` to build the Windows installer and publish a GitHub Release.
+- The Release includes both the installer (NSIS) and a portable Windows `.exe`.
 - The workflow requires `R-Portable/` to exist; since it is ignored by Git, provide it via the `R_PORTABLE_ZIP_URL` repository secret (a zip that expands to a top-level `R-Portable/` folder).

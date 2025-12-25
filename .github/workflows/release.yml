@@ -87,9 +87,24 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npm run dist
 
+      - name: Verify dist artifacts
+        shell: powershell
+        run: |
+          if (-not (Test-Path "dist")) { throw "dist/ folder not found" }
+
+          $exes = Get-ChildItem -Path "dist" -Filter "*.exe" -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notlike "*.exe.blockmap" }
+
+          if (-not $exes -or $exes.Count -lt 1) {
+            Write-Host "dist contents:"; Get-ChildItem -Path "dist" -Force | Format-Table -AutoSize | Out-String | Write-Host
+            throw "No .exe artifacts found in dist/"
+          }
+
+          Write-Host "Will publish:"; $exes | Select-Object Name, Length | Format-Table -AutoSize | Out-String | Write-Host
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            dist/**
+            dist/*.exe
