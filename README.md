@@ -61,6 +61,18 @@ npm run build:python
 
 ## Releases (GitHub Actions)
 
-- Pushing a tag like `v1.2.3` triggers `.github/workflows/release.yml` to build the Windows installer and publish a GitHub Release.
-- The Release includes both the installer (NSIS) and a portable Windows `.exe`.
-- The workflow requires `R-Portable/` to exist; since it is ignored by Git, provide it via the `R_PORTABLE_ZIP_URL` repository secret (a zip that expands to a top-level `R-Portable/` folder).
+- Pushing a tag like `v1.2.3` triggers `.github/workflows/release.yml`.
+- The Release publishes installers for **Windows** (Setup + Portable `.exe`), **Linux** (AppImage), and **macOS** (`.dmg` + `.zip`).
+- The workflow requires **bundled R and Python engine** per OS.  
+  Since they are not in Git, provide each via a repo secret (archive URLs):
+
+| Secret name                   | OS      | Contents                                                       |
+| ----------------------------- | ------- | -------------------------------------------------------------- |
+| `R_PORTABLE_ZIP_URL_WIN`      | Windows | `R-Portable/` folder with `bin/Rscript.exe`                    |
+| `R_PORTABLE_ZIP_URL_LINUX`    | Linux   | `R-Portable/` folder with `bin/Rscript`                        |
+| `R_PORTABLE_ZIP_URL_MAC`      | macOS   | `R-Portable/` folder with `bin/Rscript`                        |
+| `PYTHON_ENGINE_ZIP_URL_WIN`   | Windows | `nmr_engine_production.exe` (or fallback to PyInstaller build) |
+| `PYTHON_ENGINE_ZIP_URL_LINUX` | Linux   | `nmr_engine_production` binary                                 |
+| `PYTHON_ENGINE_ZIP_URL_MAC`   | macOS   | `nmr_engine_production` binary                                 |
+
+> If a Python engine secret is not set, CI falls back to building with PyInstaller on that runner (works for Windows; Linux/macOS need matching dependencies).
