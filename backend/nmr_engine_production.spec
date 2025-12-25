@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_dynamic_libs, collect_data_files, co
 
 block_cipher = None
 APP_NAME = "nmr_engine_production"
-BACKEND_DIR = Path(r"C:\Users\seck-s\Documents\_UNC\VERSIONDOCKER00Last\annotation-nmr\backend")
+BACKEND_DIR = Path(__file__).resolve().parent
 
 # Force CPU mode  
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -88,7 +88,6 @@ try:
     # Try multiple potential paths for MKL v1 DLLs
     potential_paths = [
         os.path.join(sys.prefix, 'Library', 'bin'),
-        r'C:\Users\seck-s\anaconda3\Library\bin',
     ]
     
     mkl_v1_dlls = [

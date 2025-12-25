@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Setup Python
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install Python build deps
+        shell: powershell
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+          python -m pip install pyinstaller
+
+      - name: Install Node deps (root)
+        run: npm ci
+
+      - name: Install Node deps (frontend)
+        run: npm ci --prefix frontend
+
+      - name: Ensure R-Portable present
+        shell: powershell
+        env:
+          R_PORTABLE_ZIP_URL: ${{ secrets.R_PORTABLE_ZIP_URL }}
+        run: |
+          if (Test-Path "R-Portable\bin\Rscript.exe") {
+            Write-Host "R-Portable present in workspace."
+            exit 0
+          }
+
+          if (-not $env:R_PORTABLE_ZIP_URL) {
+            Write-Error "R-Portable is missing and R_PORTABLE_ZIP_URL secret is not set. Provide a zip that expands to a top-level 'R-Portable/' folder."
+          }
+
+          $zipPath = Join-Path $env:RUNNER_TEMP "R-Portable.zip"
+          Write-Host "Downloading R-Portable from R_PORTABLE_ZIP_URL..."
+          Invoke-WebRequest -Uri $env:R_PORTABLE_ZIP_URL -OutFile $zipPath
+
+          Write-Host "Extracting R-Portable..."
+          Expand-Archive -Path $zipPath -DestinationPath "$PWD" -Force
+
+          if (-not (Test-Path "R-Portable\bin\Rscript.exe")) {
+            Write-Error "R-Portable still missing after extract. Zip must contain top-level 'R-Portable/'."
+          }
+
+      - name: Build Python bundle (PyInstaller)
+        shell: powershell
+        env:
+          PYTHON_EXE: ${{ steps.setup-python.outputs.python-path }}
+        run: npm run build:python
+
+      - name: Build frontend
+        run: npm run build:frontend
+
+      - name: Verify assets
+        run: node scripts/verify_assets.js --strict --release
+
+      - name: Build installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run dist
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/**

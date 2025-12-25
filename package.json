@@ -46,6 +46,10 @@
         "to": "python"
       },
       {
+        "from": "resources/python",
+        "to": "python"
+      },
+      {
         "from": "backend/scripts",
         "to": "scripts",
         "filter": [

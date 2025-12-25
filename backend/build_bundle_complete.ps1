@@ -4,18 +4,43 @@
 # 3. Verifies the build
 
 $ErrorActionPreference = "Stop"
-$AnacondaPath = "C:\Users\seck-s\anaconda3"
-$ProjectDir = "C:\Users\seck-s\Documents\_UNC\VERSIONDOCKER00Last\annotation-nmr\backend"
+$ProjectDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$PythonExe = $env:PYTHON_EXE
+$AnacondaPath = $env:ANACONDA_PATH
 $AppName = "nmr_engine_production"
 $DistDir = "$ProjectDir\dist\$AppName"
 
 Set-Location $ProjectDir
 
+if (-not $PythonExe -or -not (Test-Path $PythonExe)) {
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($pythonCmd) {
+        $PythonExe = $pythonCmd.Source
+    }
+}
+
+if (-not $PythonExe -or -not (Test-Path $PythonExe)) {
+    # Best-effort fallback for Windows: use the Python launcher if available
+    $pyCmd = Get-Command py -ErrorAction SilentlyContinue
+    if ($pyCmd) {
+        $PythonExe = $pyCmd.Source
+    }
+}
+
+if (-not $PythonExe) {
+    Write-Error "Python executable not found. Set PYTHON_EXE or ensure 'python' is on PATH."
+}
+
 Write-Host "=== Step 1: Cleaning previous build ===" -ForegroundColor Cyan
 Remove-Item -Recurse -Force dist, build -ErrorAction SilentlyContinue
 
 Write-Host "=== Step 2: Running PyInstaller ===" -ForegroundColor Cyan
-& "$AnacondaPath\python.exe" -m PyInstaller --clean --noconfirm nmr_engine_production.spec
+if ($PythonExe.ToLower().EndsWith("py.exe")) {
+    & $PythonExe -3 -m PyInstaller --clean --noconfirm nmr_engine_production.spec
+}
+else {
+    & $PythonExe -m PyInstaller --clean --noconfirm nmr_engine_production.spec
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Error "PyInstaller failed with code $LASTEXITCODE"
 }
