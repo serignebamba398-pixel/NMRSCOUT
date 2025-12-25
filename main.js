@@ -7,6 +7,7 @@ const archiver = require('archiver');
 let mainWindow;
 let backendProcess;
 let currentProjectPath = null;
+let hasLoadedProdUI = false;
 
 // Determine if we are in development or production
 const isDev = !app.isPackaged;
@@ -130,7 +131,8 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js'),
-      webSecurity: false, // ⚠️ Required for SSE streaming from file:// to http://localhost
+      // Keep Electron security defaults enabled (avoid file:// -> http:// issues by loading the UI via http://127.0.0.1 in production)
+      webSecurity: true,
     },
   });
 
@@ -139,8 +141,10 @@ function createWindow() {
     mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
-    // In prod, load the built React app
-    mainWindow.loadFile(path.join(__dirname, 'frontend', 'build', 'index.html'));
+    // In prod, we load the UI from the local backend once it's ready.
+    // (backend sends an IPC "ready" message; see startBackend())
+    hasLoadedProdUI = false;
+    mainWindow.loadURL('about:blank');
     // Ne pas ouvrir DevTools en production
     // mainWindow.webContents.openDevTools();
   }
@@ -172,6 +176,9 @@ function startBackend(projectPath = null) {
     
     if (!isDev) {
       env.RESOURCES_PATH = process.resourcesPath;
+      // Serve the packaged React build from the backend so the renderer can use http:// with webSecurity enabled.
+      env.SERVE_FRONTEND = 'true';
+      env.FRONTEND_BUILD_DIR = path.join(__dirname, 'frontend', 'build');
       
       // Check if bundled Python executable exists
       const exeName = process.platform === 'win32' ? 'nmr_engine_production.exe' : 'nmr_engine_production';
@@ -293,6 +300,13 @@ function startBackend(projectPath = null) {
       logMain('INFO', 'Message from backend', { msg });
       if (msg.type === 'ready') {
         clearTimeout(timeout);
+        if (!isDev && mainWindow && !hasLoadedProdUI) {
+          const port = msg.port || env.PORT || 5000;
+          const uiUrl = `http://127.0.0.1:${port}`;
+          logMain('INFO', 'Loading UI from backend', { uiUrl });
+          mainWindow.loadURL(uiUrl);
+          hasLoadedProdUI = true;
+        }
         if (mainWindow) {
           mainWindow.webContents.send('backend-ready', { projectPath: currentProjectPath });
         }

@@ -75,6 +75,10 @@ const cleanupRoutes = require('./routes/cleanup');
 const pathNormalizeRoutes = require('./routes/pathNormalize');
 const projectRoutes = require('./routes/projects');
 
+const shouldServeFrontend = process.env.SERVE_FRONTEND === 'true';
+const frontendBuildDir =
+  process.env.FRONTEND_BUILD_DIR || path.join(__dirname, '..', 'frontend', 'build');
+
 // Init app
 const app = express();
 process.setMaxListeners(0);
@@ -137,6 +141,14 @@ app.use(spectralBgRoutes);
 app.use(cleanupRoutes);
 app.use(pathNormalizeRoutes);
 app.use(projectRoutes);
+
+// In packaged/Electron mode, serve the React build from the backend so the renderer can load via http://
+if (shouldServeFrontend && fs.existsSync(frontendBuildDir)) {
+  app.use(express.static(frontendBuildDir, { etag: true, lastModified: true }));
+  app.get(/^\/(?!api\/).*/, (req, res) => {
+    res.sendFile(path.join(frontendBuildDir, 'index.html'));
+  });
+}
 
 // Error handlers
 app.use(notFoundHandler);
