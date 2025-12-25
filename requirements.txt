@@ -62,7 +62,7 @@ plotly>=5.0.0,<5.18.0
 openpyxl>=3.0.0,<3.2.0
 
 # XlsxWriter - Écriture avancée fichiers Excel
-xlsxwriter>=3.0.0,<3.2.0
+xlsxwriter>=3.0.0,<3.3.0
 
 # PyYAML - Fichiers de configuration YAML
 pyyaml>=6.0,<6.1
