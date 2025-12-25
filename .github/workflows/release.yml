@@ -49,6 +49,7 @@ jobs:
         shell: powershell
         env:
           R_ZIP_URL: ${{ secrets.R_PORTABLE_ZIP_URL }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           if (Test-Path "R-Portable\bin\Rscript.exe") {
             Write-Host "R-Portable already present."
@@ -58,7 +59,22 @@ jobs:
             Write-Error "Secret R_PORTABLE_ZIP_URL not set."
           }
           $zip = Join-Path $env:RUNNER_TEMP "R-Portable.zip"
-          Invoke-WebRequest -Uri $env:R_ZIP_URL -OutFile $zip
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            "User-Agent" = "github-actions"
+          }
+
+          Write-Host "Downloading R-Portable from: $env:R_ZIP_URL"
+
+          try {
+            Invoke-WebRequest -Uri $env:R_ZIP_URL -OutFile $zip -Headers $headers
+          } catch {
+            Write-Warning ("Download failed: " + $_.Exception.Message)
+            if ($_.Exception.Response) {
+              try { Write-Warning ("HTTP status: " + $_.Exception.Response.StatusCode.value__) } catch {}
+            }
+            throw "Failed to download R-Portable.zip. If this repo/release is private, ensure the URL points to a published release asset."
+          }
           Expand-Archive -Path $zip -DestinationPath . -Force
           if (-not (Test-Path "R-Portable\bin\Rscript.exe")) {
             throw "R-Portable extraction failed."
