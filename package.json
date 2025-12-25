@@ -22,6 +22,7 @@
     "appId": "com.unc.nmrannotation",
     "productName": "NMRScout",
     "npmRebuild": false,
+    "publish": "never",
     "icon": "assets/icon.ico",
     "files": [
       "main.js",
@@ -71,8 +72,7 @@
     },
     "win": {
       "target": [
-        "nsis",
-        "portable"
+        "nsis"
       ]
     }
   },

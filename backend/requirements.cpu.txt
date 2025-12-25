@@ -1,13 +1,13 @@
 # Noyau scientifique
-numpy>=1.23
-pandas>=1.5
+# IMPORTANT: NumPy <2.0 required for torch/rdkit/dgl compatibility
+numpy>=1.23,<2.0
+pandas>=1.5,<2.1
 tqdm
 cairosvg
 torch==2.1.2
 
 # DGL CPU (compatible torch 2.1.x)
 dgl==2.0.0
-# utilitaires chimie (si utilisés par certains scripts)
 # utilitaires chimie (si utilisés par certains scripts)
 dgllife==0.3.2
 
