@@ -92,6 +92,16 @@ try:
 except Exception as e:
     print(f"Warning: nmrglue collection failed: {e}")
 
+# Collect matplotlib for spectrum plotting
+try:
+    mpl_data = collect_data_files('matplotlib')
+    mpl_subs = collect_submodules('matplotlib')
+    datas.extend(mpl_data)
+    hiddenimports.extend(mpl_subs)
+    print(f"Collected matplotlib: {len(mpl_data)} data files, {len(mpl_subs)} submodules")
+except Exception as e:
+    print(f"Warning: matplotlib collection failed: {e}")
+
 # Filter binaries to remove problematic MKL/OpenMP libraries
 # AND normalize to TOC format (dest_name, src_path, 'BINARY')
 filtered_binaries = []
