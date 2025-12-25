@@ -134,6 +134,9 @@ export const useAnnotation = ({
       globalProgress: 0,
       globalProgressMessage: "",
       readyToView: false,
+      // Initialize selectedMethods and progressByMethod at the start
+      selectedMethods: types,
+      progressByMethod: types.reduce((acc, t) => ({ ...acc, [t]: 0 }), {}),
     }));
     setShowLogs(true);
 
