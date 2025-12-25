@@ -87,3 +87,5 @@ backend/backend-startup.log.txt
 assets/icon.backup_*.ico
 
 # If you intentionally want to version logs, remove *.log above.
+
+R-Portable.zip
