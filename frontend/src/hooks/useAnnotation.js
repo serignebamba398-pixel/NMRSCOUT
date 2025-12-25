@@ -415,7 +415,15 @@ export const useAnnotation = ({
     const csvs = {};
     const annotByType = {};
 
+    // DEBUG: Log all results to understand what's happening
+    console.log('[DEBUG] Annotation results:', results);
+    addLog(`[DEBUG] Received ${results.length} annotation result(s)`);
+
     results.forEach((r) => {
+      // DEBUG: Log each result
+      console.log(`[DEBUG] Result for ${r?.type}:`, { success: r?.success, downloadUrl: r?.downloadUrl, error: r?.error });
+      addLog(`[DEBUG] ${r?.type}: success=${r?.success}, hasDownloadUrl=${!!r?.downloadUrl}`);
+      
       if (r && r.success && r.downloadUrl) {
         const u = normalizeStaticUrl(r.downloadUrl);
         downloads[r.type] = u;
@@ -423,6 +431,10 @@ export const useAnnotation = ({
       }
       annotByType[r.type] = r;
     });
+
+    // DEBUG: Log final csvs object
+    console.log('[DEBUG] Final csvs object:', csvs);
+    addLog(`[DEBUG] CSVs available for viewer: ${Object.keys(csvs).join(', ') || 'NONE'}`);
 
     setViewerData({
       title: `Task ${annotationState.selectedTask}`,
