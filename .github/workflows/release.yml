@@ -37,22 +37,33 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          python -m pip install --upgrade pip
+          $py = "${{ steps.setup-python.outputs.python-path }}"
+          if (-not $py) { throw "setup-python did not provide python-path" }
+          Write-Host "Using Python: $py"
+          & $py -c "import sys; print(sys.executable)"
+
+          & $py -m pip install --upgrade pip
           if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed ($LASTEXITCODE)" }
 
-          python -m pip install -r backend/requirements.cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
+          & $py -m pip install -r backend/requirements.cpu.txt --extra-index-url https://download.pytorch.org/whl/cpu
           if ($LASTEXITCODE -ne 0) { throw "pip install requirements failed ($LASTEXITCODE)" }
 
-          python -m pip install pyinstaller
+          & $py -m pip install pyinstaller
           if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller failed ($LASTEXITCODE)" }
 
-          python -m pip --version
-          python -m pip show numpy
+          & $py -m pip --version
+
+          & $py -m pip show numpy
+          if ($LASTEXITCODE -ne 0) { throw "numpy not installed after requirements install" }
+
+          & $py -c "import numpy as np; print('numpy', np.__version__)"
+          if ($LASTEXITCODE -ne 0) { throw "numpy import failed" }
 
       - name: Sanity check Python deps
         shell: powershell
         run: |
-          python -c "import numpy as np; print('numpy', np.__version__)"
+          $py = "${{ steps.setup-python.outputs.python-path }}"
+          & $py -c "import numpy as np; print('numpy', np.__version__)"
 
       - name: Install Node deps (root)
         run: npm ci
