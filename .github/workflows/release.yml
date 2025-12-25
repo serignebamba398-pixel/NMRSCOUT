@@ -21,18 +21,19 @@ jobs:
             python_secret: PYTHON_ENGINE_ZIP_URL_WIN
             rscript_check: R-Portable/bin/Rscript.exe
             python_check: nmr_engine_production.exe
-          - os: ubuntu-latest
-            artifact_ext: AppImage
-            r_secret: R_PORTABLE_ZIP_URL_LINUX
-            python_secret: PYTHON_ENGINE_ZIP_URL_LINUX
-            rscript_check: R-Portable/bin/Rscript
-            python_check: nmr_engine_production
-          - os: macos-latest
-            artifact_ext: dmg
-            r_secret: R_PORTABLE_ZIP_URL_MAC
-            python_secret: PYTHON_ENGINE_ZIP_URL_MAC
-            rscript_check: R-Portable/bin/Rscript
-            python_check: nmr_engine_production
+          # Linux et macOS désactivés pour l'instant (bundles R/Python non disponibles)
+          # - os: ubuntu-latest
+          #   artifact_ext: AppImage
+          #   r_secret: R_PORTABLE_ZIP_URL_LINUX
+          #   python_secret: PYTHON_ENGINE_ZIP_URL_LINUX
+          #   rscript_check: R-Portable/bin/Rscript
+          #   python_check: nmr_engine_production
+          # - os: macos-latest
+          #   artifact_ext: dmg
+          #   r_secret: R_PORTABLE_ZIP_URL_MAC
+          #   python_secret: PYTHON_ENGINE_ZIP_URL_MAC
+          #   rscript_check: R-Portable/bin/Rscript
+          #   python_check: nmr_engine_production
 
     runs-on: ${{ matrix.os }}
 
