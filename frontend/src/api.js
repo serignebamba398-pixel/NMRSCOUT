@@ -5,9 +5,9 @@ import axios from "axios";
 const IS_ELECTRON = window.electronAPI?.isElectron === true;
 
 // Robust normalization of API base with double "/api" correction
-// In Electron mode, use http://localhost:5000 (port defined in main.js line 84)
+// In Electron mode, use http://127.0.0.1:5000 (use 127.0.0.1 to match UI origin loaded by main.js)
 const RAW_BASE = IS_ELECTRON
-  ? "http://localhost:5000/api"  // Electron mode - backend on port 5000
+  ? "http://127.0.0.1:5000/api"  // Electron mode - backend on port 5000
   : (process.env.REACT_APP_API_URL ?? "/api").trim();  // Web mode
 
 let API_BASE_URL = (RAW_BASE === "" ? "/api" : RAW_BASE).replace(/\/+$/, "");

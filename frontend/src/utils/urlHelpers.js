@@ -8,8 +8,8 @@ const IS_ELECTRON = typeof window !== 'undefined' && window.electronAPI?.isElect
 // Server base URL (without /api for static files)
 const getServerBase = () => {
   if (IS_ELECTRON) {
-    // In Electron, backend is on http://localhost:5000
-    return "http://localhost:5000";
+    // In Electron, backend is on http://127.0.0.1:5000 (use 127.0.0.1 to match UI origin)
+    return "http://127.0.0.1:5000";
   }
   // In web mode, relative URLs work
   return "";
@@ -17,12 +17,12 @@ const getServerBase = () => {
 
 /**
  * Returns the API backend base URL
- * In Electron: http://localhost:5000
+ * In Electron: http://127.0.0.1:5000
  * In Docker/Web: uses REACT_APP_API_URL or /api via nginx proxy
  */
 export const getApiBaseUrl = () => {
   if (IS_ELECTRON) {
-    return "http://localhost:5000";
+    return "http://127.0.0.1:5000";
   }
   // In Docker/Web mode, we can use an env variable or nginx proxy
   // Nginx redirects /api to the backend
