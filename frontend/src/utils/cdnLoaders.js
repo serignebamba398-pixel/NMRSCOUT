@@ -93,22 +93,26 @@ export function loadRDKitFromCDN() {
     let urlIndex = 0;
     const tryNextUrl = () => {
       if (urlIndex >= urls.length) {
+        console.error("[RDKIT] All sources exhausted, URLs tried:", urls);
         reject(new Error("RDKit.js failed - all sources exhausted"));
         return;
       }
       const url = urls[urlIndex];
       urlIndex++;
       
-      debugLog(`[RDKIT] Trying to load from: ${url}`);
+      console.log(`[RDKIT] Trying to load from: ${url}`);
       
       const s = document.createElement("script");
       s.async = true;
       s.defer = true;
       s.dataset.rdkit = "RDKit_minimal";
       s.src = url;
-      s.onload = onReady;
-      s.onerror = () => {
-        debugWarn(`[RDKIT] Failed to load from ${url}, trying next...`);
+      s.onload = () => {
+        console.log(`[RDKIT] Successfully loaded script from: ${url}`);
+        onReady();
+      };
+      s.onerror = (e) => {
+        console.warn(`[RDKIT] Failed to load from ${url}:`, e);
         document.head.removeChild(s);
         tryNextUrl();
       };
@@ -239,9 +243,13 @@ export function load3DmolFromCDN() {
     "https://cdn.jsdelivr.net/npm/3dmol/build/3Dmol-min.js",
   ];
 
+  console.log("[3DMOL] Base path:", localBase);
+  console.log("[3DMOL] URLs to try:", urls);
+
   mol3dPromise = new Promise(async (resolve, reject) => {
     // Check if WebGL works BEFORE loading 3Dmol
     if (!isWebGLAvailable()) {
+      console.error("[3DMOL] WebGL not available");
       reject(
         new Error(
           "WebGL not available in this browser. Please enable WebGL in about:config (webgl.disabled = false) or update your graphics drivers."
@@ -252,6 +260,7 @@ export function load3DmolFromCDN() {
 
     for (const u of urls) {
       try {
+        console.log(`[3DMOL] Trying to load from: ${u}`);
         await new Promise((res, rej) => {
           const ex = document.querySelector(`script[src="${u}"]`);
           if (ex) {
@@ -263,19 +272,28 @@ export function load3DmolFromCDN() {
           s.async = true;
           s.defer = true;
           s.src = u;
-          s.onload = res;
-          s.onerror = rej;
+          s.onload = () => {
+            console.log(`[3DMOL] Successfully loaded from: ${u}`);
+            res();
+          };
+          s.onerror = (e) => {
+            console.warn(`[3DMOL] Failed to load from ${u}:`, e);
+            rej(e);
+          };
           document.head.appendChild(s);
         });
         if (window.$3Dmol) {
+          console.log("[3DMOL] $3Dmol is now available");
           patch3DmolForOffscreenCanvas();
           resolve(window.$3Dmol);
           return;
         }
-      } catch {
+      } catch (err) {
+        console.warn(`[3DMOL] Error loading ${u}:`, err);
         // Try next URL
       }
     }
+    console.error("[3DMOL] All sources exhausted");
     reject(new Error("Impossible de charger 3Dmol"));
   });
 
