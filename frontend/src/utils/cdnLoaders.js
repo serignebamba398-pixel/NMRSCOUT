@@ -8,11 +8,29 @@ let rdkitPromise = null;
 let mol3dPromise = null;
 
 /**
- * Get base URL for local libs (works in both dev and production)
+ * Get base URL for local libs (works in both dev and production/Electron)
  */
 function getLocalLibsBase() {
-  // In production (Electron), use relative path from the served content
-  // In dev, use the public folder path
+  // In Electron production, window.location may be file:// or http://127.0.0.1
+  // We need to find the correct base path for libs
+  
+  // If running in Electron with local server (http://127.0.0.1:xxxx)
+  if (typeof window !== "undefined" && window.location) {
+    const loc = window.location;
+    
+    // If served via local backend (production Electron)
+    if (loc.protocol === "http:" && loc.hostname === "127.0.0.1") {
+      // Libs are served from /libs/ relative to the React build
+      return "";
+    }
+    
+    // If running in dev mode (localhost:3000)
+    if (loc.hostname === "localhost" && loc.port === "3000") {
+      return "";
+    }
+  }
+  
+  // Fallback to PUBLIC_URL or empty
   return process.env.PUBLIC_URL || "";
 }
 
@@ -33,23 +51,32 @@ export function loadRDKitFromCDN() {
     "https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js",
   ];
 
+  console.log("[RDKIT] Base path:", localBase);
+  console.log("[RDKIT] URLs to try:", urls);
+
   rdkitPromise = new Promise((resolve, reject) => {
     const sel = 'script[data-rdkit="RDKit_minimal"]';
     const ex = document.querySelector(sel);
 
     const onReady = () => {
       if (typeof window.initRDKitModule !== "function") {
+        console.error("[RDKIT] initRDKitModule not found after script load");
         reject(new Error("initRDKitModule not found"));
         return;
       }
+      console.log("[RDKIT] initRDKitModule found, initializing...");
       window
         .initRDKitModule()
         .then((RDKit) => {
           window.RDKit = RDKit;
+          console.log("[OK] RDKit initialized successfully");
           debugLog("[OK] RDKit initialized successfully");
           resolve(RDKit);
         })
-        .catch(reject);
+        .catch((e) => {
+          console.error("[RDKIT] initRDKitModule() failed:", e);
+          reject(e);
+        });
     };
 
     if (ex) {
