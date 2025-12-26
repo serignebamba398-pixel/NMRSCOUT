@@ -45,7 +45,6 @@ import { fetchWithRetry } from "./utils/imageUtils";
 import { 
   loadRDKitFromCDN, 
   load3DmolFromCDN, 
-  isProblematicBrowser, 
   isWebGLAvailable 
 } from "./utils/cdnLoaders";
 // colorUtils used only in sub-components
