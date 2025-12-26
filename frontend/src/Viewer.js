@@ -1231,7 +1231,7 @@ export default function Viewer({
 
   const [zoomRectEnabled, setZoomRectEnabled] = useState(true);
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
-  const [relevel2DEnabled, setRelevel2DEnabled] = useState(true); // Option to disable relevel on scroll
+  const [relevel2DEnabled, setRelevel2DEnabled] = useState(false); // Disabled by default - only zoom updates background
 
   // NEW: nonce par type pour forcer un remount des canvases
   const [refreshKeyByType, setRefreshKeyByType] = useState({});
