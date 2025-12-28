@@ -10,8 +10,9 @@ if (process.env.RESOURCES_PATH) {
   const candidates = [
     // Bundled Python: scripts are inside _internal folder (PRIORITY)
     path.join(process.env.RESOURCES_PATH, 'python', '_internal', 'scripts'),
-    path.join(process.env.RESOURCES_PATH, 'app.asar.unpacked', 'backend', 'scripts'),
+    // extraResources location for standalone .py scripts (like sim_mult_rulebased.py)
     path.join(process.env.RESOURCES_PATH, 'scripts'),
+    path.join(process.env.RESOURCES_PATH, 'app.asar.unpacked', 'backend', 'scripts'),
   ];
   
   // Check that the candidate has the main prediction script
@@ -83,6 +84,27 @@ const scriptMap = {
   HSQC: 'annotation_HSQC.R',
 };
 
+// Find multiplicity simulator - check multiple locations
+let MULT_SIMULATOR_SCRIPT = path.join(scriptsDir, 'sim_mult_rulebased.py');
+
+// In production, sim_mult_rulebased.py is in extraResources/scripts, not in the bundled exe
+if (process.env.RESOURCES_PATH && !fs.existsSync(MULT_SIMULATOR_SCRIPT)) {
+  const prodCandidates = [
+    path.join(process.env.RESOURCES_PATH, 'scripts', 'sim_mult_rulebased.py'),
+    path.join(process.env.RESOURCES_PATH, 'app.asar.unpacked', 'backend', 'scripts', 'sim_mult_rulebased.py'),
+  ];
+  for (const candidate of prodCandidates) {
+    if (fs.existsSync(candidate)) {
+      MULT_SIMULATOR_SCRIPT = candidate;
+      console.log('[paths] [OK] Found MULT_SIMULATOR_SCRIPT:', MULT_SIMULATOR_SCRIPT);
+      break;
+    }
+  }
+  if (!fs.existsSync(MULT_SIMULATOR_SCRIPT)) {
+    console.error('[paths] [WARN] MULT_SIMULATOR_SCRIPT not found. Checked:', prodCandidates);
+  }
+}
+
 const legacyOut = {
   '1H': '1H_With_Ransy_Julien.csv',
   '13C': '13C_With_Ransy_and_ECFP4.csv',
@@ -98,6 +120,7 @@ module.exports = {
   PRED_SCRIPT,
   BG_SCRIPT,
   INTERACT_SCRIPT,
+  MULT_SIMULATOR_SCRIPT,
   EXTRACTORS,
   scriptMap,
   legacyOut,
