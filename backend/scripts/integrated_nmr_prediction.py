@@ -994,6 +994,7 @@ def process_one_smiles(
     # --- Multiplicités 1H (optionnel) — VERSION ENRICHIE AVEC CONSTANTES J
 
     sidecar_path = None
+    payload = None  # ✅ Initialize payload at function level to avoid UnboundLocalError
     if multiplicity_mod is not None:
         try:
             # 1) Configuration simulation
@@ -1197,7 +1198,6 @@ def process_one_smiles(
                     group_id += 1
 
             # 6) JSON sidecar enrichi
-            payload = None
             if write_mult_json or return_payload:
                 payload = {
                     "mol_id": mol_id,
@@ -1362,6 +1362,17 @@ def run_csv(
             except Exception as e:
                 ko += 1
                 send_log(f"[{mol_id}] Error: {e}")
+
+                # [KO] Increment and emit progress even on error
+                _GLOBAL_MOLECULE_COUNTER["done"] += 1
+                progress_pct = (_GLOBAL_MOLECULE_COUNTER['done'] / _GLOBAL_MOLECULE_COUNTER['total']) * 98
+                send_progress(
+                    progress_pct,
+                    f"Molecule {_GLOBAL_MOLECULE_COUNTER['done']}/{_GLOBAL_MOLECULE_COUNTER['total']} (Error)",
+                    completed=_GLOBAL_MOLECULE_COUNTER['done'],
+                    total=_GLOBAL_MOLECULE_COUNTER['total']
+                )
+
                 manifest_rows.append({
                     "mol_id": mol_id,
                     "smiles": smi,
