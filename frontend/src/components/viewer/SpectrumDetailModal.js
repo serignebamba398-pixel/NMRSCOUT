@@ -504,24 +504,41 @@ function SpectrumDetailModal({
               {loading ? "Simulating..." : "Refresh"}
             </button>
             
-            {zoomRange && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {zoomRange && (
+                <button
+                  onClick={resetZoom}
+                  style={{
+                    padding: "6px 12px",
+                    backgroundColor: "#f1f5f9",
+                    color: "#374151",
+                    border: "1px solid #d1d5db",
+                    borderRadius: 4,
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  Reset Zoom
+                </button>
+              )}
               <button
-                onClick={resetZoom}
+                onClick={onClose}
                 style={{
                   padding: "6px 12px",
-                  backgroundColor: "#f1f5f9",
-                  color: "#374151",
-                  border: "1px solid #d1d5db",
+                  backgroundColor: "#3b82f6",
+                  color: "#fff",
+                  border: "none",
                   borderRadius: 4,
                   cursor: "pointer",
                   fontSize: 12,
+                  fontWeight: 500,
                 }}
               >
-                Reset Zoom
+                View Detail
               </button>
-            )}
+            </div>
           </div>
-          
+
           <div style={MODAL_STYLES.canvasContainer}>
             {loading && (
               <div style={MODAL_STYLES.loading}>
