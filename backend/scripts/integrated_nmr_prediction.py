@@ -61,6 +61,7 @@ _MOLECULES_SPECTRAL_DATA: List[Dict[str, Any]] = []
 
 import numpy as np
 import torch
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # CPU only
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
@@ -1279,6 +1280,113 @@ def run_single(
         send_error(f"Prediction failed for '{mol_id}'", error=str(e), traceback=tb)
         send_completed(False, mol_id=mol_id, error=str(e))
 
+def _run_csv_parallel(
+    molecules: List[dict],
+    out_dir: str,
+    model_1h_path: str,
+    model_13c_path: str,
+    property_key: str,
+    sim_params: Optional[dict],
+    num_workers: int,
+    manifest_rows: List[dict],
+    all_multiplicity_payloads: List[dict],
+) -> None:
+    """
+    Parallel CSV processing using ProcessPoolExecutor.
+
+    Args:
+        molecules: List of dicts with 'mol_id', 'smiles', 'index'
+        out_dir: Output directory
+        model_1h_path: Path to 1H model
+        model_13c_path: Path to 13C model
+        property_key: SDF property key
+        sim_params: Simulation parameters
+        num_workers: Number of parallel workers
+        manifest_rows: Output list for manifest entries
+        all_multiplicity_payloads: Output list for multiplicity payloads
+    """
+    try:
+        from parallel_prediction_worker import worker_process_molecule
+    except ImportError:
+        send_log("[WARN] Could not import parallel worker - falling back to sequential mode")
+        # Fallback: convert to sequential by setting num_workers=1
+        # This will be handled by caller
+        raise
+
+    # Prepare tasks
+    tasks = []
+    for mol in molecules:
+        task = {
+            'mol_data': {'mol_id': mol['mol_id'], 'smiles': mol['smiles']},
+            'out_dir': out_dir,
+            'model_1h_path': model_1h_path,
+            'model_13c_path': model_13c_path,
+            'property_key': property_key,
+            'sim_params': sim_params,
+        }
+        tasks.append((mol, task))
+
+    # Process with ProcessPoolExecutor
+    completed_count = 0
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        # Submit all tasks
+        future_to_mol = {}
+        for mol, task in tasks:
+            future = executor.submit(
+                worker_process_molecule,
+                task['mol_data'],
+                task['out_dir'],
+                task['model_1h_path'],
+                task['model_13c_path'],
+                task['property_key'],
+                task['sim_params'],
+            )
+            future_to_mol[future] = mol
+
+        # Process results as they complete
+        for future in as_completed(future_to_mol):
+            mol = future_to_mol[future]
+            try:
+                success, result, mol_id = future.result()
+
+                # Update progress
+                completed_count += 1
+                _GLOBAL_MOLECULE_COUNTER["done"] = completed_count
+
+                progress_pct = (completed_count / _GLOBAL_MOLECULE_COUNTER['total']) * 98
+                status = "SDF" if success else "Error"
+                send_progress(
+                    progress_pct,
+                    f"Molecule {completed_count}/{_GLOBAL_MOLECULE_COUNTER['total']} ({status})",
+                    completed=completed_count,
+                    total=_GLOBAL_MOLECULE_COUNTER['total']
+                )
+
+                if success:
+                    send_log(f"[OK] Molecule {completed_count}/{_GLOBAL_MOLECULE_COUNTER['total']} processed: {result['mol_id']}")
+                    if result.get('payload'):
+                        all_multiplicity_payloads.append(result['payload'])
+                else:
+                    send_log(f"[{mol_id}] Error: {result.get('error', 'Unknown error')}")
+
+                manifest_rows.append(result)
+
+            except Exception as e:
+                # Worker crashed
+                send_log(f"[{mol['mol_id']}] Worker error: {e}")
+                completed_count += 1
+                _GLOBAL_MOLECULE_COUNTER["done"] = completed_count
+
+                manifest_rows.append({
+                    'mol_id': mol['mol_id'],
+                    'smiles': mol['smiles'],
+                    'sdf': '',
+                    'nb_predicted_H': 0,
+                    'nb_predicted_C': 0,
+                    'payload': None,
+                    'error': f"Worker crashed: {str(e)}"
+                })
+
 def run_csv(
     csv_path: str,
     out_dir: str,
@@ -1289,6 +1397,7 @@ def run_csv(
     property_key: str,
     multiplicity_mod=None,
     sim_params: Optional[dict] = None,
+    num_workers: int = 1,  # Number of parallel workers (1 = sequential)
 ) -> None:
     ensure_dir(out_dir)
 
@@ -1315,12 +1424,35 @@ def run_csv(
     ok = 0
     ko = 0
 
+    # Read all molecules first
+    molecules_to_process = []
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        for row in reader:
-            done += 1
-            mol_id = (row.get(id_col) or f"mol_{done}").strip()
+        for idx, row in enumerate(reader, start=1):
+            mol_id = (row.get(id_col) or f"mol_{idx}").strip()
             smi = (row.get(smiles_col) or "").strip()
+            molecules_to_process.append({'mol_id': mol_id, 'smiles': smi, 'index': idx})
+
+    # Choose parallel or sequential processing
+    if num_workers > 1 and len(molecules_to_process) > 1:
+        send_log(f"[PARALLEL] Using {num_workers} workers for {len(molecules_to_process)} molecules")
+        _run_csv_parallel(
+            molecules_to_process, out_dir, model_1h_path, model_13c_path,
+            property_key, sim_params, num_workers,
+            manifest_rows, all_multiplicity_payloads
+        )
+        # Count ok/ko from manifest_rows
+        ok = sum(1 for r in manifest_rows if not r['error'])
+        ko = sum(1 for r in manifest_rows if r['error'])
+    else:
+        # Sequential processing (original code)
+        if num_workers > 1:
+            send_log("[INFO] Parallel processing requested but only 1 molecule - using sequential mode")
+
+        for mol_data in molecules_to_process:
+            done = mol_data['index']
+            mol_id = mol_data['mol_id']
+            smi = mol_data['smiles']
 
             try:
                 # NEW: use return_payload=True to get payload without writing individual file
@@ -1454,6 +1586,10 @@ def build_argparser() -> argparse.ArgumentParser:
     ap.add_argument("--property_key", default="(1)", help="Clé de propriété SDF pour stocker la liste de shifts")
     ap.add_argument("--task_id", default=None, help="ID de tâche externe (optionnel, pour logs)")
 
+    # --- Parallélisation
+    ap.add_argument("--workers", type=int, default=1,
+                    help="Nombre de workers parallèles pour CSV (1=séquentiel, 2-8 recommandé pour parallélisation)")
+
     # --- Multiplicités 1H (rule-based)
     ap.add_argument("--simulate_multiplicity", action="store_true",
                     help="Active la simulation de multiplicités 1H.")
@@ -1538,7 +1674,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                 model_13c_path=args.model_13c_path,
                 property_key=args.property_key,
                 multiplicity_mod=multiplicity_mod,
-                sim_params=sim_params
+                sim_params=sim_params,
+                num_workers=getattr(args, 'workers', 1)
             )
     except Exception as e:
         send_error("Erreur fatale", error=str(e), traceback=traceback.format_exc())
