@@ -50,7 +50,7 @@ import {
 // colorUtils used only in sub-components
 
 // Composants viewer
-import { Pill, ColorPicker, StickChart, Scatter2D } from "./components/viewer";
+import { Pill, ColorPicker, StickChart, Scatter2D, SpectrumDetailModal } from "./components/viewer";
 
 // Hook de mesure
 // useMeasureWidth used only in sub-components
@@ -1486,8 +1486,10 @@ export default function Viewer({
         .map(v => parseFloat(String(v).replace(",", ".")))
         .filter(Number.isFinite),
       metrics: extractMetricsFromRow(r),
+      smiles: r.smiles || r.SMILES || r.Smiles || r.smi || "",  // SMILES for spectrum simulation
+      source: r.Source || selectedSource || "",  // Source name
     } : null;
-  }, [rowFor]);
+  }, [rowFor, selectedSource]);
 
   const c13 = useMemo(() => {
     const r = rowFor("13C");
@@ -2147,6 +2149,9 @@ export default function Viewer({
   const [allPage, setAllPage] = useState(1);
   const [allPageSize, setAllPageSize] = useState(20);
 
+  // État pour le modal de spectre 1H détaillé
+  const [spectrumDetailOpen, setSpectrumDetailOpen] = useState(false);
+
   /* petits panneaux de réglage */
   const renderControls1D = (type) => (
     <div style={{
@@ -2606,6 +2611,30 @@ export default function Viewer({
 
                       {renderControls1D("1H")}
 
+                      {/* Bouton View Detail pour le spectre 1H simulé */}
+                      <div style={{ marginBottom: 8, display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => setSpectrumDetailOpen(true)}
+                          disabled={!oneH?.smiles}
+                          style={{
+                            padding: "4px 10px",
+                            fontSize: 11,
+                            fontWeight: 500,
+                            backgroundColor: oneH?.smiles ? "#3b82f6" : "#e5e7eb",
+                            color: oneH?.smiles ? "#fff" : "#9ca3af",
+                            border: "none",
+                            borderRadius: 4,
+                            cursor: oneH?.smiles ? "pointer" : "not-allowed",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 4,
+                          }}
+                          title={oneH?.smiles ? "View simulated spectrum with peak shapes" : "No SMILES available"}
+                        >
+                          🔍 View Detail
+                        </button>
+                      </div>
+
                       <StickChart
                         key={[
                           refreshKeyByType["1H"] ?? 0,
@@ -3028,6 +3057,16 @@ export default function Viewer({
         csvUrl={pivotCsvUrl}
         taskId={taskId}
         customColors={customColors}
+      />
+
+      {/* Modale — spectre 1H simulé détaillé */}
+      <SpectrumDetailModal
+        isOpen={spectrumDetailOpen}
+        onClose={() => setSpectrumDetailOpen(false)}
+        smiles={oneH?.smiles || ""}
+        molId={oneH?.source || selectedSource || "mol"}
+        theoryShifts={oneH?.theory || []}
+        expShifts={oneH?.expX || []}
       />
     </div>
   );

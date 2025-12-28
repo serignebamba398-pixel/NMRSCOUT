@@ -1,5 +1,6 @@
 import numpy as np
 import time
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -14,7 +15,7 @@ device = torch.device('cpu')  # Forcer l'utilisation du CPU
 
 
 class NMRModel(nn.Module):
-    def __init__(self, net: nn.Module | None = None, *args, **kwargs):
+    def __init__(self, net: Optional[nn.Module] = None, *args, **kwargs):
         super().__init__()
         self.net = net
 
