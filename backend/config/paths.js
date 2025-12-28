@@ -87,6 +87,11 @@ const scriptMap = {
 // Find multiplicity simulator - check multiple locations
 let MULT_SIMULATOR_SCRIPT = path.join(scriptsDir, 'sim_mult_rulebased.py');
 
+// Log in development
+if (!process.env.RESOURCES_PATH) {
+  console.log('[paths] [DEV] MULT_SIMULATOR_SCRIPT:', MULT_SIMULATOR_SCRIPT, '-> exists:', fs.existsSync(MULT_SIMULATOR_SCRIPT));
+}
+
 // In production, sim_mult_rulebased.py is in extraResources/scripts, not in the bundled exe
 if (process.env.RESOURCES_PATH && !fs.existsSync(MULT_SIMULATOR_SCRIPT)) {
   const prodCandidates = [

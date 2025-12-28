@@ -47,6 +47,7 @@ import hashlib
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from rdkit.Chem import rdchem
+from rdkit.Chem import Descriptors
 
 # Import du module hétérocycles complet
 try:
@@ -4880,11 +4881,10 @@ class ConformerCache:
 def _count_rotatable_bonds(mol: Chem.Mol) -> int:
     """
     Compte le nombre de liaisons rotables dans une molécule.
-    
+
     Liaisons rotables = liaisons simples non cycliques entre atomes lourds,
     excluant les liaisons terminales (méthyles, OH, etc.)
     """
-    from rdkit.Chem import Descriptors
     try:
         return Descriptors.NumRotatableBonds(mol)
     except Exception:
