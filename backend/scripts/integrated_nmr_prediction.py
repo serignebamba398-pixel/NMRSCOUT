@@ -4,10 +4,16 @@
 """integrated_nmr_prediction.py (server, DGL compatible)
 =======================================================
 - Generates SDF files enriched with predicted 1H/13C shifts.
+- Generates JSON file with full spectral data for 1H NMR (multiplicities, J-couplings).
 - CPU-only, Windows compatible.
 - Aligns the 1H assignment "per H" with the extractor scripts (predict_1H_real.py / COSY / HSQC):
     * one value per H atom (repeat the CH3/CH2/CH group value)
     * 1H group order = sorted by heavy-atom index (consistent mask -> prediction order)
+
+Outputs:
+- SDF files: One per molecule with predicted 1H and 13C shifts
+- spectral_data_1H.json: JSON with multiplicity simulation data for spectrum visualization
+- sdf_manifest.json: Manifest with all molecule info and paths
 
 Usage (single):
     python integrated_nmr_prediction.py \
@@ -15,7 +21,9 @@ Usage (single):
         --output_dir ./out \
         --model_1h_path ../models/1H_sparsified_proposed_proposed_set2set_1.pt \
         --model_13c_path ../models/13C_sparsified_proposed_proposed_set2set_1.pt \
-        --mol_id ethanol
+        --mol_id ethanol \
+        --solvent CDCl3 \
+        --spectrometer_mhz 700.0
 
 Usage (CSV):
     python integrated_nmr_prediction.py \
@@ -23,7 +31,8 @@ Usage (CSV):
         --output_dir ./out \
         --model_1h_path ../models/1H_sparsified_proposed_proposed_set2set_1.pt \
         --model_13c_path ../models/13C_sparsified_proposed_proposed_set2set_1.pt \
-        --id_column sample-id --smiles_column SMILES
+        --id_column sample-id --smiles_column SMILES \
+        --solvent DMSO-d6 --spectrometer_mhz 400.0
 """
 
 from __future__ import annotations
@@ -39,11 +48,16 @@ import shutil
 import random
 import argparse
 import traceback
+import importlib.util
+from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
 
 # [OK] Global counter for tracking
 _GLOBAL_MOLECULE_COUNTER = {"done": 0, "total": 0}
+
+# [OK] Container for all molecules' spectral JSON data
+_MOLECULES_SPECTRAL_DATA: List[Dict[str, Any]] = []
 
 import numpy as np
 import torch
@@ -57,7 +71,7 @@ torch.backends.cudnn.enabled = False
 # RDKit
 # -----------------------
 from rdkit import Chem, RDConfig, rdBase
-from rdkit.Chem import AllChem, ChemicalFeatures
+from rdkit.Chem import AllChem, ChemicalFeatures, rdchem
 try:
     from rdkit.Chem import rdmolfiles as rdMolFiles
 except ImportError:
@@ -137,6 +151,25 @@ except ImportError as e:
     print(f"Critical import error: {e}", file=sys.stderr)
     print("Make sure ml_dependencies/ contains gnn_models/, model.py, dataset.py, util.py", file=sys.stderr)
     sys.exit(1)
+
+# -----------------------
+# Multiplicity simulator imports
+# -----------------------
+try:
+    from sim_mult_rulebased import (
+        simulate_multiplicity_per_proton,
+        prepare_molecule_for_nmr,
+        SimConfig,
+        LABEL2IDX,
+        DEFAULT_SOLVENT,
+        DEFAULT_SPECTROMETER_FREQ_MHZ,
+        DEFAULT_TEMPERATURE_K,
+    )
+    MULTIPLICITY_SIMULATOR_AVAILABLE = True
+    print("[OK] Multiplicity simulator (sim_mult_rulebased) imported", flush=True)
+except ImportError as e:
+    MULTIPLICITY_SIMULATOR_AVAILABLE = False
+    print(f"[WARN] Multiplicity simulator not available: {e}", file=sys.stderr)
 
 # -----------------------
 # ML constants
@@ -774,6 +807,86 @@ def generate_sdf_with_shifts(
     send_log(f"SDF written: {sdf_path} | {len(all_shifts)} positions")
     return sdf_path
 
+
+# -----------------------
+# Helpers spécifiques simulation
+# -----------------------
+def _build_x_h_connectivity_from_mol_with_H(molH: Chem.Mol) -> Dict[int, List[int]]:
+    """Construit {heavy_idx: [H_idx,...]} depuis un Mol *avec* H."""
+    xh: Dict[int, List[int]] = {}
+    for a in molH.GetAtoms():
+        if a.GetSymbol() != "H":
+            continue
+        hidx = a.GetIdx()
+        nbs = [n.GetIdx() for n in a.GetNeighbors()]
+        if not nbs:
+            continue
+        heavy = nbs[0]
+        xh.setdefault(heavy, []).append(hidx)
+    for k in xh:
+        xh[k] = sorted(xh[k])
+    return xh
+
+def _proton_shifts_ppm_dict_from_list(molH: Chem.Mol, per_atom_H_ppm: List[float]) -> Dict[int, float]:
+    """Retourne {H_idx: δ(ppm)}."""
+    if len(per_atom_H_ppm) < molH.GetNumAtoms():
+        per_atom_H_ppm = list(per_atom_H_ppm) + [0.0] * (molH.GetNumAtoms() - len(per_atom_H_ppm))
+    out: Dict[int, float] = {}
+    for a in molH.GetAtoms():
+        if a.GetSymbol() == "H":
+            out[a.GetIdx()] = float(per_atom_H_ppm[a.GetIdx()])
+    return out
+
+# -----------------------
+# Multiplicités: sidecar + append props
+# -----------------------
+def _write_multiplicity_json(out_dir: str, mol_id: str, payload: dict) -> str:
+    path = os.path.join(out_dir, f"{sanitize_filename(mol_id)}_multiplicity.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    send_log(f"Multiplicités: JSON -> {os.path.basename(path)}")
+    return path
+
+def _append_props_to_sdf(sdf_path: str, props: Dict[str, str]) -> None:
+    try:
+        suppl = rdMolFiles.SDMolSupplier(sdf_path, removeHs=False, sanitize=False)
+        mols = [m for m in suppl if m is not None]
+        if not mols:
+            return
+        m = mols[0]
+        for k, v in props.items():
+            m.SetProp(k, v)
+        w = rdMolFiles.SDWriter(sdf_path)
+        w.write(m); w.close()
+    except Exception as e:
+        send_log(f"⚠️ Impossible d'ajouter des propriétés SDF: {e}")
+
+
+def save_spectral_json(
+    spectral_data: List[Dict[str, Any]],
+    output_dir: str,
+    filename: str = "spectral_data_1H.json",
+) -> str:
+    """
+    Save the spectral data for all molecules to a JSON file.
+    
+    Args:
+        spectral_data: List of spectral JSON dictionaries (one per molecule)
+        output_dir: Output directory
+        filename: Output filename
+    
+    Returns:
+        Path to the saved JSON file
+    """
+    output_path = os.path.join(output_dir, filename)
+    
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(spectral_data, f, indent=2, ensure_ascii=False)
+    
+    send_log(f"Spectral data saved: {output_path} ({len(spectral_data)} molecules)")
+    return output_path
+
+
 # -----------------------
 # Per-molecule orchestration
 # -----------------------
@@ -791,14 +904,33 @@ def process_one_smiles(
     models: ModelBundle,
     model_1h_path: str,
     model_13c_path: str,
-    property_key: str = "(1)"
-) -> Tuple[str, int, int, ModelBundle]:
-    smiles = (smiles or "").strip()
+    property_key: str = "(1)",
+    multiplicity_mod=None,
+    sim_params: Optional[dict] = None,
+    write_mult_json: bool = True,
+    attach_labels_to_sdf: bool = True,
+    return_payload: bool = False,  # NEW: return payload instead of writing file (for batch mode)
+) -> Tuple[str, int, int, ModelBundle, Optional[str], Optional[dict]]:
+    
+    # ✅ CORRECTION : Sauvegarder le SMILES ORIGINAL avant toute transformation
+    original_input_smiles = (smiles or "").strip()
+    
+    smiles = original_input_smiles
     if not smiles:
-        raise ValueError('Empty SMILES.')
+        raise ValueError("SMILES vide.")
+    
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        raise ValueError(f"Invalid SMILES: {smiles}")
+        raise ValueError(f"SMILES invalide : {smiles}")
+    
+    # ✅ VALIDATION STRUCTURE (si simulateur disponible)
+    if multiplicity_mod and hasattr(multiplicity_mod, '_validate_molecular_structure'):
+        try:
+            multiplicity_mod._validate_molecular_structure(mol, original_input_smiles)
+            send_log(f"[{mol_id}] ✓ Structure moléculaire validée")
+        except ValueError as ve:
+            send_error(f"[{mol_id}] Structure moléculaire invalide", error=str(ve))
+            raise
 
     work_dir = ensure_dir(os.path.join(out_dir, f"tmp_{sanitize_filename(mol_id)}"))
 
@@ -811,39 +943,45 @@ def process_one_smiles(
     train_y_mean_C, train_y_std_C = models.mean_std_13c
 
     # 1H
-    send_log(f"[{mol_id}] Preparing 1H...")
+    send_log(f"[{mol_id}] Préparation 1H...")
     npz_1h, x_h_conn = save_as_npy_for_1H(mol, work_dir)
-    
     try:
         [md] = np.load(npz_1h, allow_pickle=True)['data']
         nb_groups = len(_sorted_h_groups(md.get('h_x_connectivity', [{}])[0])) if md.get('h_x_connectivity', []) else 0
-        send_log(f"[{mol_id}] NPZ 1H ok: n_node={md['n_node'].tolist()}, mask_true={int(np.sum(md['mask']))}, h_groups={nb_groups}")
+        send_log(f"[{mol_id}] NPZ 1H ok: n_node={md['n_node'].tolist()}, mask_true={int(np.sum(md['mask']))}, groupes_H={nb_groups}")
     except Exception as dbg:
         send_log(f"[{mol_id}] NPZ 1H debug fail: {dbg}")
 
     if models.net_1h is None:
-        send_log(f"[{mol_id}] Loading 1H model...")
+        send_log(f"[{mol_id}] Chargement modèle 1H...")
         models.net_1h = load_model("1H", model_1h_path, npz_1h)
-    send_log(f"[{mol_id}] Running 1H inference...")
+    send_log(f"[{mol_id}] Inférence 1H...")
     pred_1h = inference_model(models.net_1h, npz_1h, "1H", train_y_mean_H, train_y_std_H)
 
     expected_groups = len(_sorted_h_groups(x_h_conn))
-    send_log(f"[{mol_id}] Expected 1H groups={expected_groups} | predicted={len(pred_1h)}")
+    send_log(f"[{mol_id}] Groupes 1H attendus={expected_groups} | prédits={len(pred_1h)}")
 
-    # 13C
-    send_log(f"[{mol_id}] Preparing 13C...")
-    npz_13c = save_as_npy_for_13C(mol, work_dir)
-    if models.net_13c is None:
-        send_log(f"[{mol_id}] Loading 13C model...")
-        models.net_13c = load_model("13C", model_13c_path, npz_13c)
-    send_log(f"[{mol_id}] Running 13C inference...")
-    pred_13c = inference_model(models.net_13c, npz_13c, "13C", train_y_mean_C, train_y_std_C)
+    # 13C - avec gestion d'erreur pour les molécules problématiques
+    pred_13c = np.array([])
+    npz_13c = None
+    try:
+        send_log(f"[{mol_id}] Préparation 13C...")
+        npz_13c = save_as_npy_for_13C(mol, work_dir)
+        if models.net_13c is None:
+            send_log(f"[{mol_id}] Chargement modèle 13C...")
+            models.net_13c = load_model("13C", model_13c_path, npz_13c)
+        send_log(f"[{mol_id}] Inférence 13C...")
+        pred_13c = inference_model(models.net_13c, npz_13c, "13C", train_y_mean_C, train_y_std_C)
+    except Exception as e:
+        send_log(f"[{mol_id}] ⚠ Prédiction 13C échouée (kékulisation): {e}")
+        send_log(f"[{mol_id}] Continuation avec seulement 1H...")
+        pred_13c = np.zeros(sum(1 for a in mol.GetAtoms() if a.GetSymbol() == 'C'))
 
     # SDF final
     final_name = f"{sanitize_filename(mol_id)}_predicted.sdf"
-    send_log(f"[{mol_id}] Generating final SDF...")
+    send_log(f"[{mol_id}] Génération SDF final...")
     sdf_path = generate_sdf_with_shifts(
-        smiles=smiles,
+        smiles=original_input_smiles,  # ✅ Utiliser SMILES original
         mol_original=mol,
         shifts_1h=pred_1h,
         shifts_13c=pred_13c,
@@ -853,9 +991,246 @@ def process_one_smiles(
         sdf_property_key=property_key
     )
 
-    # [OK] Detectable completion message
-    send_log(f"[OK] Molecule {mol_id} : SDF generated successfully -> {os.path.basename(sdf_path)}")
+    # --- Multiplicités 1H (optionnel) — VERSION ENRICHIE AVEC CONSTANTES J
 
+    sidecar_path = None
+    if multiplicity_mod is not None:
+        try:
+            # 1) Configuration simulation
+            sp = sim_params or {}
+            SimConfig = getattr(multiplicity_mod, "SimConfig", None)
+            cfg = SimConfig() if SimConfig else None
+            if cfg:
+                cfg.separate_diastereotopic_protons = True
+                cfg.spectrometer_mhz = float(sp.get("freq_mhz", 700.0))
+
+            # 2) Reconstruire la molécule avec H pour les indices
+            molH_for_sim = Chem.AddHs(mol, addCoords=True)
+            
+            # Générer géométrie 3D si demandé
+            if sp.get("use_3d", True) and molH_for_sim.GetNumConformers() == 0:
+                try:
+                    AllChem.EmbedMolecule(molH_for_sim, randomSeed=42)
+                    AllChem.MMFFOptimizeMolecule(molH_for_sim)
+                except Exception:
+                    pass
+            
+            x_h_conn_sim = _build_x_h_connectivity_from_mol_with_H(molH_for_sim)
+            
+            # 3) Créer le mapping des shifts ML PRÉDITS (pas les shifts heuristiques!)
+            list_H = create_shift_list_1H(molH_for_sim, x_h_conn, pred_1h)
+            proton_shifts_ppm = _proton_shifts_ppm_dict_from_list(molH_for_sim, list_H)
+
+            # ✅ 4) Utiliser simulate_multiplicity_per_proton() avec les VRAIS shifts ML
+            # Cela évite le bug de strong_coupling quand tous les shifts sont identiques
+            per_proton = multiplicity_mod.simulate_multiplicity_per_proton(
+                mol=mol,
+                x_h_connectivity=x_h_conn_sim,
+                proton_shifts_ppm=proton_shifts_ppm,  # ← shifts ML prédits !
+                solvent=sp.get("solvent", "CDCl3"),
+                spectrometer_mhz=float(sp.get("freq_mhz", 700.0)),
+                temperature_k=float(sp.get("temperature_k", 298.15)),
+                include_heteronuclear=True,
+                use_3d=bool(sp.get("use_3d", True)),
+                config=cfg,
+            )
+
+            # ✅ 5) REGROUPEMENT INTELLIGENT DES PROTONS
+            # per_proton contient un représentant par groupe (y compris séparation vinylique)
+            # On doit reconstruire les groupes en utilisant per_proton comme source de vérité
+            
+            # Mapper chaque H de per_proton vers son heavy_idx
+            repr_to_heavy: Dict[int, int] = {}
+            for h_idx in per_proton.keys():
+                nbs = [n.GetIdx() for n in molH_for_sim.GetAtomWithIdx(h_idx).GetNeighbors()]
+                if nbs:
+                    repr_to_heavy[h_idx] = nbs[0]
+            
+            # Regrouper les protons par heavy_idx ET par pattern de multiplicité identique
+            # Cela permet de séparer les protons vinyliques qui ont le même heavy mais des J différents
+            heavy_to_groups: Dict[int, List[List[int]]] = {}
+            for h_idx, heavy_idx in repr_to_heavy.items():
+                data = per_proton[h_idx]
+                # Créer une clé unique basée sur label + J_couplings
+                J_key = tuple(sorted([(j.get("J_hz", 0), j.get("n_equiv", 1)) for j in data.get("J_couplings", [])]))
+                label_key = (data.get("label", "s"), J_key)
+                
+                if heavy_idx not in heavy_to_groups:
+                    heavy_to_groups[heavy_idx] = []
+                
+                # Chercher un groupe existant avec le même pattern
+                found = False
+                for group in heavy_to_groups[heavy_idx]:
+                    repr_h = group[0]
+                    repr_data = per_proton[repr_h]
+                    repr_J_key = tuple(sorted([(j.get("J_hz", 0), j.get("n_equiv", 1)) for j in repr_data.get("J_couplings", [])]))
+                    repr_label_key = (repr_data.get("label", "s"), repr_J_key)
+                    if label_key == repr_label_key:
+                        group.append(h_idx)
+                        found = True
+                        break
+                
+                if not found:
+                    heavy_to_groups[heavy_idx].append([h_idx])
+            
+            # Ajouter les protons équivalents qui ne sont pas dans per_proton (CH₃, CH₂ équivalents)
+            for heavy_idx, h_list in x_h_conn_sim.items():
+                repr_h = None
+                for h in h_list:
+                    if h in per_proton:
+                        repr_h = h
+                        break
+                if repr_h is not None:
+                    # Ajouter les H manquants au groupe du représentant
+                    for group in heavy_to_groups.get(heavy_idx, []):
+                        if repr_h in group:
+                            for h in h_list:
+                                if h not in group and h not in per_proton:
+                                    group.append(h)
+                            break
+
+            n_atoms = molH_for_sim.GetNumAtoms()
+            mult_per_atom = [""] * n_atoms
+
+            groups_items: List[dict] = []
+            group_map_entries: List[str] = []
+            group_id = 0
+
+            # Base sans H pour détection OH/NH/COOH
+            base_for_exch = Chem.RemoveHs(molH_for_sim)
+
+            # ✅ BOUCLE CORRIGÉE : Itérer sur les groupes construits (heavy_to_groups)
+            # Chaque heavy_idx peut avoir plusieurs groupes si les protons sont non-équivalents
+            for heavy_idx in sorted(heavy_to_groups.keys()):
+                for h_group in heavy_to_groups[heavy_idx]:
+                    h_indices = sorted(h_group)
+                    
+                    if not h_indices:
+                        continue
+                    
+                    # Le représentant est le premier H du groupe (il est dans per_proton)
+                    h_idx_repr = h_indices[0]
+                    data = per_proton.get(h_idx_repr, {})
+                    
+                    label_str = data.get("label", "s")
+                    label_idx = int(data.get("label_idx", 0))
+
+                    # Déterminer l'atome lourd
+                    if 0 <= heavy_idx < base_for_exch.GetNumAtoms():
+                        heavy_atom = base_for_exch.GetAtomWithIdx(heavy_idx)
+                        heavy_symbol = heavy_atom.GetSymbol()
+                    else:
+                        heavy_atom = None
+                        heavy_symbol = "?"
+
+                    # ✅ Type de groupe : vérifier si c'est un proton séparé (vinylique, diastéréotopique)
+                    note = "unique_or_equiv"
+                    
+                    # Si ce groupe contient moins de H que x_h_conn_sim, les protons ont été séparés
+                    original_h_count = len(x_h_conn_sim.get(heavy_idx, []))
+                    if len(h_indices) < original_h_count and original_h_count == 2:
+                        # Vérifier si c'est vinylique (sp2) ou diastéréotopique (sp3)
+                        if heavy_atom is not None:
+                            hyb = heavy_atom.GetHybridization()
+                            if hyb == rdchem.HybridizationType.SP2:
+                                note = "vinyl_nonequiv"
+                            else:
+                                note = "diastereotopic"
+                    
+                    # Vérifier geminal partner dans les données
+                    partners = data.get("partners", [])
+                    for p in partners:
+                        partner_idx = p.get("partner_h_index")
+                        J_hz = p.get("J_hz", 0)
+                        if partner_idx and partner_idx not in h_indices:
+                            partner_nbs = [n.GetIdx() for n in molH_for_sim.GetAtomWithIdx(partner_idx).GetNeighbors()]
+                            if partner_nbs and partner_nbs[0] == heavy_idx:
+                                # Partenaire geminal sur le même heavy
+                                if 0 < abs(J_hz) < 4:
+                                    note = "vinyl_nonequiv"
+                                elif 10 < abs(J_hz) < 15:
+                                    note = "diastereotopic"
+                                break
+
+                    # Détection protons échangeables
+                    is_exchangeable = False
+                    exch_type = None
+                    try:
+                        if hasattr(multiplicity_mod, "_is_exchangeable_H_on_X") and heavy_atom is not None:
+                            exch_type = multiplicity_mod._is_exchangeable_H_on_X(base_for_exch, heavy_idx)
+                            if exch_type:
+                                is_exchangeable = True
+                                note = "exchangeable"
+                    except Exception:
+                        pass
+
+                    # ✅ ASSIGNER LE LABEL À TOUS LES H DU GROUPE
+                    for h in h_indices:
+                        if 0 <= h < n_atoms:
+                            mult_per_atom[h] = label_str
+
+                    # ✅ Collecter les shifts de tous les H du groupe
+                    h_shifts = [float(proton_shifts_ppm.get(h, 0.0)) for h in h_indices]
+
+                    # Construction de l'entrée JSON
+                    groups_items.append({
+                        "group_id": group_id,
+                        "heavy_idx": heavy_idx,
+                        "heavy_symbol": heavy_symbol,
+                        "H_indices": [int(h) for h in h_indices],
+                        "H_shifts_ppm": h_shifts,
+                        "label": label_str,
+                        "label_index": label_idx,
+                        "note": note,
+                        "second_order_type": data.get("second_order_type", "first_order"),
+                        "system_type": data.get("system_type"),
+                        "virtual_coupling": bool(data.get("virtual_coupling", False)),
+                        "J_couplings": data.get("J_couplings", []),
+                        "partners": data.get("partners", []),
+                        "satellites_13C_hz": data.get("satellites_13C_hz", []),
+                    })
+
+                    # ✅ Mapper TOUS les H de ce groupe au même group_id
+                    for h in h_indices:
+                        group_map_entries.append(f"{h}:{group_id}")
+                    
+                    group_id += 1
+
+            # 6) JSON sidecar enrichi
+            payload = None
+            if write_mult_json or return_payload:
+                payload = {
+                    "mol_id": mol_id,
+                    "smiles": original_input_smiles,
+                    "solvent": sp.get("solvent", "CDCl3"),
+                    "freq_MHz": float(sp.get("freq_mhz", 700.0)),
+                    "temperature_K": float(sp.get("temperature_k", 298.15)),
+                    "groups": groups_items,
+                    "nb_groups": len(groups_items),
+                    "nb_protons": sum(len(g["H_indices"]) for g in groups_items),  # ✅ Total des H
+                    "note": "Protons grouped by heavy atom; diastereotopic protons separated only if truly different",
+                    "typical_linewidth_hz": float(cfg.line_width_hz) if cfg else 0.8,
+                    "tolerance_grouping_hz": float(getattr(multiplicity_mod, "TOLERANCE_J_HZ", 0.15)),
+                    "digital_resolution_hz": float(cfg.digital_resolution_hz) if cfg and cfg.digital_resolution_hz else None
+                }
+                # Write individual file only if NOT in batch mode (return_payload=False)
+                if write_mult_json and not return_payload:
+                    sidecar_path = _write_multiplicity_json(out_dir, mol_id, payload)
+
+            # 7) Propriétés SDF
+            if attach_labels_to_sdf:
+                props = {
+                    "H1_MULT_LABELS": " ".join(mult_per_atom),
+                    "H1_MULT_GROUPS": str(group_id),
+                    "H1_MULT_MAP": " ".join(group_map_entries),
+                }
+                _append_props_to_sdf(sdf_path, props)
+
+        except Exception as e:
+            send_log(f"[{mol_id}] ⚠️ Simulation multiplicités échouée: {e}")
+            send_log(traceback.format_exc())
+            payload = None  # Ensure payload is None on error
+    # Nettoyage
     try:
         shutil.rmtree(work_dir, ignore_errors=True)
     except Exception:
@@ -863,7 +1238,7 @@ def process_one_smiles(
 
     nH = int(len(pred_1h))
     nC = int(len(pred_13c))
-    return sdf_path, nH, nC, models
+    return sdf_path, nH, nC, models, sidecar_path, payload
 
 # -----------------------
 # Modes single / CSV
@@ -874,7 +1249,9 @@ def run_single(
     out_dir: str,
     model_1h_path: str,
     model_13c_path: str,
-    property_key: str
+    property_key: str,
+    multiplicity_mod=None,
+    sim_params: Optional[dict] = None,
 ) -> None:
     ensure_dir(out_dir)
 
@@ -882,16 +1259,21 @@ def run_single(
     mol_id = mol_id or "mol"
 
     try:
-        sdf_path, nH, nC, _ = process_one_smiles(
+        sdf_path, nH, nC, _, sidecar, _ = process_one_smiles(
             smiles=smiles,
             mol_id=mol_id,
             out_dir=out_dir,
             models=models,
             model_1h_path=model_1h_path,
             model_13c_path=model_13c_path,
-            property_key=property_key
+            property_key=property_key,
+            multiplicity_mod=multiplicity_mod,
+            sim_params=sim_params,
+            return_payload=False,  # Single mode: write individual file
         )
-        send_completed(True, sdf=sdf_path, mol_id=mol_id, nb_predicted_H=nH, nb_predicted_C=nC)
+        
+        send_completed(True, sdf=sdf_path, mol_id=mol_id, nb_predicted_H=nH, nb_predicted_C=nC,
+                       multiplicity_json=sidecar or "")
     except Exception as e:
         tb = traceback.format_exc()
         send_error(f"Prediction failed for '{mol_id}'", error=str(e), traceback=tb)
@@ -904,7 +1286,9 @@ def run_csv(
     id_col: str,
     model_1h_path: str,
     model_13c_path: str,
-    property_key: str
+    property_key: str,
+    multiplicity_mod=None,
+    sim_params: Optional[dict] = None,
 ) -> None:
     ensure_dir(out_dir)
 
@@ -927,6 +1311,7 @@ def run_csv(
 
     models = ModelBundle(net_1h=None, net_13c=None, mean_std_1h=None, mean_std_13c=None)
     manifest_rows: List[dict] = []
+    all_multiplicity_payloads: List[dict] = []  # NEW: collect all payloads for consolidated JSON
     ok = 0
     ko = 0
 
@@ -938,12 +1323,20 @@ def run_csv(
             smi = (row.get(smiles_col) or "").strip()
 
             try:
-                sdf_path, nH, nC, models = process_one_smiles(
+                # NEW: use return_payload=True to get payload without writing individual file
+                sdf_path, nH, nC, models, _, payload = process_one_smiles(
                     smiles=smi, mol_id=mol_id, out_dir=out_dir, models=models,
                     model_1h_path=model_1h_path, model_13c_path=model_13c_path,
-                    property_key=property_key
+                    property_key=property_key,
+                    multiplicity_mod=multiplicity_mod,
+                    sim_params=sim_params,
+                    return_payload=True,  # Don't write individual JSON, return payload
                 )
                 ok += 1
+                
+                # Collect payload for consolidated JSON
+                if payload is not None:
+                    all_multiplicity_payloads.append(payload)
                 
                 # [OK] Increment and emit progress
                 _GLOBAL_MOLECULE_COUNTER["done"] += 1
@@ -978,6 +1371,19 @@ def run_csv(
                     "error": str(e)
                 })
 
+    # Write consolidated multiplicity JSON (ONE file for ALL molecules)
+    consolidated_multiplicity_path = os.path.join(out_dir, "all_multiplicities.json")
+    with open(consolidated_multiplicity_path, "w", encoding="utf-8") as mf:
+        json.dump({
+            "total_molecules": len(all_multiplicity_payloads),
+            "ok": ok,
+            "ko": ko,
+            "timestamp": time.time(),
+            "molecules": all_multiplicity_payloads
+        }, mf, indent=2, ensure_ascii=False)
+    send_log(f"Multiplicités consolidées: {consolidated_multiplicity_path} ({len(all_multiplicity_payloads)} molécules)")
+
+    # Write manifest (summary)
     manifest_path = os.path.join(out_dir, "sdf_manifest.json")
     with open(manifest_path, "w", encoding="utf-8") as mf:
         json.dump({
@@ -985,59 +1391,119 @@ def run_csv(
             "ko": ko,
             "total": total,
             "output_dir": out_dir,
+            "multiplicity_json": consolidated_multiplicity_path,  # Reference to consolidated file
             "items": manifest_rows,
             "timestamp": time.time()
         }, mf, indent=2, ensure_ascii=False)
 
     send_log(f"CSV finished. Success: {ok} | Failures: {ko} | Manifest: {manifest_path}")
-    send_completed(True, ok=ok, ko=ko, output_dir=out_dir, manifest=manifest_path)
+    send_completed(True, ok=ok, ko=ko, output_dir=out_dir, manifest=manifest_path, 
+                   multiplicity_json=consolidated_multiplicity_path)
+
+# -----------------------
+# Simulateur de multiplicités: import dynamique
+# -----------------------
+def _load_multiplicity_sim(sim_path: str):
+    p = Path(sim_path).resolve()
+    if not p.exists():
+        raise FileNotFoundError(f"Simulator not found: {p}")
+
+    mod_name = "sim_mult_rulebased"
+
+    spec = importlib.util.spec_from_file_location(mod_name, str(p))
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not create spec for {p}")
+
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[mod_name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
 
 # -----------------------
 # Argparser & main
 # -----------------------
 def build_argparser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
-        description="Generate SDF (predicted 1H/13C shifts) from a SMILES or a CSV.",
+        description="Génération SDF (déplacements 1H/13C prédits) à partir d'un SMILES ou d'un CSV.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument("--smiles", help="SMILES to predict (single mode)")
-    src.add_argument("--csv", help="CSV file with 'id' and 'smiles' columns (or --id_column/--smiles_column)")
+    src.add_argument("--smiles", help="SMILES à prédire (mode single)")
+    src.add_argument("--csv", help="Fichier CSV avec colonnes 'id' et 'smiles' (ou --id_column/--smiles_column)")
 
-    ap.add_argument("--output_dir", required=True, help="Output folder (generated SDFs)")
-    ap.add_argument("--model_1h_path", required=True, help="Path to 1H model (.pt)")
-    ap.add_argument("--model_13c_path", required=True, help="Path to 13C model (.pt)")
+    ap.add_argument("--output_dir", required=True, help="Dossier de sortie (SDF générés)")
+    ap.add_argument("--model_1h_path", required=True, help="Chemin du modèle 1H (.pt)")
+    ap.add_argument("--model_13c_path", required=True, help="Chemin du modèle 13C (.pt)")
 
-    ap.add_argument("--mol_id", default="mol", help="Molecule identifier when using --smiles")
-    ap.add_argument("--id_column", default="id", help="ID column name (CSV)")
-    ap.add_argument("--smiles_column", default="smiles", help="SMILES column name (CSV)")
+    ap.add_argument("--mol_id", default="mol", help="Identifiant de la molécule quand --smiles est utilisé")
+    ap.add_argument("--id_column", default="id", help="Nom de la colonne ID (CSV)")
+    ap.add_argument("--smiles_column", default="smiles", help="Nom de la colonne SMILES (CSV)")
 
-    ap.add_argument("--property_key", default="(1)", help="SDF property key used to store the shift list")
-    ap.add_argument("--task_id", default=None, help="External task ID (optional, for logs)")
+    ap.add_argument("--property_key", default="(1)", help="Clé de propriété SDF pour stocker la liste de shifts")
+    ap.add_argument("--task_id", default=None, help="ID de tâche externe (optionnel, pour logs)")
+
+    # --- Multiplicités 1H (rule-based)
+    ap.add_argument("--simulate_multiplicity", action="store_true",
+                    help="Active la simulation de multiplicités 1H.")
+    ap.add_argument("--simulator_path", default=None,
+                    help="Chemin vers sim_mult_rulebased.py (optionnel).")
+    ap.add_argument("--sim_solvent", default="CDCl3",
+                    help="Solvant pour la simulation (ex: CDCl3, DMSO-d6, C6D6...).")
+    ap.add_argument("--sim_freq_mhz", type=float, default=700.0,
+                    help="Fréquence spectromètre (MHz).")
+    ap.add_argument("--sim_temperature_k", type=float, default=298.15,
+                    help="Température (K).")
+    ap.add_argument("--sim_use_3d", action="store_true",
+                    help="Tente une géométrie 3D (ETKDG) pour Karplus/vinyliques.")
+    ap.add_argument("--sim_debug", action="store_true",
+                    help="Enregistre les détails (J/groupes/second ordre) dans le JSON.")
 
     return ap
 
 def validate_models(paths: List[str]) -> None:
     for p in paths:
         if not os.path.exists(p):
-            raise FileNotFoundError(f"Model not found: {p}")
+            raise FileNotFoundError(f"Modèle introuvable : {p}")
         size = os.path.getsize(p)
-        send_log(f"Model detected: {p} ({human_bytes(size)})")
+        send_log(f"Modèle détecté : {p} ({human_bytes(size)})")
 
 def main(argv: Optional[List[str]] = None) -> None:
     parser = build_argparser()
     args, unknown = parser.parse_known_args(argv)
 
     if unknown:
-        send_log(f"Unknown CLI arguments ignored: {unknown}")
+        send_log(f"Arguments CLI inconnus ignorés: {unknown}")
     if getattr(args, "task_id", None):
         send_log(f"Task ID: {args.task_id}")
 
     try:
         validate_models([args.model_1h_path, args.model_13c_path])
     except Exception as e:
-        send_error('Model validation failed', error=str(e))
+        send_error("Validation des modèles échouée", error=str(e))
         sys.exit(1)
+
+    # --- Chargement simulateur (si demandé)
+    multiplicity_mod = None
+    sim_params = None
+    if getattr(args, "simulate_multiplicity", False):
+        if args.simulator_path:
+            try:
+                multiplicity_mod = _load_multiplicity_sim(args.simulator_path)
+                send_log(f"✓ Simulateur de multiplicités chargé depuis {args.simulator_path}")
+            except Exception as e:
+                send_log(f"⚠️ Échec chargement simulateur: {e}")
+        else:
+            send_log("⚠️ --simulate_multiplicity activé mais --simulator_path non fourni")
+        
+        if multiplicity_mod:
+            sim_params = {
+                "solvent": args.sim_solvent,
+                "freq_mhz": args.sim_freq_mhz,
+                "temperature_k": args.sim_temperature_k,
+                "use_3d": bool(args.sim_use_3d),
+                "debug": bool(args.sim_debug),
+            }
 
     try:
         if args.smiles:
@@ -1047,7 +1513,9 @@ def main(argv: Optional[List[str]] = None) -> None:
                 out_dir=args.output_dir,
                 model_1h_path=args.model_1h_path,
                 model_13c_path=args.model_13c_path,
-                property_key=args.property_key
+                property_key=args.property_key,
+                multiplicity_mod=multiplicity_mod,
+                sim_params=sim_params
             )
         else:
             run_csv(
@@ -1057,10 +1525,12 @@ def main(argv: Optional[List[str]] = None) -> None:
                 id_col=args.id_column,
                 model_1h_path=args.model_1h_path,
                 model_13c_path=args.model_13c_path,
-                property_key=args.property_key
+                property_key=args.property_key,
+                multiplicity_mod=multiplicity_mod,
+                sim_params=sim_params
             )
     except Exception as e:
-        send_error('Fatal error', error=str(e), traceback=traceback.format_exc())
+        send_error("Erreur fatale", error=str(e), traceback=traceback.format_exc())
         send_completed(False)
         sys.exit(1)
 

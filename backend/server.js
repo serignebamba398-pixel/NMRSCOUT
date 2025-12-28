@@ -74,6 +74,7 @@ const spectralBgRoutes = require('./routes/spectralBg');
 const cleanupRoutes = require('./routes/cleanup');
 const pathNormalizeRoutes = require('./routes/pathNormalize');
 const projectRoutes = require('./routes/projects');
+const spectrumRoutes = require('./routes/spectrum');  // Simulation de spectre 1H
 
 const shouldServeFrontend = process.env.SERVE_FRONTEND === 'true';
 const frontendBuildDir =
@@ -141,6 +142,7 @@ app.use(spectralBgRoutes);
 app.use(cleanupRoutes);
 app.use(pathNormalizeRoutes);
 app.use(projectRoutes);
+app.use(spectrumRoutes);  // Simulation de spectre 1H
 
 // In packaged/Electron mode, serve the React build from the backend so the renderer can load via http://
 if (shouldServeFrontend && fs.existsSync(frontendBuildDir)) {

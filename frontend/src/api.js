@@ -2653,4 +2653,76 @@ export const debugSpectralMeta = (meta, method = 'unknown') => {
   return true;
 };
 
+/* ============================================================================
+   SIMULATE SPECTRUM 1H (détaillé avec formes de raie)
+   ============================================================================ */
+
+/**
+ * Simule un spectre 1H complet avec formes de raie (Lorentzian/Voigt)
+ * 
+ * DEUX MODES:
+ * 1. Mode JSON (RECOMMANDÉ) - utilise les données de multiplicité pré-calculées
+ * 2. Mode SMILES (fallback) - calcule les multiplicités à la volée
+ * 
+ * @param {Object} options
+ * @param {string} [options.smiles] - SMILES de la molécule (fallback)
+ * @param {Object} [options.multiplicity_json] - Données de multiplicité pré-calculées (recommandé)
+ * @param {string} [options.multiplicity_json_path] - Chemin vers fichier JSON de multiplicité
+ * @param {string} [options.mol_id] - Identifiant de la molécule
+ * @param {number} [options.freq_mhz=700] - Fréquence du spectromètre en MHz
+ * @param {string} [options.solvent="CDCl3"] - Solvant
+ * @param {string} [options.line_shape="lorentzian"] - Forme de raie (lorentzian, gaussian, voigt)
+ * @param {number} [options.digital_resolution_hz=0.1] - Résolution numérique en Hz
+ * @param {number[]} [options.ppm_range=[-0.5, 12]] - Intervalle ppm [min, max]
+ * @param {number} [options.line_width_hz=1.0] - Largeur de raie par défaut en Hz
+ * 
+ * @returns {Promise<Object>} Résultat de la simulation
+ *   - ppm: number[] - axe des ppm
+ *   - intensity: number[] - intensité normalisée
+ *   - peaks: {ppm, intensity, label, multiplicity, J_hz, n_protons}[] - informations sur les pics
+ *   - n_groups: number - nombre de groupes de protons
+ *   - total_protons: number - nombre total de protons
+ */
+export const simulateSpectrum = async ({
+  smiles,
+  multiplicity_json,
+  multiplicity_json_path,
+  mol_id = 'mol',
+  freq_mhz = 700,
+  solvent = 'CDCl3',
+  line_shape = 'lorentzian',
+  digital_resolution_hz = 0.1,
+  ppm_range = [-0.5, 12],
+  line_width_hz = 1.0,
+} = {}) => {
+  // Vérifier qu'on a au moins une source de données
+  if (!smiles && !multiplicity_json && !multiplicity_json_path) {
+    throw new Error('Either smiles, multiplicity_json, or multiplicity_json_path is required');
+  }
+  
+  try {
+    const response = await api.post('/simulate-spectrum', {
+      smiles,
+      multiplicity_json,
+      multiplicity_json_path,
+      mol_id,
+      freq_mhz,
+      solvent,
+      line_shape,
+      digital_resolution_hz,
+      ppm_range,
+      line_width_hz,
+    });
+    
+    if (response.data.status === 'error') {
+      throw new Error(response.data.error || 'Simulation failed');
+    }
+    
+    return response.data;
+  } catch (err) {
+    console.error('[simulateSpectrum] Error:', err);
+    throw err;
+  }
+};
+
 export default api;
