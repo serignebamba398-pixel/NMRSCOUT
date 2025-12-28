@@ -188,6 +188,8 @@ hiddenimports.extend([
     'sklearn',
     'rdkit',
     'rdkit.Chem',
+    'rdkit.Chem.Descriptors',
+    'rdkit.Chem.AllChem',
     # For nmr_export_bg.py spectral background export
     'nmrglue',
     'nmrglue.bruker',
