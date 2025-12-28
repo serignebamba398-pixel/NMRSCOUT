@@ -2631,7 +2631,7 @@ export default function Viewer({
                           }}
                           title={oneH?.smiles ? "View simulated spectrum with peak shapes" : "No SMILES available"}
                         >
-                          🔍 View Detail
+                          View Detail
                         </button>
                       </div>
 

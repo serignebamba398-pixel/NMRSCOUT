@@ -4,7 +4,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 const { PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE } = require('../config');
-const { PRED_SCRIPT, outputsDir, uploadsDir } = require('../config/paths');
+const { PRED_SCRIPT, MULT_SIMULATOR_SCRIPT, outputsDir, uploadsDir } = require('../config/paths');
 const { ensureDir } = require('../utils/filesystem');
 const { getPythonExe, buildPythonEnv, detectDatasetDir } = require('../utils/spawn');
 const { logWithMemory } = require('../utils/logger');
@@ -214,6 +214,15 @@ function handlePrediction(req, res) {
       '--property_key',
       propertyKey,
     );
+
+    // Add multiplicity simulation arguments (always enabled)
+    if (MULT_SIMULATOR_SCRIPT && fs.existsSync(MULT_SIMULATOR_SCRIPT)) {
+      args.push('--simulate_multiplicity');
+      args.push('--simulator_path', MULT_SIMULATOR_SCRIPT);
+      sseSend(res, { type: 'log', message: `Multiplicity simulator: ${MULT_SIMULATOR_SCRIPT}` });
+    } else {
+      sseSend(res, { type: 'log', message: `[WARN] Multiplicity simulator not found: ${MULT_SIMULATOR_SCRIPT}` });
+    }
 
     const addSmilesArg = smi => args.push('--smiles', smi);
 
