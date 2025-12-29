@@ -1214,6 +1214,24 @@ export default function Viewer({
   // If externalSource is provided, use it; otherwise keep internal state
   const [internalSource, setInternalSource] = useState(null);
   const selectedSource = externalSource || internalSource;
+
+  // Extract taskId from CSV URLs if not provided
+  const derivedTaskId = useMemo(() => {
+    if (taskId) return taskId;
+
+    // Try to extract taskId from CSV URLs (format: /outputs/{uuid}/...)
+    const csvValues = Object.values(csvs || {});
+    for (const csv of csvValues) {
+      if (typeof csv === 'string') {
+        const match = csv.match(/\/outputs\/([a-f0-9-]{36})\//i);
+        if (match) {
+          console.log('[Viewer] Derived taskId from CSV URL:', match[1]);
+          return match[1];
+        }
+      }
+    }
+    return null;
+  }, [taskId, csvs]);
   const setSelectedSource = useCallback(
     (next) => {
       if (externalSource) return;
@@ -3065,6 +3083,7 @@ export default function Viewer({
         onClose={() => setSpectrumDetailOpen(false)}
         smiles={oneH?.smiles || ""}
         molId={oneH?.source || selectedSource || "mol"}
+        taskId={derivedTaskId}
         theoryShifts={oneH?.theory || []}
         expShifts={oneH?.expX || []}
       />

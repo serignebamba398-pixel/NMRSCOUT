@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-const { uploadsDir } = require('../config/paths');
+const { uploadsDir, outputsDir } = require('../config/paths');
 const { safeResolve } = require('../utils/filesystem');
 const { logWithMemory } = require('../utils/logger');
 const upload = require('../middleware/upload');
@@ -56,6 +56,56 @@ router.delete('/api/files/:filename', (req, res) => {
     res.json({ message: 'Deleted' });
   } catch (e) {
     res.status(400).json({ error: e.message });
+  }
+});
+
+/**
+ * GET /api/multiplicity/:taskId/:molId
+ * Retrieve multiplicity data for a specific molecule from all_multiplicities.json
+ *
+ * @param taskId - UUID of the prediction task
+ * @param molId - Molecule ID to find in the JSON
+ * @returns JSON object with multiplicity data for the molecule
+ */
+router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
+  try {
+    const { taskId, molId } = req.params;
+
+    // Construct path to all_multiplicities.json
+    const jsonPath = path.join(outputsDir, taskId, 'all_multiplicities.json');
+
+    if (!fs.existsSync(jsonPath)) {
+      return res.status(404).json({
+        error: 'Multiplicity file not found',
+        path: jsonPath
+      });
+    }
+
+    // Read and parse the JSON file
+    const jsonContent = fs.readFileSync(jsonPath, 'utf-8');
+    const allMultiplicities = JSON.parse(jsonContent);
+
+    // Find the molecule by ID
+    const molecule = allMultiplicities.molecules?.find(m => m.mol_id === molId);
+
+    if (!molecule) {
+      return res.status(404).json({
+        error: `Molecule ${molId} not found in multiplicity data`,
+        available: allMultiplicities.molecules?.map(m => m.mol_id) || []
+      });
+    }
+
+    // Return the multiplicity data for this molecule
+    res.json({
+      status: 'ok',
+      mol_id: molecule.mol_id,
+      smiles: molecule.smiles,
+      multiplicity_data: molecule.multiplicity_data
+    });
+
+  } catch (e) {
+    console.error('[multiplicity] Error:', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
