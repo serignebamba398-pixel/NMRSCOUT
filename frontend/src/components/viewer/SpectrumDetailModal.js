@@ -234,7 +234,7 @@ function SpectrumDetailModal({
     }
   }, [molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, fetchedMultiplicityData, lineWidthHz, loadingMultiplicity]);
 
-  // Fetch on mount or when params change
+  // Trigger simulation when modal opens or data/params change
   useEffect(() => {
     // Ne pas lancer la simulation si on est encore en train de charger les données
     if (loadingMultiplicity) {
@@ -242,10 +242,12 @@ function SpectrumDetailModal({
       return;
     }
 
+    // Lancer la simulation dès que le modal est ouvert ET qu'on a des données
     if (isOpen && (multiplicityJson || fetchedMultiplicityData)) {
+      console.log('[SpectrumDetailModal] Triggering spectrum simulation');
       fetchSpectrum();
     }
-  }, [isOpen, multiplicityJson, fetchedMultiplicityData, fetchSpectrum, loadingMultiplicity]);
+  }, [isOpen, loadingMultiplicity, multiplicityJson, fetchedMultiplicityData, freqMhz, lineShape, ppmMin, ppmMax, lineWidthHz, fetchSpectrum]);
 
   // Draw spectrum on canvas
   useEffect(() => {
