@@ -733,7 +733,7 @@ function handlePrediction(req, res) {
             type: 'progress',
             phase: 'extractors',
             percent: SDF_WEIGHT,
-            message: 'Starting CSV extraction...',
+            message: 'Generating CSV files (1H, 13C, COSY, HSQC)...',
           });
 
           try {
@@ -758,7 +758,7 @@ function handlePrediction(req, res) {
                     type: 'progress',
                     phase: 'extractors',
                     percent: Math.min(99, Math.round(globalPercent * 10) / 10),
-                    message: msg.message || 'Extraction in progress...',
+                    message: msg.message || 'Generating CSV files...',
                   });
                   return;
                 }
@@ -787,9 +787,9 @@ function handlePrediction(req, res) {
           lastPercent = 100;
           sseSend(res, {
             type: 'progress',
-            phase: 'extractors',
+            phase: 'completed',
             percent: 100,
-            message: 'Prediction and extractor CSV generation finished',
+            message: 'Prediction completed - All files generated',
           });
           console.log('[BACKEND-FINAL] Forced 100%');
         }
