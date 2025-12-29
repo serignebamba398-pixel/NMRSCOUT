@@ -2633,21 +2633,21 @@ export default function Viewer({
                       <div style={{ marginBottom: 8, display: "flex", gap: 8 }}>
                         <button
                           onClick={() => setSpectrumDetailOpen(true)}
-                          disabled={!oneH?.smiles && !derivedTaskId}
+                          disabled={!derivedTaskId}
                           style={{
                             padding: "4px 10px",
                             fontSize: 11,
                             fontWeight: 500,
-                            backgroundColor: (oneH?.smiles || derivedTaskId) ? "#3b82f6" : "#e5e7eb",
-                            color: (oneH?.smiles || derivedTaskId) ? "#fff" : "#9ca3af",
+                            backgroundColor: derivedTaskId ? "#3b82f6" : "#e5e7eb",
+                            color: derivedTaskId ? "#fff" : "#9ca3af",
                             border: "none",
                             borderRadius: 4,
-                            cursor: (oneH?.smiles || derivedTaskId) ? "pointer" : "not-allowed",
+                            cursor: derivedTaskId ? "pointer" : "not-allowed",
                             display: "flex",
                             alignItems: "center",
                             gap: 4,
                           }}
-                          title={(oneH?.smiles || derivedTaskId) ? "View simulated spectrum with peak shapes" : "No data available"}
+                          title={derivedTaskId ? "View simulated spectrum with multiplicity data" : "No prediction task loaded"}
                         >
                           View Detail
                         </button>
@@ -3081,7 +3081,6 @@ export default function Viewer({
       <SpectrumDetailModal
         isOpen={spectrumDetailOpen}
         onClose={() => setSpectrumDetailOpen(false)}
-        smiles={oneH?.smiles || ""}
         molId={oneH?.source || selectedSource || "mol"}
         taskId={derivedTaskId}
         theoryShifts={oneH?.theory || []}
