@@ -149,12 +149,11 @@ const spinnerKeyframes = `
 function SpectrumDetailModal({
   isOpen,
   onClose,
-  smiles,
   molId = "mol",
-  taskId = null,  // UUID de la tâche de prédiction
+  taskId = null,  // UUID de la tâche de prédiction (REQUIS)
   theoryShifts = [],  // Positions théoriques (traits bleus)
   expShifts = [],      // Positions expérimentales (traits rouges)
-  multiplicityJson = null,  // JSON de multiplicité pré-calculé (recommandé)
+  multiplicityJson = null,  // JSON de multiplicité pré-calculé (prioritaire sur taskId)
 }) {
   const canvasRef = useRef(null);
   const [loading, setLoading] = useState(false);
@@ -195,7 +194,7 @@ function SpectrumDetailModal({
 
   // Fetch spectrum data
   const fetchSpectrum = useCallback(async () => {
-    // Priorité: multiplicityJson (prop) > fetchedMultiplicityData (API) > smiles (fallback)
+    // Priorité: multiplicityJson (prop) > fetchedMultiplicityData (API)
     const multData = multiplicityJson || fetchedMultiplicityData;
 
     // Si on est en train de charger les données de multiplicité, attendre
@@ -204,9 +203,9 @@ function SpectrumDetailModal({
       return;
     }
 
-    // On a besoin soit du JSON de multiplicité, soit du SMILES
-    if (!multData && !smiles) {
-      setError("No multiplicity data or SMILES available");
+    // Le JSON de multiplicité est REQUIS
+    if (!multData) {
+      setError("No multiplicity data available. Please load a prediction task.");
       return;
     }
 
@@ -215,10 +214,8 @@ function SpectrumDetailModal({
 
     try {
       const data = await simulateSpectrum({
-        // Priorité au JSON de multiplicité (plus précis)
+        // Utilise toujours le JSON de multiplicité
         multiplicity_json: multData,
-        // Fallback sur SMILES si pas de JSON
-        smiles: multData ? undefined : smiles,
         mol_id: molId,
         freq_mhz: freqMhz,
         line_shape: lineShape,
@@ -235,7 +232,7 @@ function SpectrumDetailModal({
     } finally {
       setLoading(false);
     }
-  }, [smiles, molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, fetchedMultiplicityData, lineWidthHz, loadingMultiplicity]);
+  }, [molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, fetchedMultiplicityData, lineWidthHz, loadingMultiplicity]);
 
   // Fetch on mount or when params change
   useEffect(() => {
@@ -245,10 +242,10 @@ function SpectrumDetailModal({
       return;
     }
 
-    if (isOpen && (smiles || multiplicityJson || fetchedMultiplicityData)) {
+    if (isOpen && (multiplicityJson || fetchedMultiplicityData)) {
       fetchSpectrum();
     }
-  }, [isOpen, smiles, multiplicityJson, fetchedMultiplicityData, fetchSpectrum, loadingMultiplicity]);
+  }, [isOpen, multiplicityJson, fetchedMultiplicityData, fetchSpectrum, loadingMultiplicity]);
 
   // Draw spectrum on canvas
   useEffect(() => {
