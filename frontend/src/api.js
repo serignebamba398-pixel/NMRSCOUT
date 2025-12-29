@@ -2699,7 +2699,7 @@ export const simulateSpectrum = async ({
   if (!smiles && !multiplicity_json && !multiplicity_json_path) {
     throw new Error('Either smiles, multiplicity_json, or multiplicity_json_path is required');
   }
-  
+
   try {
     const response = await api.post('/simulate-spectrum', {
       smiles,
@@ -2713,14 +2713,39 @@ export const simulateSpectrum = async ({
       ppm_range,
       line_width_hz,
     });
-    
+
     if (response.data.status === 'error') {
       throw new Error(response.data.error || 'Simulation failed');
     }
-    
+
     return response.data;
   } catch (err) {
     console.error('[simulateSpectrum] Error:', err);
+    throw err;
+  }
+};
+
+/**
+ * Récupère les données de multiplicité pré-calculées depuis all_multiplicities.json
+ *
+ * @param {string} taskId - UUID de la tâche de prédiction
+ * @param {string} molId - Identifiant de la molécule
+ * @returns {Promise<Object>} Données de multiplicité
+ *   - status: "ok"
+ *   - mol_id: string
+ *   - smiles: string
+ *   - multiplicity_data: object - données de multiplicité complètes
+ */
+export const getMultiplicityData = async (taskId, molId) => {
+  if (!taskId || !molId) {
+    throw new Error('taskId and molId are required');
+  }
+
+  try {
+    const response = await api.get(`/multiplicity/${taskId}/${molId}`);
+    return response.data;
+  } catch (err) {
+    console.error('[getMultiplicityData] Error:', err);
     throw err;
   }
 };
