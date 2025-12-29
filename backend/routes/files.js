@@ -96,11 +96,12 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
     }
 
     // Return the multiplicity data for this molecule
+    // Note: The JSON structure has the full molecule object, we return it as-is
     res.json({
       status: 'ok',
       mol_id: molecule.mol_id,
       smiles: molecule.smiles,
-      multiplicity_data: molecule.multiplicity_data
+      multiplicity_data: molecule  // Return the entire molecule object (contains groups, solvent, freq_MHz, etc.)
     });
 
   } catch (e) {
