@@ -1217,10 +1217,25 @@ export default function Viewer({
 
   // Extract taskId from CSV URLs if not provided
   const derivedTaskId = useMemo(() => {
-    if (taskId) return taskId;
+    console.log('[Viewer] derivedTaskId calculation - taskId prop:', taskId);
+    if (taskId) {
+      console.log('[Viewer] Using provided taskId:', taskId);
+      return taskId;
+    }
+
+    // Try to extract from annotationResults (annotation workflow includes predictionTaskId)
+    const annotationValues = Object.values(annotationResults || {});
+    console.log('[Viewer] Trying to extract predictionTaskId from annotationResults:', annotationValues);
+    for (const result of annotationValues) {
+      if (result && result.predictionTaskId) {
+        console.log('[Viewer] Found predictionTaskId in annotationResults:', result.predictionTaskId);
+        return result.predictionTaskId;
+      }
+    }
 
     // Try to extract taskId from CSV URLs (format: /outputs/{uuid}/...)
     const csvValues = Object.values(csvs || {});
+    console.log('[Viewer] Trying to extract taskId from CSV URLs:', csvValues);
     for (const csv of csvValues) {
       if (typeof csv === 'string') {
         const match = csv.match(/\/outputs\/([a-f0-9-]{36})\//i);
@@ -1230,8 +1245,9 @@ export default function Viewer({
         }
       }
     }
+    console.log('[Viewer] No taskId found');
     return null;
-  }, [taskId, csvs]);
+  }, [taskId, csvs, annotationResults]);
   const setSelectedSource = useCallback(
     (next) => {
       if (externalSource) return;

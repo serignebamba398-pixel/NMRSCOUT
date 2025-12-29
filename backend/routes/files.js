@@ -61,7 +61,10 @@ router.delete('/api/files/:filename', (req, res) => {
 
 /**
  * GET /api/multiplicity/:taskId/:molId
- * Retrieve multiplicity data for a specific molecule from all_multiplicities.json
+ * Retrieve multiplicity data for a specific molecule from multiplicity JSON files
+ * Supports both formats:
+ * - all_multiplicities.json (CSV batch predictions)
+ * - {mol_id}_multiplicity.json (single SMILES predictions)
  *
  * @param taskId - UUID of the prediction task
  * @param molId - Molecule ID to find in the JSON
@@ -70,38 +73,101 @@ router.delete('/api/files/:filename', (req, res) => {
 router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
   try {
     const { taskId, molId } = req.params;
+    const taskDir = path.join(outputsDir, taskId);
 
-    // Construct path to all_multiplicities.json
-    const jsonPath = path.join(outputsDir, taskId, 'all_multiplicities.json');
-
-    if (!fs.existsSync(jsonPath)) {
+    if (!fs.existsSync(taskDir)) {
       return res.status(404).json({
-        error: 'Multiplicity file not found',
-        path: jsonPath
+        error: 'Task directory not found',
+        path: taskDir
       });
     }
 
-    // Read and parse the JSON file
-    const jsonContent = fs.readFileSync(jsonPath, 'utf-8');
-    const allMultiplicities = JSON.parse(jsonContent);
+    // Try 1: Look for specific molecule file {molId}_multiplicity.json
+    const specificPath = path.join(taskDir, `${molId}_multiplicity.json`);
+    if (fs.existsSync(specificPath)) {
+      const jsonContent = fs.readFileSync(specificPath, 'utf-8');
+      const moleculeData = JSON.parse(jsonContent);
 
-    // Find the molecule by ID
-    const molecule = allMultiplicities.molecules?.find(m => m.mol_id === molId);
-
-    if (!molecule) {
-      return res.status(404).json({
-        error: `Molecule ${molId} not found in multiplicity data`,
-        available: allMultiplicities.molecules?.map(m => m.mol_id) || []
+      return res.json({
+        status: 'ok',
+        mol_id: moleculeData.mol_id || molId,
+        smiles: moleculeData.smiles || '',
+        multiplicity_data: moleculeData
       });
     }
 
-    // Return the multiplicity data for this molecule
-    // Note: The JSON structure has the full molecule object, we return it as-is
-    res.json({
-      status: 'ok',
-      mol_id: molecule.mol_id,
-      smiles: molecule.smiles,
-      multiplicity_data: molecule  // Return the entire molecule object (contains groups, solvent, freq_MHz, etc.)
+    // Try 2: Look for all_multiplicities.json (batch predictions)
+    const allPath = path.join(taskDir, 'all_multiplicities.json');
+    if (fs.existsSync(allPath)) {
+      const jsonContent = fs.readFileSync(allPath, 'utf-8');
+      const allMultiplicities = JSON.parse(jsonContent);
+
+      // Find the molecule by ID
+      const molecule = allMultiplicities.molecules?.find(m => m.mol_id === molId);
+
+      if (!molecule) {
+        return res.status(404).json({
+          error: `Molecule ${molId} not found in all_multiplicities.json`,
+          available: allMultiplicities.molecules?.map(m => m.mol_id) || []
+        });
+      }
+
+      return res.json({
+        status: 'ok',
+        mol_id: molecule.mol_id,
+        smiles: molecule.smiles,
+        multiplicity_data: molecule
+      });
+    }
+
+    // Try 3: Search for any *_multiplicity.json or *multiplicities.json file
+    const files = fs.readdirSync(taskDir);
+    const multFiles = files.filter(f =>
+      f.endsWith('_multiplicity.json') || f.endsWith('multiplicities.json')
+    );
+
+    if (multFiles.length > 0) {
+      // Try each multiplicity file
+      for (const file of multFiles) {
+        const filePath = path.join(taskDir, file);
+        const jsonContent = fs.readFileSync(filePath, 'utf-8');
+        const data = JSON.parse(jsonContent);
+
+        // Check if this is a single molecule file
+        if (data.mol_id === molId) {
+          return res.json({
+            status: 'ok',
+            mol_id: data.mol_id,
+            smiles: data.smiles || '',
+            multiplicity_data: data
+          });
+        }
+
+        // Check if this is a batch file with molecules array
+        if (data.molecules && Array.isArray(data.molecules)) {
+          const molecule = data.molecules.find(m => m.mol_id === molId);
+          if (molecule) {
+            return res.json({
+              status: 'ok',
+              mol_id: molecule.mol_id,
+              smiles: molecule.smiles,
+              multiplicity_data: molecule
+            });
+          }
+        }
+      }
+
+      return res.status(404).json({
+        error: `Molecule ${molId} not found in any multiplicity files`,
+        files_checked: multFiles
+      });
+    }
+
+    // No multiplicity files found
+    return res.status(404).json({
+      error: 'No multiplicity files found in task directory',
+      taskDir,
+      files: files
     });
 
   } catch (e) {
