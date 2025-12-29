@@ -2,7 +2,7 @@
 // Modal pour afficher le spectre 1H simulé avec formes de raie
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { simulateSpectrum } from "../../api";
+import { simulateSpectrum, getMultiplicityData } from "../../api";
 
 const MODAL_STYLES = {
   overlay: {
@@ -151,6 +151,7 @@ function SpectrumDetailModal({
   onClose,
   smiles,
   molId = "mol",
+  taskId = null,  // UUID de la tâche de prédiction
   theoryShifts = [],  // Positions théoriques (traits bleus)
   expShifts = [],      // Positions expérimentales (traits rouges)
   multiplicityJson = null,  // JSON de multiplicité pré-calculé (recommandé)
@@ -159,34 +160,55 @@ function SpectrumDetailModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [spectrumData, setSpectrumData] = useState(null);
-  
+  const [fetchedMultiplicityData, setFetchedMultiplicityData] = useState(null);
+
   // Options de simulation
   const [freqMhz, setFreqMhz] = useState(700);
   const [lineShape, setLineShape] = useState("lorentzian");
   const [ppmMin, setPpmMin] = useState(-0.5);
   const [ppmMax, setPpmMax] = useState(12);
   const [lineWidthHz, setLineWidthHz] = useState(1.0);
-  
+
   // Zoom state
   const [zoomRange, setZoomRange] = useState(null);
 
+  // Fetch multiplicity data from task directory when modal opens
+  useEffect(() => {
+    if (isOpen && taskId && molId && !multiplicityJson) {
+      console.log('[SpectrumDetailModal] Fetching multiplicity data for:', { taskId, molId });
+
+      getMultiplicityData(taskId, molId)
+        .then(data => {
+          console.log('[SpectrumDetailModal] Fetched multiplicity data:', data);
+          setFetchedMultiplicityData(data.multiplicity_data);
+        })
+        .catch(err => {
+          console.warn('[SpectrumDetailModal] Failed to fetch multiplicity data:', err.message);
+          setFetchedMultiplicityData(null);
+        });
+    }
+  }, [isOpen, taskId, molId, multiplicityJson]);
+
   // Fetch spectrum data
   const fetchSpectrum = useCallback(async () => {
+    // Priorité: multiplicityJson (prop) > fetchedMultiplicityData (API) > smiles (fallback)
+    const multData = multiplicityJson || fetchedMultiplicityData;
+
     // On a besoin soit du JSON de multiplicité, soit du SMILES
-    if (!multiplicityJson && !smiles) {
+    if (!multData && !smiles) {
       setError("No multiplicity data or SMILES available");
       return;
     }
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const data = await simulateSpectrum({
         // Priorité au JSON de multiplicité (plus précis)
-        multiplicity_json: multiplicityJson,
+        multiplicity_json: multData,
         // Fallback sur SMILES si pas de JSON
-        smiles: multiplicityJson ? undefined : smiles,
+        smiles: multData ? undefined : smiles,
         mol_id: molId,
         freq_mhz: freqMhz,
         line_shape: lineShape,
@@ -194,7 +216,7 @@ function SpectrumDetailModal({
         digital_resolution_hz: 0.1,
         line_width_hz: lineWidthHz,
       });
-      
+
       setSpectrumData(data);
       setZoomRange(null);  // Reset zoom on new data
     } catch (err) {
@@ -203,14 +225,14 @@ function SpectrumDetailModal({
     } finally {
       setLoading(false);
     }
-  }, [smiles, molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, lineWidthHz]);
+  }, [smiles, molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, fetchedMultiplicityData, lineWidthHz]);
 
   // Fetch on mount or when params change
   useEffect(() => {
-    if (isOpen && (smiles || multiplicityJson)) {
+    if (isOpen && (smiles || multiplicityJson || fetchedMultiplicityData)) {
       fetchSpectrum();
     }
-  }, [isOpen, smiles, multiplicityJson, fetchSpectrum]);
+  }, [isOpen, smiles, multiplicityJson, fetchedMultiplicityData, fetchSpectrum]);
 
   // Draw spectrum on canvas
   useEffect(() => {
