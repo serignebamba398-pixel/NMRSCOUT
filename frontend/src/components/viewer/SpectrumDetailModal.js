@@ -161,6 +161,7 @@ function SpectrumDetailModal({
   const [error, setError] = useState(null);
   const [spectrumData, setSpectrumData] = useState(null);
   const [fetchedMultiplicityData, setFetchedMultiplicityData] = useState(null);
+  const [loadingMultiplicity, setLoadingMultiplicity] = useState(false);
 
   // Options de simulation
   const [freqMhz, setFreqMhz] = useState(700);
@@ -176,15 +177,18 @@ function SpectrumDetailModal({
   useEffect(() => {
     if (isOpen && taskId && molId && !multiplicityJson) {
       console.log('[SpectrumDetailModal] Fetching multiplicity data for:', { taskId, molId });
+      setLoadingMultiplicity(true);
 
       getMultiplicityData(taskId, molId)
         .then(data => {
           console.log('[SpectrumDetailModal] Fetched multiplicity data:', data);
           setFetchedMultiplicityData(data.multiplicity_data);
+          setLoadingMultiplicity(false);
         })
         .catch(err => {
           console.warn('[SpectrumDetailModal] Failed to fetch multiplicity data:', err.message);
           setFetchedMultiplicityData(null);
+          setLoadingMultiplicity(false);
         });
     }
   }, [isOpen, taskId, molId, multiplicityJson]);
@@ -193,6 +197,12 @@ function SpectrumDetailModal({
   const fetchSpectrum = useCallback(async () => {
     // Priorité: multiplicityJson (prop) > fetchedMultiplicityData (API) > smiles (fallback)
     const multData = multiplicityJson || fetchedMultiplicityData;
+
+    // Si on est en train de charger les données de multiplicité, attendre
+    if (loadingMultiplicity) {
+      console.log('[SpectrumDetailModal] Still loading multiplicity data, waiting...');
+      return;
+    }
 
     // On a besoin soit du JSON de multiplicité, soit du SMILES
     if (!multData && !smiles) {
@@ -225,14 +235,20 @@ function SpectrumDetailModal({
     } finally {
       setLoading(false);
     }
-  }, [smiles, molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, fetchedMultiplicityData, lineWidthHz]);
+  }, [smiles, molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, fetchedMultiplicityData, lineWidthHz, loadingMultiplicity]);
 
   // Fetch on mount or when params change
   useEffect(() => {
+    // Ne pas lancer la simulation si on est encore en train de charger les données
+    if (loadingMultiplicity) {
+      console.log('[SpectrumDetailModal] Waiting for multiplicity data to load...');
+      return;
+    }
+
     if (isOpen && (smiles || multiplicityJson || fetchedMultiplicityData)) {
       fetchSpectrum();
     }
-  }, [isOpen, smiles, multiplicityJson, fetchedMultiplicityData, fetchSpectrum]);
+  }, [isOpen, smiles, multiplicityJson, fetchedMultiplicityData, fetchSpectrum, loadingMultiplicity]);
 
   // Draw spectrum on canvas
   useEffect(() => {
@@ -562,7 +578,13 @@ function SpectrumDetailModal({
           </div>
 
           <div style={MODAL_STYLES.canvasContainer}>
-            {loading && (
+            {loadingMultiplicity && (
+              <div style={MODAL_STYLES.loading}>
+                <div style={MODAL_STYLES.spinner}></div>
+                <span>Loading multiplicity data...</span>
+              </div>
+            )}
+            {!loadingMultiplicity && loading && (
               <div style={MODAL_STYLES.loading}>
                 <div style={MODAL_STYLES.spinner}></div>
                 <span>Simulating spectrum...</span>
