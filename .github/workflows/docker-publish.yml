@@ -45,6 +45,32 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Download ML data for Docker build
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          echo "Downloading models.zip from release assets..."
+          curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/octet-stream" \
+            -o models.zip \
+            "https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/models.zip"
+
+          echo "Extracting to backend directories..."
+          mkdir -p backend/models backend/ml_dependencies/data
+
+          unzip -o models.zip -d /tmp/models-extract
+
+          # Move files to correct locations
+          cp /tmp/models-extract/*.pt backend/models/ 2>/dev/null || true
+          cp /tmp/models-extract/*graph*.npz backend/ml_dependencies/data/ 2>/dev/null || true
+          cp /tmp/models-extract/sample_*.npz backend/ml_dependencies/ 2>/dev/null || true
+          cp /tmp/models-extract/*.jar backend/ml_dependencies/ 2>/dev/null || true
+          cp /tmp/models-extract/*.pkl backend/ml_dependencies/data/ 2>/dev/null || true
+          cp /tmp/models-extract/*.sd backend/ml_dependencies/data/ 2>/dev/null || true
+
+          echo "Files ready for Docker build:"
+          ls -lh backend/models/ backend/ml_dependencies/data/ backend/ml_dependencies/*.jar 2>/dev/null
+
       - name: Build & push backend (multi-arch)
         uses: docker/build-push-action@v6
         with:

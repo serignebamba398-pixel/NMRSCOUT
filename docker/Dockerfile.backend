@@ -56,7 +56,7 @@ ENV DGLBACKEND="pytorch"
 # 4) Préparation app
 # ------------------------------------------
 WORKDIR /app
-COPY backend/.env ./backend/.env
+COPY backend/.env.docker ./backend/.env
 
 # Dépendances Node.js
 COPY backend/package*.json ./backend/
