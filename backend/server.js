@@ -163,6 +163,14 @@ const server = app.listen(PORT, () => {
     `Endpoints: /api/run-annotation, /api/run-annotation-from-prediction, /api/predict/start, /api/prediction-tasks, /api/tasks/:taskId/cancel, /api/diagnostic, /health, /api/files, /api/tasks, /api/cleanup, /api/download/:taskId/:filename, /api/inspect/:taskId, /api/spectral-bg/export, /api/spectral-bg/zoom, /api/spectral-bg/relevel, /api/spectral-bg/interact, /api/path/normalize (+ alias /path/normalize)`
   );
   
+  // ✅ PERSISTENCE: Initialiser le système de persistance des tâches au démarrage
+  try {
+    const { initializeOnStartup } = require('./services/taskPersistence');
+    initializeOnStartup();
+  } catch (e) {
+    logWithMemory(`Task persistence init error: ${e.message}`, 'WARN');
+  }
+  
   // Notify parent process (Electron) that backend is ready
   if (process.send) {
     process.send({ type: 'ready', port: PORT });

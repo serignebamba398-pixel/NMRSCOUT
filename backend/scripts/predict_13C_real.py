@@ -179,7 +179,7 @@ def dataframe_for_sdf(sdf_path: str, carbon_mode: str = "nonquaternary") -> pd.D
                 "Filename":  os.path.basename(sdf_path),
                 "C_index":   c_idx,  # 0-based
                 "Nb_H":      len(h_idx_list),
-                "H_indices": ",".join(map(str, h_idx_list)) if h_idx_list else "",
+                "H_indices": "|".join(map(str, h_idx_list)) if h_idx_list else "",
                 "Delta_ppm": delta,
                 "ECFP4":     fp,
             })

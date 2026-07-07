@@ -27,19 +27,20 @@ params <- list(
     tol_match_F1 = 0.2,
     tol_match_F2 = 0.2,
     correlation_threshold = 0.80, # |r| threshold for STOCSY
+    correlation_method = "pearson", # "pearson" or "spearman"
     coverage_threshold_group = 0,
     coverage_threshold_subchain = 0,
     ratio_min = 0.01,
     ransy_cv_threshold = 0.15,
     coverage_threshold_ransy = 0,
     max_missing_ransy = 50,
-    nb_cores = 6,
+    nb_cores = 5,
     progress_style = 3,
     batch_size = 1,
     memory_cleanup_interval = 50,
     enable_checkpoints = TRUE,
     max_memory_mb = 2048,
-    max_pivots = 100,
+    max_pivots = 30,
     alpha_cost = 0.3
 )
 
@@ -114,6 +115,14 @@ if (length(args) >= 4) {
         })
     }
     for (name in names(custom_params)) if (name %in% names(params)) params[[name]] <- custom_params[[name]]
+
+    # Handle spelling variants: tol_correspondence (English) -> tol_correspondance (French)
+    if (!is.null(custom_params$tol_correspondence_f1)) {
+      params$tol_correspondance_F1 <- custom_params$tol_correspondence_f1
+    }
+    if (!is.null(custom_params$tol_correspondence_f2)) {
+      params$tol_correspondance_F2 <- custom_params$tol_correspondence_f2
+    }
 }
 
 nb_cores <- sanitize_threads(params$nb_cores)
@@ -170,12 +179,20 @@ batch_size <- as.integer(params$batch_size)
 memory_cleanup_interval <- as.integer(params$memory_cleanup_interval)
 enable_checkpoints <- isTRUE(params$enable_checkpoints)
 max_pivots <- as.integer(params$max_pivots)
-if (is.na(max_pivots) || max_pivots < 1) max_pivots <- 200L
+if (is.na(max_pivots) || max_pivots < 1) max_pivots <- 30L
 alpha_cost <- as.numeric(params$alpha_cost)
+correlation_method <- if (is.null(params$correlation_method)) "pearson" else tolower(as.character(params$correlation_method))
+if (!correlation_method %in% c("pearson", "spearman")) correlation_method <- "pearson"
+
+# Normalization parameters (default: no normalization for backward compatibility)
+use_pqn <- isTRUE(params$use_pqn)
+use_csn <- isTRUE(params$use_csn)
+normalization_applied <- "none"  # Will be updated after applying normalization
 
 # Global reservoir
 intensity_columns <- character(0)
 spectrum_mat <- NULL # global 2D intensity matrix
+ppm_idx_lookup <- NULL # Pre-computed named index for fast ppm_matrix lookups
 
 # -------------------------------
 # 6) Data reading
@@ -225,8 +242,78 @@ tryCatch(
         if (length(intensity_columns) == 0) stop("No intensity columns.")
         log_message(paste("Intensity columns:", length(intensity_columns)))
 
-        # Global intensity matrix (all COSY rows x samples)
+        # -------------------------------
+        # 6.5) Sample size detection & mode selection [NEW]
+        # -------------------------------
+        # Get script directory (works with Rscript called from Node.js)
+        script_dir <- tryCatch(
+            {
+                dirname(sys.frame(1)$ofile)
+            },
+            error = function(e) {
+                # Fallback: use commandArgs to get script path
+                args_full <- commandArgs(trailingOnly = FALSE)
+                file_arg <- grep("^--file=", args_full, value = TRUE)
+                if (length(file_arg) > 0) {
+                    dirname(sub("^--file=", "", file_arg[1]))
+                } else {
+                    # Last resort: current working directory
+                    getwd()
+                }
+            }
+        )
+
+        detector_path <- file.path(script_dir, "sample_size_detector.R")
+        if (!file.exists(detector_path)) {
+            log_error(paste("Cannot find sample_size_detector.R at:", detector_path))
+            quit(status = 1)
+        }
+        source(detector_path)
+
+        mode_info <- detect_annotation_mode(spectrum_matrix)
+        log_message(mode_info$warning)
+
+        # Global flags
+        USE_STOCSY <<- mode_info$use_stocsy
+        USE_RANSY <<- mode_info$use_ransy
+        N_SAMPLES <<- mode_info$n_samples
+        ANNOTATION_MODE <<- mode_info$mode
+
+        if (!USE_STOCSY) {
+            log_message(sprintf(
+                "DEGRADED MODE: Only %d sample(s) - STOCSY/RANSY disabled, using intensity ratios only",
+                N_SAMPLES
+            ))
+        }
+
+        # Global matrices for intensity_ratio_annotation_2D() when n < 5
+        spectrum_matrix <<- spectrum_matrix # Make accessible globally
         spectrum_mat <<- as.matrix(spectrum_matrix[, ..intensity_columns])
+
+        # Apply spectral normalization if requested
+        if (use_pqn || use_csn) {
+          norm_script <- file.path(dirname(script_path), "spectral_normalization.R")
+          if (file.exists(norm_script)) {
+            source(norm_script)
+            norm_result <- apply_normalization(
+              mat = spectrum_mat,
+              use_pqn = use_pqn,
+              use_csn = use_csn,
+              log_func = log_message
+            )
+            spectrum_mat <<- norm_result$matrix
+            normalization_applied <<- norm_result$methods_applied
+          } else {
+            log_message(paste("[NORMALIZATION] Warning: spectral_normalization.R not found at", norm_script))
+            normalization_applied <<- "none (file not found)"
+          }
+        } else {
+          log_message("[NORMALIZATION] No normalization applied (raw intensities)")
+        }
+
+        # Pre-compute ppm_matrix index lookup (O(1) access instead of O(n) match)
+        ppm_idx_lookup <<- setNames(seq_len(nrow(spectrum_matrix)), spectrum_matrix$ppm_matrix)
+        log_message(paste("Index lookup table created:", length(ppm_idx_lookup), "entries"))
 
         tableau_final <- prediction_COSY
         gc()
@@ -247,6 +334,17 @@ sanitize_for_csv <- function(x) {
     x <- gsub("[\r\n\t]", " ", x, perl = TRUE)
     x <- gsub("\\s+", " ", x, perl = TRUE)
     trimws(x)
+}
+
+# -------------------------------
+# 7.5) Fast ppm_matrix index lookup (O(1) vs O(n))
+# -------------------------------
+fast_ppm_idx <- function(ppms) {
+    # Use pre-computed named vector for O(1) lookup instead of match() O(n)
+    if (is.null(ppm_idx_lookup)) {
+        return(match(ppms, spectrum_matrix$ppm_matrix))
+    }
+    as.integer(ppm_idx_lookup[ppms])
 }
 
 # -------------------------------
@@ -279,14 +377,14 @@ trouver_correspondances_2D <- function(shifts, tol_F1, tol_F2) {
 }
 
 # -------------------------------
-# 9) 2D STOCSY (OPTIMIZED)
+# 9) 2D STOCSY (OPTIMIZED - VECTORIZED CORRELATION)
 # -------------------------------
-calculer_STOCSY_2D <- function(ppms, intensity_cols, driver_ppm, r_min) {
+calculer_STOCSY_2D <- function(ppms, intensity_cols, driver_ppm, r_min, method = "pearson") {
     if (length(ppms) == 0L) {
         return(data.table(ppm_matrix = character(), r = numeric()))
     }
 
-    idx <- match(ppms, spectrum_matrix$ppm_matrix)
+    idx <- fast_ppm_idx(ppms)
     idx <- idx[!is.na(idx)]
     if (!length(idx)) {
         return(data.table(ppm_matrix = character(), r = numeric()))
@@ -308,11 +406,37 @@ calculer_STOCSY_2D <- function(ppms, intensity_cols, driver_ppm, r_min) {
     }
 
     mat2 <- mat[, valid_cols, drop = FALSE]
-    drv <- driver_v[valid_cols]
+    drv <- as.numeric(driver_v[valid_cols])
 
-    r_vec <- apply(mat2, 1, function(x) {
-        suppressWarnings(cor(as.numeric(x), drv, use = "pairwise.complete.obs", method = "pearson"))
-    })
+    # For Spearman: convert to ranks before computing correlation
+    if (tolower(method) == "spearman") {
+        mat2 <- t(apply(mat2, 1, rank, na.last = "keep"))
+        drv <- rank(drv, na.last = "keep")
+    }
+
+    # VECTORIZED correlation: Pearson r = cov(X,Y) / (sd(X) * sd(Y))
+    # For matrix rows vs single vector, use matrix algebra
+    n_cols <- length(drv)
+    drv_centered <- drv - mean(drv)
+    drv_sd <- sqrt(sum(drv_centered^2))
+
+    if (drv_sd == 0) {
+        return(data.table(ppm_matrix = character(), r = numeric()))
+    }
+
+    # Center all rows at once (vectorized)
+    row_means <- rowMeans(mat2, na.rm = TRUE)
+    mat_centered <- mat2 - row_means
+
+    # Covariance: sum of products divided by n-1 (but for correlation we only need relative)
+    # Numerator: mat_centered %*% drv_centered (matrix-vector multiplication)
+    cov_numerator <- as.numeric(mat_centered %*% drv_centered)
+
+    # Row standard deviations (vectorized)
+    row_sds <- sqrt(rowSums(mat_centered^2, na.rm = TRUE))
+
+    # Pearson correlation
+    r_vec <- cov_numerator / (row_sds * drv_sd)
     r_vec[!is.finite(r_vec)] <- NA_real_
 
     dt <- data.table(ppm_matrix = row_ppm, r = r_vec)
@@ -348,14 +472,14 @@ gfilter_groups_par_coverage_2D <- function(groups, molecule_shifts, tol_F1, tol_
 }
 
 # -------------------------------
-# 11) 2D RANSY (OPTIMIZED)
+# 11) 2D RANSY (OPTIMIZED - VECTORIZED CV)
 # -------------------------------
 calculer_RANSY_2D <- function(ppms, intensity_cols, cv_th, driver_ppm) {
     if (length(ppms) == 0L) {
         return(NULL)
     }
 
-    idx <- match(ppms, spectrum_matrix$ppm_matrix)
+    idx <- fast_ppm_idx(ppms)
     idx <- idx[!is.na(idx)]
     if (!length(idx)) {
         return(NULL)
@@ -375,58 +499,141 @@ calculer_RANSY_2D <- function(ppms, intensity_cols, cv_th, driver_ppm) {
     }
 
     mat2 <- mat[, valid_cols, drop = FALSE]
-    ratio_mat <- sweep(mat2, 2, driver_v[valid_cols], "/")
+    drv_valid <- driver_v[valid_cols]
 
-    cvs <- apply(ratio_mat, 1, function(x) {
-        x <- x[is.finite(x)]
-        if (!length(x)) {
-            return(Inf)
-        }
-        m <- mean(x)
-        s <- sd(x)
-        if (!is.finite(m) || m == 0) Inf else s / m
-    })
+    # VECTORIZED ratio calculation
+    ratio_mat <- sweep(mat2, 2, drv_valid, "/")
+
+    # Replace non-finite values with NA for proper mean/sd calculation
+    ratio_mat[!is.finite(ratio_mat)] <- NA
+
+    # VECTORIZED CV calculation: CV = sd / mean
+    # Count valid (non-NA) values per row
+    n_valid <- rowSums(!is.na(ratio_mat))
+
+    # Row means (vectorized)
+    row_means <- rowMeans(ratio_mat, na.rm = TRUE)
+
+    # Row standard deviations (vectorized using rowSums)
+    # sd = sqrt(sum((x - mean)^2) / (n - 1))
+    ratio_centered <- ratio_mat - row_means  # Broadcasting works row-wise
+    row_vars <- rowSums(ratio_centered^2, na.rm = TRUE) / pmax(n_valid - 1, 1)
+    row_sds <- sqrt(row_vars)
+
+    # CV = sd / mean (handle division by zero)
+    cvs <- ifelse(row_means == 0 | !is.finite(row_means), Inf, row_sds / abs(row_means))
+    cvs[n_valid < 2] <- Inf  # Need at least 2 values for meaningful CV
+
     data.table(ppm_matrix = row_ppm, cv = cvs)[cv <= cv_th]
 }
 
 # -------------------------------
 # 12) Substring coverage (FIXED)
 # -------------------------------
-calculer_coverage_sub_ratio_2D <- function(sub_chain, molecule_shifts, tol_F1, tol_F2) {
+
+# Helper: grouper les paires 2D quasi-dégénérées (chevauchement COSY: ΔF1≤0.05 ET ΔF2≤0.05)
+# OPTIMIZED: Vectorized distance matrix + union-find instead of O(n²) loops
+get_overlap_groups_2D <- function(dt_shifts, overlap_tol_F1, overlap_tol_F2) {
+    n <- nrow(dt_shifts)
+    if (n <= 1) return(seq_len(n))
+
+    # Vectorized: compute all pairwise distances at once
+    F1 <- dt_shifts$shift_value_F1
+    F2 <- dt_shifts$shift_value_F2
+
+    # Distance matrices (vectorized outer subtraction)
+    diff_F1 <- abs(outer(F1, F1, "-"))
+    diff_F2 <- abs(outer(F2, F2, "-"))
+
+    # Boolean matrix: TRUE if within tolerance
+    adjacent <- (diff_F1 <= overlap_tol_F1) & (diff_F2 <= overlap_tol_F2)
+
+    # Union-find with path compression
+    parent <- seq_len(n)
+    find_root <- function(x) {
+        if (parent[x] != x) parent[x] <<- find_root(parent[x])
+        parent[x]
+    }
+
+    # Only process upper triangle (i < j)
+    pairs <- which(adjacent & upper.tri(adjacent), arr.ind = TRUE)
+    if (nrow(pairs) > 0) {
+        for (k in seq_len(nrow(pairs))) {
+            i <- pairs[k, 1]
+            j <- pairs[k, 2]
+            ri <- find_root(i)
+            rj <- find_root(j)
+            if (ri != rj) parent[rj] <- ri
+        }
+    }
+
+    # Final compression
+    vapply(seq_len(n), find_root, integer(1))
+}
+
+calculer_coverage_sub_ratio_2D <- function(sub_chain, molecule_shifts, tol_F1, tol_F2,
+                                           overlap_tol_F1 = 0.1, overlap_tol_F2 = 0.1) {
     if (length(sub_chain) == 0 || !nrow(molecule_shifts)) {
         return(0)
     }
     uniq_ms <- unique(molecule_shifts[, .(shift_value_F1, shift_value_F2)])
-    matched_u <- rep(FALSE, nrow(uniq_ms))
     avail_sub <- spectrum_matrix[ppm_matrix %in% sub_chain, .(ppm_F1, ppm_F2, ppm_matrix)]
-    for (i in seq_len(nrow(uniq_ms))) {
-        m1 <- uniq_ms$shift_value_F1[i]
-        m2 <- uniq_ms$shift_value_F2[i]
-        cand <- avail_sub[abs(ppm_F1 - m1) <= tol_F1 & abs(ppm_F2 - m2) <= tol_F2]
-        if (nrow(cand) > 0) {
-            cand[, dist := sqrt((ppm_F1 - m1)^2 + (ppm_F2 - m2)^2)]
-            best <- cand[which.min(dist), ppm_matrix]
-            avail_sub <- avail_sub[ppm_matrix != best]
-            matched_u[i] <- TRUE
+
+    # Grouper les paires quasi-dégénérées — 1 match par groupe
+    grp_ids <- get_overlap_groups_2D(uniq_ms, overlap_tol_F1, overlap_tol_F2)
+    groupes_uniques <- unique(grp_ids)
+    nb_groupes <- length(groupes_uniques)
+    groupes_matches <- 0L
+
+    for (g in groupes_uniques) {
+        idx_membres <- which(grp_ids == g)
+        trouve <- FALSE
+        for (i in idx_membres) {
+            m1 <- uniq_ms$shift_value_F1[i]
+            m2 <- uniq_ms$shift_value_F2[i]
+            cand <- avail_sub[abs(ppm_F1 - m1) <= tol_F1 & abs(ppm_F2 - m2) <= tol_F2]
+            if (nrow(cand) > 0) {
+                cand[, dist := sqrt((ppm_F1 - m1)^2 + (ppm_F2 - m2)^2)]
+                best <- cand[which.min(dist), ppm_matrix]
+                avail_sub <- avail_sub[ppm_matrix != best]
+                trouve <- TRUE
+                break
+            }
         }
+        if (trouve) groupes_matches <- groupes_matches + 1L
     }
-    sum(matched_u) / nrow(uniq_ms) * 100
+    groupes_matches / nb_groupes * 100
 }
 
 # -------------------------------
 # 13) STOCSY pipeline for each molecule (OPTIMIZED)
 # -------------------------------
 former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1, tol_match_F2,
-                                     correlation_threshold, coverage_threshold_group,
-                                     coverage_threshold_subchain, ratio_min,
-                                     ransy_cv_threshold, coverage_threshold_ransy,
+                                     correlation_threshold, correlation_method = "pearson",
+                                     coverage_threshold_group, coverage_threshold_subchain,
+                                     ratio_min, ransy_cv_threshold, coverage_threshold_ransy,
                                      max_missing, max_pivots = 200, alpha = 0.3) {
+    # === [NEW] ADAPTIVE MODE DETECTION ===
+    if (exists("USE_STOCSY") && !USE_STOCSY) {
+        # Fallback: n < 5 → intensity ratios only (2D version)
+        # For 2D, we use the same intensity_ratio_annotation with ppm_matrix keys
+        return(intensity_ratio_annotation(
+            matched_ppms = matched_ppms,
+            molecule_ppm = paste(molecule_shifts$shift_value_F1, molecule_shifts$shift_value_F2, sep = "|"),
+            tol_match = sqrt(tol_match_F1^2 + tol_match_F2^2), # Euclidean tolerance
+            ratio_min = ratio_min,
+            spectrum_matrix = spectrum_matrix,
+            spectrum_mat = spectrum_mat
+        ))
+    }
+
+    # === ORIGINAL CODE (n >= 5): STOCSY + RANSY ===
     if (length(matched_ppms) == 0 || !nrow(molecule_shifts)) {
         return(NULL)
     }
 
     # Step 1: average intensities via spectrum_mat
-    idx_match <- match(matched_ppms, spectrum_matrix$ppm_matrix)
+    idx_match <- fast_ppm_idx(matched_ppms)
     idx_valid <- which(!is.na(idx_match))
     if (!length(idx_valid)) {
         return(NULL)
@@ -449,8 +656,13 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
     # Step 2: pivots
     baseline_candidates <- head(ppms_desc, min(max_pivots, length(ppms_desc)))
 
-    # Target deduplication F1/F2
-    unique_mppm <- unique(molecule_shifts[, .(shift_value_F1, shift_value_F2)])
+    # Target deduplication F1/F2 - collecter TOUS les H1/H2 pour les protons équivalents
+    # Pour chaque paire de shifts unique, on collecte tous les indices H possibles
+    # Séparateur '~' pour éviter conflit avec ',' et ';' du CSV et '||' des paires
+    unique_mppm <- molecule_shifts[, .(
+        H1_all = paste(unique(H1), collapse = "~"),
+        H2_all = paste(unique(H2), collapse = "~")
+    ), by = .(shift_value_F1, shift_value_F2)]
 
     # Step 3: STOCSY for each pivot
     groups_stocsy <- list()
@@ -459,7 +671,8 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
             ppms = matched_ppms_clean,
             intensity_cols = intensity_columns,
             driver_ppm = pivot,
-            r_min = correlation_threshold
+            r_min = correlation_threshold,
+            method = correlation_method
         )
         if (is.null(dt_stocsy) || !nrow(dt_stocsy)) next
         stocsy_ppms <- sort(unique(dt_stocsy$ppm_matrix))
@@ -489,7 +702,7 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         if (is.na(pivot_int) || pivot_int == 0) next
 
         # Group intensities via spectrum_mat
-        idx_grp <- match(grp, spectrum_matrix$ppm_matrix)
+        idx_grp <- fast_ppm_idx(grp)
         idx_grp_valid <- which(!is.na(idx_grp))
         if (!length(idx_grp_valid)) next
         grp_clean <- grp[idx_grp_valid]
@@ -516,32 +729,46 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         max_cv_all <- max(avail$cv, na.rm = TRUE)
         if (!is.finite(max_cv_all) || max_cv_all == 0) max_cv_all <- 1
 
-        # RANSY pairings (1-1) with distance+CV cost
-        pairs_dt <- data.table(mol_F1 = numeric(0), mol_F2 = numeric(0), ppm_ransy = character(0))
+        # RANSY pairings — par groupes quasi-dégénérés (ΔF1≤0.05 ET ΔF2≤0.05 pour COSY)
+        overlap_tol_cosy_F1 <- 0.1
+        overlap_tol_cosy_F2 <- 0.1
+        grp_ids_ransy <- get_overlap_groups_2D(unique_mppm, overlap_tol_cosy_F1, overlap_tol_cosy_F2)
+        groupes_ransy <- unique(grp_ids_ransy)
+        pairs_dt <- data.table(mol_F1 = numeric(0), mol_F2 = numeric(0), ppm_ransy = character(0), H1_all = character(0), H2_all = character(0))
+        nb_groupes_ransy_matches <- 0L
 
-        for (i in seq_len(nrow(unique_mppm))) {
-            m1 <- unique_mppm$shift_value_F1[i]
-            m2 <- unique_mppm$shift_value_F2[i]
-            cand <- avail[abs(ppm_F1 - m1) <= tol_match_F1 & abs(ppm_F2 - m2) <= tol_match_F2]
-
-            if (nrow(cand) > 0) {
-                cand[, dist_norm := sqrt(((ppm_F1 - m1) / tol_match_F1)^2 + ((ppm_F2 - m2) / tol_match_F2)^2)]
-                cand[, cost := alpha * (cv / max_cv_all) + (1 - alpha) * dist_norm]
-                best_r <- cand[which.min(cost), ppm_matrix]
-                pairs_dt <- rbind(pairs_dt, data.table(mol_F1 = m1, mol_F2 = m2, ppm_ransy = best_r))
-                avail <- avail[ppm_matrix != best_r]
+        for (g in groupes_ransy) {
+            idx_membres <- which(grp_ids_ransy == g)
+            for (i in idx_membres) {
+                m1 <- unique_mppm$shift_value_F1[i]
+                m2 <- unique_mppm$shift_value_F2[i]
+                cand <- avail[abs(ppm_F1 - m1) <= tol_match_F1 & abs(ppm_F2 - m2) <= tol_match_F2]
+                if (nrow(cand) > 0) {
+                    cand[, dist_norm := sqrt(((ppm_F1 - m1) / tol_match_F1)^2 + ((ppm_F2 - m2) / tol_match_F2)^2)]
+                    cand[, cost := alpha * (cv / max_cv_all) + (1 - alpha) * dist_norm]
+                    best_r <- cand[which.min(cost), ppm_matrix]
+                    avail <- avail[ppm_matrix != best_r]
+                    nb_groupes_ransy_matches <- nb_groupes_ransy_matches + 1L
+                    # Enregistrer la paire pour chaque membre du groupe
+                    for (ii in idx_membres) {
+                        h1_ii <- if ("H1_all" %in% names(unique_mppm)) unique_mppm$H1_all[ii] else ""
+                        h2_ii <- if ("H2_all" %in% names(unique_mppm)) unique_mppm$H2_all[ii] else ""
+                        pairs_dt <- rbind(pairs_dt, data.table(mol_F1 = unique_mppm$shift_value_F1[ii], mol_F2 = unique_mppm$shift_value_F2[ii], ppm_ransy = best_r, H1_all = h1_ii, H2_all = h2_ii))
+                    }
+                    break
+                }
             }
         }
 
         matched_unique <- unique(pairs_dt$ppm_ransy)
-        coverage_ransy <- if (nrow(unique_mppm) > 0) length(matched_unique) / nrow(unique_mppm) * 100 else 0
+        coverage_ransy <- if (length(groupes_ransy) > 0) nb_groupes_ransy_matches / length(groupes_ransy) * 100 else 0
         if (coverage_ransy > coverage_sub_final) coverage_ransy <- coverage_sub_final
 
-        missing_cnt <- nrow(unique_mppm) - length(matched_unique)
+        missing_cnt <- length(groupes_ransy) - nb_groupes_ransy_matches
         if (missing_cnt > max_missing || coverage_ransy < coverage_threshold_ransy) next
 
         # Intensities in substring (via spectrum_mat)
-        idx_sub <- match(sub_chain_vec, spectrum_matrix$ppm_matrix)
+        idx_sub <- fast_ppm_idx(sub_chain_vec)
         idx_sub_valid <- which(!is.na(idx_sub))
         if (!length(idx_sub_valid)) next
         sub_chain_clean <- sub_chain_vec[idx_sub_valid]
@@ -550,6 +777,18 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         if (!is.finite(max_int_all) || max_int_all == 0) max_int_all <- 1
         intensity_ratios_str <- paste(round(avg_mat_all / max_int_all, 3), collapse = "|")
         ransy_var_str <- paste(paste(dt_ransy$ppm_matrix, round(dt_ransy$cv, 4), sep = ":"), collapse = "|")
+
+        # Calcul de l'erreur 2D moyenne ppm pour les paires appariées COSY
+        avg_error_ppm_2D <- if (nrow(pairs_dt) > 0) {
+            ppm_ransy_idx <- fast_ppm_idx(pairs_dt$ppm_ransy)
+            errors_F1 <- abs(pairs_dt$mol_F1 - spectrum_matrix$ppm_F1[ppm_ransy_idx])
+            errors_F2 <- abs(pairs_dt$mol_F2 - spectrum_matrix$ppm_F2[ppm_ransy_idx])
+            # Distance euclidienne normalisée pour COSY (F1=F2=1H)
+            dist_2D <- sqrt((errors_F1 / tol_match_F1)^2 + (errors_F2 / tol_match_F2)^2)
+            round(mean(dist_2D, na.rm = TRUE), 4)
+        } else {
+            NA_real_
+        }
 
         all_results[[length(all_results) + 1]] <- list(
             base_ppm          = pivot,
@@ -563,6 +802,7 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
             coverage_ransy    = coverage_ransy,
             RANSY_variabilite = ransy_var_str,
             avg_variabilite   = round(mean(dt_ransy[ppm_matrix %in% matched_unique, cv], na.rm = TRUE), 4),
+            avg_error_ppm_2D  = avg_error_ppm_2D,
             groupe_ppms       = grp
         )
     }
@@ -580,7 +820,7 @@ get_mean_intensity_for_ppm2d <- function(pm) {
     if (!is.character(pm) || length(pm) != 1L) {
         return(NA_real_)
     }
-    idx <- match(pm, spectrum_matrix$ppm_matrix)
+    idx <- fast_ppm_idx(pm)
     if (is.na(idx) || idx < 1L) {
         return(NA_real_)
     }
@@ -603,6 +843,7 @@ creer_resultat_defaut_2D <- function(src, ecfp_str, dt_mol, match_ppms) {
         coverage_ransy = 0, RANSY_variabilite = "",
         avg_variabilite = 0, intensity_ratios = "",
         ppm_molecule_matched = "",
+        matched_atom_indices = "",
         error = "no_valid_results"
     )
 }
@@ -646,16 +887,16 @@ tryCatch(
         sources <- unique(tableau_final$Source)
         total_sources <- length(sources)
         log_total_sources(total_sources)
-        
+
         # Adaptive batch size according to molecule count
         batch_size <- if (total_sources < 100) {
-          10
+            10
         } else if (total_sources < 500) {
-          25
+            25
         } else if (total_sources < 2000) {
-          50
+            50
         } else {
-          100
+            100
         }
 
         log_message("=== PARAMETERS ===")
@@ -695,9 +936,12 @@ tryCatch(
                     parallel::clusterExport(cluster, varlist = c(
                         "tableau_final", "spectrum_matrix", "spectrum_mat", "intensity_columns",
                         "tol_match_F1", "tol_match_F2", "tol_correspondance_F1", "tol_correspondance_F2",
-                        "ratio_min", "ransy_cv_threshold", "correlation_threshold",
+                        "ratio_min", "ransy_cv_threshold", "correlation_threshold", "correlation_method",
                         "coverage_threshold_group", "coverage_threshold_subchain",
                         "coverage_threshold_ransy", "max_missing_ransy", "max_pivots", "alpha_cost",
+                        "use_pqn", "use_csn", "normalization_applied",
+                        "USE_STOCSY", "USE_RANSY", "N_SAMPLES", "ANNOTATION_MODE",
+                        "intensity_ratio_annotation_2D",
                         "trouver_correspondances_2D", "calculer_STOCSY_2D", "gfilter_groups_par_coverage_2D",
                         "calculer_RANSY_2D", "calculer_coverage_sub_ratio_2D", "former_groupes_stocsy_2D",
                         "creer_resultat_defaut_2D", "get_mean_intensity_for_ppm2d",
@@ -738,7 +982,7 @@ tryCatch(
             start_idx <- (batch_idx - 1) * batch_size + 1
             end_idx <- min(batch_idx * batch_size, total_sources)
             batch_sources <- if (total_sources > 0) sources[start_idx:end_idx] else character(0)
-            
+
             # Percentage calculation based on processed sources
             pct_start <- round(((start_idx - 1) / max(1, total_sources)) * 100, 1)
 
@@ -772,6 +1016,7 @@ tryCatch(
                                     tol_match_F1 = tol_match_F1,
                                     tol_match_F2 = tol_match_F2,
                                     correlation_threshold = correlation_threshold,
+                                    correlation_method = correlation_method,
                                     coverage_threshold_group = coverage_threshold_group,
                                     coverage_threshold_subchain = coverage_threshold_subchain,
                                     ratio_min = ratio_min,
@@ -790,8 +1035,9 @@ tryCatch(
                                         groupe_correlation = "",
                                         baseline_ppm = NA_character_, sous_chaine = "", coverage_sub = 0, coverage_sub_ratio = 0,
                                         pivot_ppm = NA_character_, RANSY_signals = "", ppm_molecule_matched = "",
+                                        matched_atom_indices = "",
                                         RANSY_mean_intensities = "", coverage_ransy = 0, RANSY_variabilite = "",
-                                        avg_variabilite = 0, intensity_ratios = "", error = "no_ransy_valid"
+                                        avg_variabilite = 0, avg_error_ppm_2D = NA_real_, intensity_ratios = "", error = "no_ransy_valid"
                                     )))
                                 }
 
@@ -803,6 +1049,22 @@ tryCatch(
                                     pairs <- best$matched_pairs
                                     if (is.null(pairs) || !nrow(pairs)) pairs <- data.table(mol_F1 = numeric(0), mol_F2 = numeric(0), ppm_ransy = character(0))
                                     ppm_molecule_matched <- if (nrow(pairs)) paste(paste(pairs$mol_F1, pairs$mol_F2, sep = "|"), collapse = "||") else ""
+
+                                    # Build matched_atom_indices: H1_all:H2_all for each matched pair
+                                    # Format: "34,35,36:34,35,36" pour protons équivalents
+                                    matched_atom_indices <- ""
+                                    if (nrow(pairs) && "H1_all" %in% names(pairs) && "H2_all" %in% names(pairs)) {
+                                        idx_parts <- vapply(seq_len(nrow(pairs)), function(ii) {
+                                            h1_all <- pairs$H1_all[ii]
+                                            h2_all <- pairs$H2_all[ii]
+                                            if (!is.na(h1_all) && !is.na(h2_all) && nchar(h1_all) > 0 && nchar(h2_all) > 0) {
+                                                paste(h1_all, h2_all, sep = ":")
+                                            } else {
+                                                ""
+                                            }
+                                        }, character(1))
+                                        matched_atom_indices <- paste(idx_parts[idx_parts != ""], collapse = "||")
+                                    }
 
                                     data.table(
                                         Source = src, ECFP4 = ecfp_str,
@@ -816,10 +1078,12 @@ tryCatch(
                                         pivot_ppm = best$pivot_ppm,
                                         RANSY_signals = paste(ransy_all, collapse = "||"),
                                         ppm_molecule_matched = ppm_molecule_matched,
+                                        matched_atom_indices = matched_atom_indices,
                                         RANSY_mean_intensities = sanitize_for_csv(paste(round(ransy_means, 6), collapse = ";")),
                                         coverage_ransy = best$coverage_ransy,
                                         RANSY_variabilite = sanitize_for_csv(best$RANSY_variabilite),
                                         avg_variabilite = best$avg_variabilite,
+                                        avg_error_ppm_2D = ifelse(is.null(best$avg_error_ppm_2D) || is.na(best$avg_error_ppm_2D), NA_real_, best$avg_error_ppm_2D),
                                         intensity_ratios = sanitize_for_csv(best$intensity_ratios),
                                         error = NA_character_
                                     )
@@ -855,10 +1119,10 @@ tryCatch(
 
             batch_duration <- as.numeric(difftime(Sys.time(), batch_start_time, units = "secs"))
             log_message(paste("Batch", batch_idx, "completed in", round(batch_duration, 1), "seconds"))
-            
+
             # Percentage calculation based on processed sources
             pct_end <- round((end_idx / max(1, total_sources)) * 100, 1)
-            
+
             if (batch_idx < total_batches) {
                 remaining_batches <- total_batches - batch_idx
                 eta_minutes <- round((remaining_batches * batch_duration) / 60, 1)
@@ -873,7 +1137,12 @@ tryCatch(
         log_memory("before assembly")
         if (length(results_list) > 0) {
             resultats <- data.table::rbindlist(results_list, fill = TRUE)
-            data.table::setorder(resultats, Source, -coverage_ransy)
+            # Calculate ransy_score: 75% coverage + 25% stability (inverse of CV variability)
+            # Stability = 1 - (avg_variabilite / ransy_cv_threshold) bounded between 0 and 1
+            resultats[, stability := 1 - pmin(1, pmax(0, ifelse(is.na(avg_variabilite), 1, avg_variabilite / ransy_cv_threshold)))]
+            resultats[, ransy_score := 0.75 * ifelse(is.na(coverage_ransy), 0, coverage_ransy) + 0.25 * stability * 100]
+            data.table::setorder(resultats, Source, -ransy_score)
+            log_message("Ranking by ransy_score (75% coverage + 25% stability)")
             best_per_sourceCOSY <- resultats[, .SD[1], by = Source]
             best_per_sourceCOSY[, Source := sub("^NMR_", "", Source)]
             best_per_sourceCOSY[, Source := sub("\\.sdf$", "", Source)]
@@ -913,10 +1182,16 @@ tryCatch(
             version = "stocsy_pipeline_optimise_dt",
             batches_processed = ceiling(length(sources) / batch_size),
             memory_optimized = TRUE,
+            annotation_mode = if (exists("ANNOTATION_MODE")) ANNOTATION_MODE else "unknown",
+            n_samples = if (exists("N_SAMPLES")) N_SAMPLES else NA,
+            stocsy_enabled = if (exists("USE_STOCSY")) USE_STOCSY else TRUE,
+            ransy_enabled = if (exists("USE_RANSY")) USE_RANSY else TRUE,
+            normalization_applied = if (exists("normalization_applied")) normalization_applied else "none",
             summary = list(
                 avg_coverage_ransy = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$coverage_ransy, na.rm = TRUE), 2) else 0,
                 avg_coverage_sub   = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$coverage_sub, na.rm = TRUE), 2) else 0,
-                avg_variabilite    = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$avg_variabilite, na.rm = TRUE), 4) else 0
+                avg_variabilite    = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$avg_variabilite, na.rm = TRUE), 4) else 0,
+                avg_error_ppm_2D   = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$avg_error_ppm_2D, na.rm = TRUE), 4) else 0
             )
         ))
 

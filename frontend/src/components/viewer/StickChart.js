@@ -1,11 +1,9 @@
 // src/components/viewer/StickChart.js
 // Composant de visualisation de spectre 1D (Canvas)
+// Tracé direct des données brutes (ppm, intensity) - zoom instantané
 
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { useMeasureWidth } from "../../hooks/useMeasureWidth";
-import { buildImgSrc } from "../../utils/imageUtils";
-import { debugWarn, debugError } from "../../utils/debug";
-import { make1DMapper } from "../../api";
 import {
   COLOR_THEORY,
   COLOR_EXP,
@@ -16,6 +14,10 @@ import {
 
 /**
  * Composant Canvas pour afficher un spectre 1D (stick chart)
+ * Utilise les données brutes pour un zoom instantané
+ * 
+ * @param {Object} spectrumData - Données brutes du spectre {ppm: number[], intensity: number[]}
+ * @param {Object} ppmRange - Range PPM optionnel {min, max} pour le zoom
  */
 function StickChart({
   theory = [],
@@ -25,46 +27,41 @@ function StickChart({
   height = PLOT_HEIGHT,
   showTheory = true,
   showExp = true,
-  backgroundImage = null,
-  backgroundMeta = null,
+  spectrumData = null,      // Données brutes {ppm: [], intensity: []}
+  ppmRange = null,          // Range pour le zoom {min, max}
+  spectrumColor = "#1e40af",
   canInteract = false,
   zoomEnabled = true,
   onZoom,
-  onZoomPx,
   onReset,
   busy = false,
+  extraButtons = null,
+  intensityScale = 1.0,     // Facteur d'échelle de l'intensité
+  onIntensityChange = null, // Callback pour changer l'intensité (delta) => void
 }) {
   const [wrapRef, width] = useMeasureWidth(700);
   const canvasRef = useRef(null);
-  const [bgLoaded, setBgLoaded] = useState(false);
-  const bgImageRef = useRef(null);
   const [drag, setDrag] = useState(null);
 
+  // Calcul du range PPM à afficher
   const range = useMemo(() => {
-    if (backgroundMeta) {
-      if (
-        backgroundMeta.ppm_min != null &&
-        backgroundMeta.ppm_max != null
-      ) {
-        const a = Number(backgroundMeta.ppm_min);
-        const b = Number(backgroundMeta.ppm_max);
-        return { minX: Math.min(a, b), maxX: Math.max(a, b) };
-      }
-      if (
-        backgroundMeta.ppm_left != null &&
-        backgroundMeta.ppm_right != null
-      ) {
-        const a = Number(backgroundMeta.ppm_right);
-        const b = Number(backgroundMeta.ppm_left);
-        return { minX: Math.min(a, b), maxX: Math.max(a, b) };
-      }
+    // Priorité 1: range passé en prop (zoom)
+    if (ppmRange && ppmRange.min != null && ppmRange.max != null) {
+      return { minX: Math.min(ppmRange.min, ppmRange.max), maxX: Math.max(ppmRange.min, ppmRange.max) };
     }
+    // Priorité 2: range des données du spectre
+    if (spectrumData?.ppm?.length > 0) {
+      const minPpm = Math.min(...spectrumData.ppm);
+      const maxPpm = Math.max(...spectrumData.ppm);
+      return { minX: minPpm, maxX: maxPpm };
+    }
+    // Priorité 3: range des points théoriques/expérimentaux
     const all = [
       ...(showTheory ? theory : []),
       ...(showExp ? expPpm : []),
     ].filter(Number.isFinite);
 
-    if (all.length === 0) return { minX: 0, maxX: 1 };
+    if (all.length === 0) return { minX: 0, maxX: 14 };
     let minX = Math.min(...all);
     let maxX = Math.max(...all);
     if (minX === maxX) {
@@ -72,7 +69,7 @@ function StickChart({
       maxX += 0.01;
     }
     return { minX, maxX };
-  }, [theory, expPpm, showTheory, showExp, backgroundMeta]);
+  }, [theory, expPpm, showTheory, showExp, spectrumData, ppmRange]);
 
   const expSeries = useMemo(() => {
     const norm = (arr) => {
@@ -86,35 +83,6 @@ function StickChart({
     const a = norm(expInt);
     return expPpm.map((x, i) => ({ x, a: a[i] ?? 0.6 }));
   }, [expPpm, expInt]);
-
-  // Loading background image
-  useEffect(() => {
-    if (!backgroundImage) {
-      setBgLoaded(false);
-      bgImageRef.current = null;
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-
-    const safeSrc = buildImgSrc(backgroundImage, backgroundMeta);
-
-    let retriedWithoutCb = false;
-    img.onload = () => {
-      bgImageRef.current = img;
-      setBgLoaded(true);
-    };
-    img.onerror = () => {
-      if (!retriedWithoutCb && safeSrc !== backgroundImage) {
-        retriedWithoutCb = true;
-        img.src = backgroundImage;
-        return;
-      }
-      bgImageRef.current = null;
-      setBgLoaded(false);
-    };
-    img.src = safeSrc;
-  }, [backgroundImage, backgroundMeta]);
 
   // Rendu du canvas
   useEffect(() => {
@@ -136,102 +104,69 @@ function StickChart({
     ctx.fillStyle = BG;
     ctx.fillRect(0, 0, W, H);
 
-    // Dessin de l'image de fond
-    if (bgLoaded && bgImageRef.current) {
-      const imgValid =
-        bgImageRef.current.complete &&
-        bgImageRef.current.naturalWidth > 0 &&
-        bgImageRef.current.naturalHeight > 0;
+    // Fonction de mapping ppm -> pixel (axes inversés pour NMR: gauche = max, droite = min)
+    const denom = range.maxX - range.minX || 1;
+    const ppmToX = (ppm) => {
+      const t = (ppm - range.minX) / denom;
+      return PAD + (reverse ? (1 - t) : t) * gridW;
+    };
 
-      if (!imgValid) {
-        debugWarn("[WARN] Image 1D not yet loaded, skip drawImage");
-      } else {
-        const bb = backgroundMeta?.plot_bbox_px;
-        if (bb && [bb.x, bb.y, bb.w, bb.h].every(Number.isFinite)) {
-          try {
-            ctx.drawImage(
-              bgImageRef.current,
-              Math.max(0, bb.x),
-              Math.max(0, bb.y),
-              Math.max(1, bb.w),
-              Math.max(1, bb.h),
-              PAD,
-              PAD,
-              gridW,
-              gridH
-            );
-          } catch (e) {
-            debugError("[ERROR] drawImage 1D:", e.message);
-          }
-        } else {
-          try {
-            ctx.drawImage(bgImageRef.current, PAD, PAD, gridW, gridH);
-          } catch (e) {
-            debugError("[ERROR] drawImage 1D (full):", e.message);
+    // Tracé du spectre de fond à partir des données brutes
+    if (spectrumData?.ppm?.length > 0 && spectrumData?.intensity?.length > 0) {
+      const ppmArr = spectrumData.ppm;
+      const intArr = spectrumData.intensity;
+
+      // Filtrer les points visibles dans le range actuel
+      const visibleData = [];
+      let maxInt = 0;
+      for (let i = 0; i < ppmArr.length; i++) {
+        const ppm = ppmArr[i];
+        if (ppm >= range.minX && ppm <= range.maxX) {
+          visibleData.push({ ppm, int: intArr[i] });
+          if (Math.abs(intArr[i]) > maxInt) maxInt = Math.abs(intArr[i]);
+        }
+      }
+      if (maxInt === 0) maxInt = 1;
+
+      // Fonction de mapping intensité -> Y (avec scale)
+      const intToY = (int) => {
+        const scaled = int * intensityScale;
+        return PAD + gridH - (scaled / maxInt) * gridH * 0.85;
+      };
+
+      // Tracer la courbe du spectre
+      if (visibleData.length > 1) {
+        ctx.strokeStyle = spectrumColor;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        let started = false;
+        for (const pt of visibleData) {
+          const x = ppmToX(pt.ppm);
+          const y = intToY(pt.int);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
           }
         }
-        ctx.globalAlpha = 0.12;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(PAD, PAD, gridW, gridH);
-        ctx.globalAlpha = 1.0;
+        ctx.stroke();
       }
     }
 
-    // Grille
-    ctx.strokeStyle = "rgba(99,110,131,0.25)";
-    ctx.lineWidth = 1;
-    const gridY = 5;
-    for (let i = 0; i <= gridY; i++) {
-      const y = PAD + (i / gridY) * gridH;
-      ctx.beginPath();
-      ctx.moveTo(PAD, y);
-      ctx.lineTo(PAD + gridW, y);
-      ctx.stroke();
-    }
+    // Axe horizontal en bas
     ctx.strokeStyle = AXIS;
     ctx.beginPath();
     ctx.moveTo(PAD, PAD + gridH);
     ctx.lineTo(PAD + gridW, PAD + gridH);
     ctx.stroke();
 
-    const denom = range.maxX - range.minX || 1;
-
-    // Fonction de mapping ppm -> pixel
-    const toX = (() => {
-      const canMap =
-        bgLoaded &&
-        bgImageRef.current &&
-        backgroundMeta &&
-        backgroundMeta.ppm_left != null &&
-        backgroundMeta.ppm_right != null;
-
-      if (canMap) {
-        const mapper = make1DMapper?.(backgroundMeta, gridW);
-        if (mapper && mapper.axisRect?.w > 0) {
-          return (ppmRaw) => {
-            const ppm = Number(ppmRaw);
-            if (!Number.isFinite(ppm)) return PAD;
-            const xpx = mapper(ppm);
-            const t = (xpx - mapper.axisRect.x) / mapper.axisRect.w;
-            return PAD + t * gridW;
-          };
-        }
-      }
-      return (ppmRaw) => {
-        const ppm = Number(ppmRaw);
-        if (!Number.isFinite(ppm)) return PAD;
-        const t = (ppm - range.minX) / denom;
-        const s = reverse ? 1 - t : t;
-        return PAD + s * gridW;
-      };
-    })();
-
-    // Theoretical points
+    // Theoretical points (sticks)
     if (showTheory && theory?.length) {
       ctx.strokeStyle = COLOR_THEORY;
       ctx.lineWidth = 2.5;
       for (const ppm of theory) {
-        const x = Math.round(toX(ppm)) + 0.5;
+        const x = Math.round(ppmToX(ppm)) + 0.5;
         ctx.beginPath();
         ctx.moveTo(x, PAD + gridH);
         ctx.lineTo(x, PAD + gridH * 0.95);
@@ -239,12 +174,12 @@ function StickChart({
       }
     }
 
-    // Experimental points
+    // Experimental points (sticks)
     if (showExp && expSeries?.length) {
       ctx.strokeStyle = COLOR_EXP;
       ctx.lineWidth = 2.5;
       for (const { x: ppm } of expSeries) {
-        const xv = Math.round(toX(ppm)) + 0.5;
+        const xv = Math.round(ppmToX(ppm)) + 0.5;
         ctx.beginPath();
         ctx.moveTo(xv, PAD + gridH);
         ctx.lineTo(xv, PAD + gridH * 0.95);
@@ -252,7 +187,7 @@ function StickChart({
       }
     }
 
-    // Labels des ticks
+    // Labels des ticks PPM
     ctx.fillStyle = AXIS;
     ctx.font = "12px ui-sans-serif, system-ui, -apple-system";
     const ticks = 6;
@@ -280,7 +215,7 @@ function StickChart({
       ctx.fillRect(PAD, PAD, gridW, gridH);
       ctx.fillStyle = "#64748b";
       ctx.font = "13px ui-sans-serif, system-ui, -apple-system";
-      ctx.fillText("Updating background…", PAD + 10, PAD + 22);
+      ctx.fillText("Loading...", PAD + 10, PAD + 22);
     }
   }, [
     width,
@@ -291,10 +226,11 @@ function StickChart({
     range,
     showExp,
     showTheory,
-    bgLoaded,
-    backgroundMeta,
+    spectrumData,
+    spectrumColor,
     drag,
     busy,
+    intensityScale,
   ]);
 
   const canDragNow = canInteract && zoomEnabled;
@@ -329,74 +265,18 @@ function StickChart({
       const PAD = 30;
       const rect = e.currentTarget.getBoundingClientRect();
       const W = rect.width;
-      const H = rect.height;
       const gridW = W - 2 * PAD;
-      const gridH = H - 2 * PAD;
 
       const eps = 0.5;
-      const x0 = Math.max(
-        PAD + eps,
-        Math.min(W - PAD - eps, Math.min(drag.x0, drag.x1))
-      );
-      const x1 = Math.max(
-        PAD + eps,
-        Math.min(W - PAD - eps, Math.max(drag.x0, drag.x1))
-      );
+      const x0 = Math.max(PAD + eps, Math.min(W - PAD - eps, Math.min(drag.x0, drag.x1)));
+      const x1 = Math.max(PAD + eps, Math.min(W - PAD - eps, Math.max(drag.x0, drag.x1)));
 
       setDrag(null);
 
       if (!canDragNow || x1 - x0 < 4) return;
 
-      if (typeof onZoom === "function") {
-        let left, right;
-        if (
-          Number.isFinite(+backgroundMeta?.ppm_left) &&
-          Number.isFinite(+backgroundMeta?.ppm_right)
-        ) {
-          left = +backgroundMeta.ppm_left;
-          right = +backgroundMeta.ppm_right;
-        } else if (
-          Number.isFinite(+backgroundMeta?.ppm_min) &&
-          Number.isFinite(+backgroundMeta?.ppm_max)
-        ) {
-          const a = +backgroundMeta.ppm_min;
-          const b = +backgroundMeta.ppm_max;
-          left = Math.max(a, b);
-          right = Math.min(a, b);
-        }
-
-        if (Number.isFinite(left) && Number.isFinite(right)) {
-          const frac = (xc) => Math.max(0, Math.min(1, (xc - PAD) / gridW));
-          const ppmAt = (xc) => left - frac(xc) * (left - right);
-          const pA = ppmAt(x0);
-          const pB = ppmAt(x1);
-          onZoom(Math.min(pA, pB), Math.max(pA, pB));
-          return;
-        }
-      }
-
-      if (typeof onZoomPx === "function") {
-        const rectPxDOM = {
-          x: Math.min(x0, x1) - PAD,
-          y: 0,
-          w: Math.abs(x1 - x0),
-          h: gridH,
-        };
-        if (rectPxDOM.w >= 1) {
-          onZoomPx(rectPxDOM, {
-            displayWidth: gridW,
-            displayHeight: gridH,
-          });
-          return;
-        }
-      }
-
-      if (
-        range &&
-        Number.isFinite(range.minX) &&
-        Number.isFinite(range.maxX) &&
-        typeof onZoom === "function"
-      ) {
+      // Calcul du nouveau range PPM à partir de la sélection
+      if (typeof onZoom === "function" && range) {
         const t0 = (x0 - PAD) / gridW;
         const t1 = (x1 - PAD) / gridW;
         const rangeWidth = range.maxX - range.minX;
@@ -409,7 +289,7 @@ function StickChart({
         onZoom(Math.min(ppmA, ppmB), Math.max(ppmA, ppmB));
       }
     },
-    [drag, canDragNow, backgroundMeta, onZoom, onZoomPx, range, reverse]
+    [drag, canDragNow, onZoom, range, reverse]
   );
 
   useEffect(() => {
@@ -419,6 +299,20 @@ function StickChart({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Handler molette pour ajuster l'intensité - useEffect car passive: false requis
+  useEffect(() => {
+    const cvs = canvasRef.current;
+    if (!cvs || typeof onIntensityChange !== "function") return;
+    
+    const handleWheel = (e) => {
+      e.preventDefault();
+      onIntensityChange(e.deltaY);
+    };
+    
+    cvs.addEventListener("wheel", handleWheel, { passive: false });
+    return () => cvs.removeEventListener("wheel", handleWheel);
+  }, [onIntensityChange]);
 
   return (
     <div
@@ -441,22 +335,6 @@ function StickChart({
         onMouseUp={onMouseUp}
         onMouseLeave={() => drag && setDrag(null)}
       />
-      {backgroundImage && !bgLoaded && (
-        <div
-          style={{
-            position: "absolute",
-            top: 10,
-            right: 10,
-            fontSize: 12,
-            color: "#666",
-            background: "rgba(255,255,255,0.85)",
-            padding: 4,
-            borderRadius: 4,
-          }}
-        >
-          Loading 1D background...
-        </div>
-      )}
       {canInteract && (
         <div
           style={{
@@ -465,13 +343,15 @@ function StickChart({
             left: 8,
             fontSize: 12,
             color: "#475569",
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
           }}
         >
-          Glisser pour zoomer •{" "}
+          <span>Drag to zoom •</span>
           <button
             onClick={onReset}
             style={{
-              marginLeft: 6,
               padding: "2px 6px",
               borderRadius: 6,
               border: "1px solid #cbd5e1",
@@ -481,6 +361,7 @@ function StickChart({
           >
             Reset Zoom
           </button>
+          {extraButtons}
         </div>
       )}
     </div>

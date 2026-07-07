@@ -48,20 +48,23 @@ import shutil
 import random
 import argparse
 import traceback
+import threading
 import importlib.util
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 
 # [OK] Global counter for tracking
 _GLOBAL_MOLECULE_COUNTER = {"done": 0, "total": 0}
+_PRINT_LOCK = threading.Lock()  # Thread-safe stdout
+_MODEL_LOCK = threading.Lock()  # Thread-safe model loading
 
 # [OK] Container for all molecules' spectral JSON data
 _MOLECULES_SPECTRAL_DATA: List[Dict[str, Any]] = []
 
 import numpy as np
 import torch
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # CPU only
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
@@ -80,6 +83,12 @@ except ImportError:
 
 rdBase.DisableLog('rdApp.error')
 rdBase.DisableLog('rdApp.warning')
+
+# -----------------------
+# Corrections 13C aromatiques (DÉSACTIVÉ - non utilisé)
+# -----------------------
+# Module retiré - les corrections aromatiques ne sont plus appliquées
+AROMATIC_13C_CORRECTIONS_AVAILABLE = False
 
 # -----------------------
 # DGL (robust import)
@@ -173,6 +182,87 @@ except ImportError as e:
     print(f"[WARN] Multiplicity simulator not available: {e}", file=sys.stderr)
 
 # -----------------------
+# HOSE code predictor (v2.1 with std-based S4→S3 fallback)
+# -----------------------
+# HOSE predictor REMOVED - not used for predictions
+# Only Fingerprint → ML hierarchy is used
+# -----------------------
+# Fingerprint database predictor (radius 4→3→2 with std fallback, ML fallback)
+# -----------------------
+try:
+    from fingerprint_db_predictor import FingerprintPredictor
+    _FINGERPRINT_PREDICTOR: Optional["FingerprintPredictor"] = None
+    FINGERPRINT_DB_AVAILABLE = True
+    print("[OK] Fingerprint database predictor imported", flush=True)
+except ImportError as e:
+    FINGERPRINT_DB_AVAILABLE = False
+    _FINGERPRINT_PREDICTOR = None
+    print(f"[WARN] Fingerprint database predictor not available: {e}", file=sys.stderr)
+
+def get_fingerprint_predictor() -> Optional["FingerprintPredictor"]:
+    """Singleton accessor for fingerprint predictor."""
+    global _FINGERPRINT_PREDICTOR
+    if not FINGERPRINT_DB_AVAILABLE:
+        return None
+    if _FINGERPRINT_PREDICTOR is None:
+        try:
+            _FINGERPRINT_PREDICTOR = FingerprintPredictor()
+            # Count fingerprints for each radius (R6, R5, R4, R3, R2)
+            r6_count = len(_FINGERPRINT_PREDICTOR._db.get(6, {})) if _FINGERPRINT_PREDICTOR._db else 0
+            r5_count = len(_FINGERPRINT_PREDICTOR._db.get(5, {})) if _FINGERPRINT_PREDICTOR._db else 0
+            r4_count = len(_FINGERPRINT_PREDICTOR._db.get(4, {})) if _FINGERPRINT_PREDICTOR._db else 0
+            r3_count = len(_FINGERPRINT_PREDICTOR._db.get(3, {})) if _FINGERPRINT_PREDICTOR._db else 0
+            r2_count = len(_FINGERPRINT_PREDICTOR._db.get(2, {})) if _FINGERPRINT_PREDICTOR._db else 0
+            print(f"[OK] Fingerprint predictor initialized (r6={r6_count}, r5={r5_count}, r4={r4_count}, r3={r3_count}, r2={r2_count})", flush=True)
+        except Exception as e:
+            print(f"[WARN] Failed to initialize fingerprint predictor: {e}", file=sys.stderr)
+            return None
+    return _FINGERPRINT_PREDICTOR
+
+# -----------------------
+# Diastereotopic delta table (experimental values)
+# NOTE: Le calcul du delta est effectué UNIQUEMENT dans sim_mult_rulebased.py
+#       qui appelle get_diastereotopic_delta(). Ici on importe seulement
+#       les constantes pour référence et fallback.
+# -----------------------
+try:
+    from diastereotopic_delta_table import (
+        get_solvent_multiplier,
+        is_aromatic_solvent,
+        DELTA_CYCLOHEXANE,
+        DELTA_CHIRAL_ADJ,
+        DELTA_DEFAULT,
+        SOLVENT_MULTIPLIER,
+        AMINO_ACID_BETA_DELTA,
+        ANISOTROPIC_SYSTEMS,
+        CYCLIC_DELTA,
+    )
+    DIASTEREOTOPIC_TABLE_AVAILABLE = True
+    print("[OK] Diastereotopic delta table imported", flush=True)
+except ImportError as e:
+    DIASTEREOTOPIC_TABLE_AVAILABLE = False
+    print(f"[WARN] Diastereotopic delta table not available: {e}", file=sys.stderr)
+    # Fallback values - ✅ CORRIGÉES selon validation BMRB/SDBS
+    DELTA_CYCLOHEXANE = 0.48
+    DELTA_CHIRAL_ADJ = 0.12
+    DELTA_DEFAULT = 0.10
+    SOLVENT_MULTIPLIER = {"CDCl3": 1.0, "DMSO-d6": 0.95, "C6D6": 1.6, "default": 1.0}
+    AMINO_ACID_BETA_DELTA = {"default": (0.04, 0.01, "fallback")}
+    ANISOTROPIC_SYSTEMS = {"calixarene_cone": (1.43, 1.70, "fallback")}
+    CYCLIC_DELTA = {"cyclohexane": (0.48, 0.50, "fallback")}
+
+
+    def get_solvent_multiplier(s): return SOLVENT_MULTIPLIER.get(s, 1.0)
+    def is_aromatic_solvent(s): return s in ("C6D6", "pyridine-d5")
+
+# -----------------------
+# Delta pour CH₃ géminaux sur double liaison trisubstituée (groupe prényl/isoprényl)
+# Expérimental: ~0.06 ppm entre CH₃ cis et trans (ex: Flavoglaucin 1.75 vs 1.79 ppm)
+# Références: terpenoïdes, prényl-phénols, géraniol, nérol
+# -----------------------
+DELTA_GEMINAL_CH3_DOUBLE_BOND = 0.06
+
+# -----------------------
 # ML constants
 # -----------------------
 ATOM_LIST = ['H','Li','B','C','N','O','F','Na','Mg','Al','Si','P','S','Cl','K','Ti','Zn','Ge','As','Se','Br','Pd','Ag','Sn','Sb','Te','I','Hg','Tl','Pb','Bi','Ga']
@@ -222,17 +312,18 @@ BATCH_SIZE = 128
 # Logs JSON SSE
 # -----------------------
 def _print_json(obj: dict) -> None:
-    """Print JSON safely for Windows cp1252 console."""
-    try:
-        # Use ensure_ascii=True to avoid Unicode encoding issues on Windows
-        print(json.dumps(obj, ensure_ascii=True), flush=True)
-    except Exception:
-        # Fallback: convert to ASCII-safe string
+    """Print JSON safely for Windows cp1252 console (thread-safe)."""
+    with _PRINT_LOCK:
         try:
-            safe_str = str(obj).encode('ascii', errors='replace').decode('ascii')
-            print(safe_str, flush=True)
+            # Use ensure_ascii=True to avoid Unicode encoding issues on Windows
+            print(json.dumps(obj, ensure_ascii=True), flush=True)
         except Exception:
-            print('{"type":"error","message":"Output encoding error"}', flush=True)
+            # Fallback: convert to ASCII-safe string
+            try:
+                safe_str = str(obj).encode('ascii', errors='replace').decode('ascii')
+                print(safe_str, flush=True)
+            except Exception:
+                print('{"type":"error","message":"Output encoding error"}', flush=True)
 
 def _sanitize_message(message: str) -> str:
     """Replace Unicode symbols with ASCII equivalents for Windows compatibility."""
@@ -292,10 +383,118 @@ def ensure_dir(p: str) -> str:
     os.makedirs(p, exist_ok=True)
     return p
 
-def sanitize_filename(name: str) -> str:
+def sanitize_filename(name: str, max_len: int = 80) -> str:
+    import unicodedata, hashlib
     name = (name or "").strip()
+    # Normalize accented characters to ASCII (é->e, ü->u, ç->c, etc.)
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
     name = re.sub(r"[^\w.\-]+", "_", name)
-    return name or "mol"
+    if not name:
+        return "mol"
+    if len(name) > max_len:
+        h = hashlib.md5(name.encode()).hexdigest()[:8]
+        name = name[:max_len] + "_" + h
+    return name
+
+# =========================================================================
+# REPRISE INCRÉMENTALE - Fonctions utilitaires
+# =========================================================================
+def _load_existing_predictions(resume_dir: str) -> Tuple[Dict[str, dict], Dict[str, Any]]:
+    """
+    Charge les prédictions existantes d'un dossier précédent.
+
+    Returns:
+        - mol_data: Dict[mol_id] -> {smiles, sdf_path, params, payload}
+        - params: Paramètres utilisés (freq_mhz, solvent, temperature_k, ph)
+    """
+    mol_data = {}
+    params = {}
+
+    # Charger checkpoint.json pour les paramètres
+    checkpoint_path = os.path.join(resume_dir, "checkpoint.json")
+    if os.path.exists(checkpoint_path):
+        try:
+            with open(checkpoint_path, "r", encoding="utf-8") as f:
+                checkpoint = json.load(f)
+            opts = checkpoint.get("options", {})
+            params = {
+                "freq_mhz": opts.get("freq_mhz", opts.get("sim_freq_mhz", 700.0)),
+                "solvent": opts.get("solvent", opts.get("sim_solvent", "CDCl3")),
+                "temperature_k": opts.get("temperature_k", opts.get("sim_temperature_k", 298.15)),
+                "ph": opts.get("ph", opts.get("sim_ph", 7.4)),
+            }
+        except Exception as e:
+            send_log(f"[RESUME] ⚠️ Impossible de lire checkpoint.json: {e}")
+
+    # Charger sdf_manifest.json pour la liste des molécules
+    manifest_path = os.path.join(resume_dir, "sdf_manifest.json")
+    if os.path.exists(manifest_path):
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+            for item in manifest.get("items", []):
+                mol_id = item.get("mol_id", "")
+                if mol_id and not item.get("error"):
+                    sdf_file = item.get("sdf", "")
+                    # Construire chemin absolu si nécessaire
+                    if sdf_file and not os.path.isabs(sdf_file):
+                        sdf_file = os.path.join(resume_dir, os.path.basename(sdf_file))
+                    mol_data[mol_id] = {
+                        "smiles": item.get("smiles", ""),
+                        "sdf_path": sdf_file,
+                        "nb_predicted_H": item.get("nb_predicted_H", 0),
+                        "nb_predicted_C": item.get("nb_predicted_C", 0),
+                    }
+        except Exception as e:
+            send_log(f"[RESUME] ⚠️ Impossible de lire sdf_manifest.json: {e}")
+
+    # Charger all_multiplicities.json pour les payloads
+    mult_path = os.path.join(resume_dir, "all_multiplicities.json")
+    if os.path.exists(mult_path):
+        try:
+            with open(mult_path, "r", encoding="utf-8") as f:
+                mult_data = json.load(f)
+            for mol in mult_data.get("molecules", []):
+                mol_id = mol.get("mol_id", "")
+                if mol_id and mol_id in mol_data:
+                    mol_data[mol_id]["payload"] = mol
+        except Exception as e:
+            send_log(f"[RESUME] ⚠️ Impossible de lire all_multiplicities.json: {e}")
+
+    return mol_data, params
+
+
+def _params_match(old_params: Dict[str, Any], new_params: Dict[str, Any]) -> bool:
+    """
+    Vérifie si les paramètres essentiels sont identiques.
+    Paramètres comparés: freq_mhz, solvent, temperature_k, ph
+    """
+    keys = ["freq_mhz", "solvent", "temperature_k", "ph"]
+    for k in keys:
+        old_val = old_params.get(k)
+        new_val = new_params.get(k)
+        # Comparaison avec tolérance pour les floats
+        if isinstance(old_val, float) and isinstance(new_val, float):
+            if abs(old_val - new_val) > 0.01:
+                return False
+        elif old_val != new_val:
+            return False
+    return True
+
+
+def _copy_sdf_to_output(src_path: str, dest_dir: str) -> str:
+    """Copie un fichier SDF vers le nouveau dossier de sortie."""
+    if not os.path.exists(src_path):
+        return ""
+    dest_path = os.path.join(dest_dir, os.path.basename(src_path))
+    try:
+        import shutil
+        shutil.copy2(src_path, dest_path)
+        return dest_path
+    except Exception as e:
+        send_log(f"[RESUME] ⚠️ Erreur copie SDF {src_path}: {e}")
+        return ""
+
 
 def human_bytes(n: int) -> str:
     if n is None:
@@ -311,6 +510,101 @@ def human_bytes(n: int) -> str:
 # -----------------------
 # Sample dataset
 # -----------------------
+def _detect_geminal_ch3_on_double_bond(mol: Chem.Mol, heavy_to_H: Dict[int, List[int]]) -> Dict[int, Tuple[int, str]]:
+    """
+    Détecte les paires de CH₃ géminaux sur une double liaison trisubstituée.
+    
+    Pattern: C(CH₃)₂=CH-R (groupe prényl/isoprényl)
+    - Le CH₃ cis par rapport à R est généralement plus blindé (~1.68 ppm)
+    - Le CH₃ trans par rapport à R est généralement plus déblindé (~1.75 ppm)
+    - Δδ typique: 0.04-0.08 ppm
+    
+    Args:
+        mol: Molécule avec H explicites
+        heavy_to_H: Mapping heavy_idx -> [H indices]
+    
+    Returns:
+        Dict[heavy_idx, (partner_heavy_idx, position)] où position = 'cis' ou 'trans'
+        Le CH₃ 'cis' recevra un shift plus bas, le 'trans' un shift plus haut
+    """
+    result = {}
+    base = Chem.RemoveHs(mol)
+    
+    # Pattern SMARTS: deux CH₃ sur un C sp2 d'une double liaison
+    # [CH3]-[C]([CH3])=[C]-[#6] : gem-diméthyl sur C=C trisubstituée
+    pattern = Chem.MolFromSmarts('[CH3;X4]-[C;X3]([CH3;X4])=[C;X3]-[#6]')
+    if pattern is None:
+        return result
+    
+    matches = mol.GetSubstructMatches(pattern)
+    
+    for match in matches:
+        # match: (CH3_1, C_quaternaire, CH3_2, C_vinyl, C_substituant)
+        ch3_1_idx = match[0]
+        c_quat_idx = match[1]
+        ch3_2_idx = match[2]
+        c_vinyl_idx = match[3]
+        
+        # Vérifier que ce sont bien des CH₃ dans notre mapping
+        if ch3_1_idx not in heavy_to_H or ch3_2_idx not in heavy_to_H:
+            continue
+        if len(heavy_to_H.get(ch3_1_idx, [])) != 3 or len(heavy_to_H.get(ch3_2_idx, [])) != 3:
+            continue
+        
+        # Assigner cis/trans basé sur l'ordre des indices
+        # Convention: le premier CH₃ (indice plus bas) = 'cis' (shift plus bas)
+        if ch3_1_idx < ch3_2_idx:
+            result[ch3_1_idx] = (ch3_2_idx, 'cis')
+            result[ch3_2_idx] = (ch3_1_idx, 'trans')
+        else:
+            result[ch3_2_idx] = (ch3_1_idx, 'cis')
+            result[ch3_1_idx] = (ch3_2_idx, 'trans')
+    
+    return result
+
+
+def _detect_geminal_dimethyl_13c(mol: Chem.Mol) -> List[Tuple[int, int, int]]:
+    """
+    Détecte les paires de CH₃ géminaux sur n'importe quel carbone (13C).
+    Utilise la même logique que pour 1H mais retourne les indices des carbones CH3.
+    
+    Pattern général: R-C(CH₃)(CH₃)-R' où C peut être sp2 ou sp3
+    
+    Args:
+        mol: Molécule SANS H explicites (structure de base)
+    
+    Returns:
+        List de tuples (c_central_idx, ch3_1_idx, ch3_2_idx)
+        où c_central est le carbone portant les deux CH3
+    """
+    result = []
+    
+    # Pattern SMARTS: carbone avec exactement 2 voisins CH3 (degré 1)
+    # [C]-[C]([C])-* : carbone avec 2 voisins carbones terminaux
+    # On vérifie ensuite que ce sont bien des CH3
+    for c_idx in range(mol.GetNumAtoms()):
+        c_atom = mol.GetAtomWithIdx(c_idx)
+        
+        if c_atom.GetSymbol() != 'C':
+            continue
+        
+        # Carbone sp2 ou sp3
+        if c_atom.GetHybridization() not in [rdchem.HybridizationType.SP2, rdchem.HybridizationType.SP3]:
+            continue
+        
+        # Trouver les voisins CH3 (degré 1 = terminaux)
+        ch3_neighbors = []
+        for neighbor in c_atom.GetNeighbors():
+            if neighbor.GetSymbol() == 'C' and neighbor.GetDegree() == 1:
+                ch3_neighbors.append(neighbor.GetIdx())
+        
+        # Si exactement 2 CH3, c'est un gem-diméthyle
+        if len(ch3_neighbors) == 2:
+            result.append((c_idx, ch3_neighbors[0], ch3_neighbors[1]))
+    
+    return result
+
+
 def _sorted_h_groups(hx: Dict[int, List[int]]) -> List[Tuple[int, List[int]]]:
     """Return H groups sorted by heavy-atom index (key), and H sorted within each group."""
     return [(k, sorted(v)) for k, v in sorted(hx.items(), key=lambda kv: kv[0]) if v]
@@ -398,6 +692,22 @@ def _stereochemistry(bond: Chem.Bond) -> List[int]:
         return [(bond.GetProp('Stereochemistry') == 'Bond_Cis'), (bond.GetProp('Stereochemistry') == 'Bond_Trans')]
     return [0, 0]
 
+def _safe_mol_to_smiles(mol: Chem.Mol) -> str:
+    """Convert mol to SMILES with fallback for kekulization errors."""
+    try:
+        return Chem.MolToSmiles(mol)
+    except Exception:
+        try:
+            # Try without kekulization (aromatic representation)
+            return Chem.MolToSmiles(mol, kekuleSmiles=False)
+        except Exception:
+            try:
+                # Ultimate fallback: use canonical SMILES without sanitization
+                return Chem.MolToSmiles(mol, canonical=True, kekuleSmiles=False)
+            except Exception:
+                # Return a placeholder if all else fails
+                return "UNKNOWN"
+
 def add_mol_sparsified_graph(mol_dict: Dict[str, Any], mol: Chem.Mol) -> Dict[str, Any]:
     n_node = mol.GetNumAtoms()
     n_edge = mol.GetNumBonds() * 2
@@ -427,7 +737,7 @@ def add_mol_sparsified_graph(mol_dict: Dict[str, Any], mol: Chem.Mol) -> Dict[st
     mol_dict['node_attr'].append(node_attr)
     mol_dict['shift'].append(shift)
     mol_dict['mask'].append(mask)
-    mol_dict['smi'].append(Chem.MolToSmiles(mol))
+    mol_dict['smi'].append(_safe_mol_to_smiles(mol))
 
     if n_edge > 0:
         bond_fea1 = np.eye(len(BOND_LIST), dtype=bool)[[BOND_LIST.index(str(b.GetBondType())) for b in mol.GetBonds()]]
@@ -529,22 +839,60 @@ def get_x_h_connectivity(connectivity_list: List[List[str]], atom_list: List[str
             x_h.setdefault(b, []).append(a)
     return x_h
 
-def save_as_npy_for_1H(mol: Chem.Mol, output_dir: str) -> Tuple[str, Dict[int, List[int]]]:
-    mol = Chem.AddHs(mol, addCoords=True)
-    sdf_path = mol2SDF(mol, output_dir, name="tmp_1H")
+def save_as_npy_for_1H(mol: Chem.Mol, output_dir: str) -> Tuple[str, Dict[int, List[int]], Chem.Mol]:
+    """Returns (npz_path, x_h_connectivity, mol_from_sdf_with_H).
+
+    IMPORTANT: The returned mol is the one read back from SDF (mol_read),
+    NOT mol_with_h, because x_h_conn indices are based on mol_read's atom order.
+    This ensures atom index consistency for fingerprint prediction.
+    """
+    mol_with_h = Chem.AddHs(mol, addCoords=True)
+    sdf_path = mol2SDF(mol_with_h, output_dir, name="tmp_1H")
 
     atom_list, connectivity_list, _, _, mol_read = get_molecule_data(sdf_path)
     x_h_conn = get_x_h_connectivity(connectivity_list, atom_list)
 
     mol_rd = Chem.RemoveHs(mol_read)
-    Chem.SanitizeMol(mol_rd)
+    
+    # Robust sanitization with multiple fallbacks for kekulization issues
+    sanitized = False
+    try:
+        Chem.SanitizeMol(mol_rd)
+        sanitized = True
+    except Exception:
+        pass
+    
+    if not sanitized:
+        try:
+            # Fallback 1: sanitize without kekulization
+            Chem.SanitizeMol(mol_rd, sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_KEKULIZE)
+            Chem.SetAromaticity(mol_rd, Chem.AromaticityModel.AROMATICITY_SIMPLE)
+            sanitized = True
+        except Exception:
+            pass
+    
+    if not sanitized:
+        try:
+            # Fallback 2: minimal sanitization
+            Chem.SanitizeMol(mol_rd, sanitizeOps=(
+                Chem.SanitizeFlags.SANITIZE_ALL ^ 
+                Chem.SanitizeFlags.SANITIZE_KEKULIZE ^ 
+                Chem.SanitizeFlags.SANITIZE_SETAROMATICITY
+            ))
+            mol_rd.UpdatePropertyCache(strict=False)
+        except Exception:
+            mol_rd.UpdatePropertyCache(strict=False)
 
-    si = Chem.FindPotentialStereo(mol_rd)
-    for element in si:
-        if str(element.type) == 'Atom_Tetrahedral' and str(element.specified) == 'Specified':
-            mol_rd.GetAtomWithIdx(element.centeredOn).SetProp('Chirality', str(element.descriptor))
-        elif str(element.type) == 'Bond_Double' and str(element.specified) == 'Specified':
-            mol_rd.GetBondWithIdx(element.centeredOn).SetProp('Stereochemistry', str(element.descriptor))
+    try:
+        si = Chem.FindPotentialStereo(mol_rd)
+        for element in si:
+            if str(element.type) == 'Atom_Tetrahedral' and str(element.specified) == 'Specified':
+                mol_rd.GetAtomWithIdx(element.centeredOn).SetProp('Chirality', str(element.descriptor))
+            elif str(element.type) == 'Bond_Double' and str(element.specified) == 'Specified':
+                mol_rd.GetBondWithIdx(element.centeredOn).SetProp('Stereochemistry', str(element.descriptor))
+    except Exception:
+        # Ignore stereo errors on problematic molecules
+        pass
 
     H_HEAVY_LIST = [k for k, v in x_h_conn.items() if v]
     for atom in mol_rd.GetAtoms():
@@ -572,24 +920,77 @@ def save_as_npy_for_1H(mol: Chem.Mol, output_dir: str) -> Tuple[str, Dict[int, L
 
     save_path = os.path.join(output_dir, "sample_1H.npz")
     np.savez_compressed(save_path, data=[mol_dict])
-    return save_path, x_h_conn
+    # ✅ FIX: Retourner mol_read (lu depuis SDF) car ses indices correspondent à x_h_conn
+    # mol_with_h a des indices DIFFÉRENTS après le round-trip SDF!
+    return save_path, x_h_conn, mol_read
 
 def save_as_npy_for_13C(mol: Chem.Mol, output_dir: str) -> str:
     mol_rd = Chem.Mol(mol)
-    Chem.SanitizeMol(mol_rd)
+    
+    # Robust sanitization with multiple fallbacks for kekulization issues
+    sanitized = False
+    try:
+        Chem.SanitizeMol(mol_rd)
+        sanitized = True
+    except Exception:
+        pass
+    
+    if not sanitized:
+        try:
+            # Fallback 1: sanitize without kekulization
+            Chem.SanitizeMol(mol_rd, sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_KEKULIZE)
+            Chem.SetAromaticity(mol_rd, Chem.AromaticityModel.AROMATICITY_SIMPLE)
+            sanitized = True
+        except Exception:
+            pass
+    
+    if not sanitized:
+        try:
+            # Fallback 2: minimal sanitization (skip kekulize and aromaticity)
+            Chem.SanitizeMol(mol_rd, sanitizeOps=(
+                Chem.SanitizeFlags.SANITIZE_ALL ^ 
+                Chem.SanitizeFlags.SANITIZE_KEKULIZE ^ 
+                Chem.SanitizeFlags.SANITIZE_SETAROMATICITY
+            ))
+            mol_rd.UpdatePropertyCache(strict=False)
+            sanitized = True
+        except Exception:
+            pass
+    
+    if not sanitized:
+        # Fallback 3: just update property cache without sanitization
+        try:
+            mol_rd.UpdatePropertyCache(strict=False)
+        except Exception:
+            pass
 
-    si = Chem.FindPotentialStereo(mol_rd)
-    for element in si:
-        if str(element.type) == 'Atom_Tetrahedral' and str(element.specified) == 'Specified':
-            mol_rd.GetAtomWithIdx(element.centeredOn).SetProp('Chirality', str(element.descriptor))
-        elif str(element.type) == 'Bond_Double' and str(element.specified) == 'Specified':
-            mol_rd.GetBondWithIdx(element.centeredOn).SetProp('Stereochemistry', str(element.descriptor))
+    try:
+        si = Chem.FindPotentialStereo(mol_rd)
+        for element in si:
+            if str(element.type) == 'Atom_Tetrahedral' and str(element.specified) == 'Specified':
+                mol_rd.GetAtomWithIdx(element.centeredOn).SetProp('Chirality', str(element.descriptor))
+            elif str(element.type) == 'Bond_Double' and str(element.specified) == 'Specified':
+                mol_rd.GetBondWithIdx(element.centeredOn).SetProp('Stereochemistry', str(element.descriptor))
+    except Exception:
+        # Ignore stereo errors on problematic molecules
+        pass
 
-    smiles = Chem.MolToSmiles(mol_rd)
+    smiles = _safe_mol_to_smiles(mol_rd)
     if '.' in smiles:
-        frags = Chem.GetMolFrags(mol_rd, asMols=True, sanitizeFrags=True)
+        # Éviter la kekulization lors de la fragmentation
+        frags = Chem.GetMolFrags(mol_rd, asMols=True, sanitizeFrags=False)
         mol_rd = max(frags, key=lambda m: m.GetNumAtoms())
-        send_log(f"Multi-fragment molecule: using largest fragment: {Chem.MolToSmiles(mol_rd)}")
+        # Tenter de sanitize le fragment sélectionné avec gestion d'erreur
+        try:
+            Chem.SanitizeMol(mol_rd)
+        except Exception as e:
+            send_log(f"Kekulization échoué pour le fragment, utilisation d'une approche alternative: {e}")
+            try:
+                Chem.SanitizeMol(mol_rd, sanitizeOps=Chem.SANITIZE_ALL^Chem.SANITIZE_KEKULIZE)
+                Chem.SetAromaticity(mol_rd, Chem.AromaticityModel.AROMATICITY_SIMPLE)
+            except Exception as e2:
+                send_log(f"Sanitization alternative échoué: {e2}")
+        send_log(f"Multi-fragment molecule: using largest fragment: {_safe_mol_to_smiles(mol_rd)}")
 
     for atom in mol_rd.GetAtoms():
         if atom.GetSymbol() == "C":
@@ -775,16 +1176,18 @@ def generate_sdf_with_shifts(
     outfile_name: Optional[str] = None,
     sdf_property_key: str = "(1)"
 ) -> str:
-    send_log('Generating enriched SDF...')
-    
-    molH = Chem.AddHs(mol_original, addCoords=True)
+    molH = Chem.AddHs(mol_original)
 
+    # ✅ Toujours générer des coordonnées 2D pour le SDF de sortie
+    # (Le simulateur utilise sa propre molécule 3D pour les calculs de J-couplage)
     try:
-        if molH.GetNumConformers() == 0:
-            AllChem.EmbedMolecule(molH, randomSeed=42)
-            AllChem.MMFFOptimizeMolecule(molH)
+        from rdkit.Chem import rdCoordGen
+        rdCoordGen.AddCoords(molH)
     except Exception:
-        pass
+        try:
+            AllChem.Compute2DCoords(molH)
+        except Exception:
+            pass
 
     list_H = create_shift_list_1H(molH, x_h_connectivity, shifts_1h)
     list_C = create_shift_list_13C(molH, shifts_13c)
@@ -804,16 +1207,31 @@ def generate_sdf_with_shifts(
     writer.write(molH)
     writer.close()
 
-    # [OK] Detectable message for the frontend
-    send_log(f"SDF written: {sdf_path} | {len(all_shifts)} positions")
     return sdf_path
 
 
 # -----------------------
 # Helpers spécifiques simulation
 # -----------------------
-def _build_x_h_connectivity_from_mol_with_H(molH: Chem.Mol) -> Dict[int, List[int]]:
-    """Construit {heavy_idx: [H_idx,...]} depuis un Mol *avec* H."""
+def _build_x_h_connectivity_from_mol_with_H(molH: Chem.Mol, solvent: str = "CDCl3") -> Dict[int, List[int]]:
+    """
+    Construit {heavy_idx: [H_idx,...]} depuis un Mol *avec* H.
+
+    Args:
+        molH: Molécule avec hydrogènes explicites
+        solvent: Solvant NMR (CDCl3, D2O, CD3OD, etc.)
+
+    Returns:
+        Dict mapping heavy atom index -> list of attached H indices
+
+    Note:
+        En solvants protiques (D2O, CD3OD), les protons échangeables (OH, NH, SH)
+        sont exclus car ils échangent rapidement et ne sont pas visibles en RMN.
+    """
+    # Solvants protiques: protons échangeables (OH, NH, SH) ne sont pas visibles
+    protic_solvents = {'D2O', 'd2o', 'CD3OD', 'cd3od', 'MeOD', 'meod', 'CD3COCD3', 'cd3cocd3'}
+    exclude_exchangeable = solvent in protic_solvents
+
     xh: Dict[int, List[int]] = {}
     for a in molH.GetAtoms():
         if a.GetSymbol() != "H":
@@ -823,6 +1241,14 @@ def _build_x_h_connectivity_from_mol_with_H(molH: Chem.Mol) -> Dict[int, List[in
         if not nbs:
             continue
         heavy = nbs[0]
+        heavy_atom = molH.GetAtomWithIdx(heavy)
+        heavy_symbol = heavy_atom.GetSymbol()
+
+        # Filtrer les protons échangeables en solvants protiques
+        if exclude_exchangeable and heavy_symbol in ('O', 'N', 'S'):
+            # OH, NH, SH ne sont pas visibles en D2O/CD3OD (échange rapide)
+            continue
+
         xh.setdefault(heavy, []).append(hidx)
     for k in xh:
         xh[k] = sorted(xh[k])
@@ -845,7 +1271,6 @@ def _write_multiplicity_json(out_dir: str, mol_id: str, payload: dict) -> str:
     path = os.path.join(out_dir, f"{sanitize_filename(mol_id)}_multiplicity.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
-    send_log(f"Multiplicités: JSON -> {os.path.basename(path)}")
     return path
 
 def _append_props_to_sdf(sdf_path: str, props: Dict[str, str]) -> None:
@@ -861,6 +1286,72 @@ def _append_props_to_sdf(sdf_path: str, props: Dict[str, str]) -> None:
         w.write(m); w.close()
     except Exception as e:
         send_log(f"⚠️ Impossible d'ajouter des propriétés SDF: {e}")
+
+
+def _update_sdf_with_corrected_shifts(
+    sdf_path: str,
+    groups_items: List[Dict[str, Any]],
+    property_key: str = "(1)"
+) -> None:
+    """
+    Met à jour les shifts 1H dans le SDF avec les valeurs corrigées (delta diastéréotopique).
+    
+    Args:
+        sdf_path: Chemin vers le fichier SDF
+        groups_items: Liste des groupes avec H_indices et H_shifts_ppm corrigés
+        property_key: Clé de la propriété SDF contenant les shifts
+    """
+    try:
+        suppl = rdMolFiles.SDMolSupplier(sdf_path, removeHs=False, sanitize=False)
+        mols = [m for m in suppl if m is not None]
+        if not mols:
+            send_log("⚠️ Impossible de lire le SDF pour mise à jour des shifts")
+            return
+        
+        m = mols[0]
+        
+        # Récupérer les shifts actuels
+        current_shifts_str = m.GetProp(property_key) if m.HasProp(property_key) else ""
+        if not current_shifts_str:
+            send_log("⚠️ Pas de shifts trouvés dans le SDF")
+            return
+        
+        current_shifts = [float(x) for x in current_shifts_str.split()]
+        
+        # Créer un mapping H_idx -> shift corrigé à partir des groupes
+        corrected_h_shifts: Dict[int, float] = {}
+        for group in groups_items:
+            h_indices = group.get("H_indices", [])
+            h_shifts = group.get("H_shifts_ppm", [])
+            heavy_symbol = group.get("heavy_symbol", "C")
+            
+            # Seulement pour les protons (pas 13C)
+            if heavy_symbol not in ("N", "O", "S"):  # C ou hétéroatomes avec H
+                for i, h_idx in enumerate(h_indices):
+                    if i < len(h_shifts):
+                        corrected_h_shifts[h_idx] = h_shifts[i]
+        
+        # Mettre à jour les shifts dans la liste
+        updated = False
+        for h_idx, corr_shift in corrected_h_shifts.items():
+            if h_idx < len(current_shifts):
+                old_val = current_shifts[h_idx]
+                if abs(old_val - corr_shift) > 0.001:  # Changement significatif
+                    current_shifts[h_idx] = corr_shift
+                    updated = True
+        
+        if updated:
+            # Réécrire le SDF avec les shifts corrigés
+            new_shifts_str = " ".join(f"{x:.3f}" for x in current_shifts)
+            m.SetProp(property_key, new_shifts_str)
+            m.SetProp("Shifts_Corrected", "diastereotopic_delta_applied")
+            
+            w = rdMolFiles.SDWriter(sdf_path)
+            w.write(m)
+            w.close()
+
+    except Exception as e:
+        send_log(f"⚠️ Erreur mise à jour SDF shifts: {e}")
 
 
 def save_spectral_json(
@@ -928,59 +1419,458 @@ def process_one_smiles(
     if multiplicity_mod and hasattr(multiplicity_mod, '_validate_molecular_structure'):
         try:
             multiplicity_mod._validate_molecular_structure(mol, original_input_smiles)
-            send_log(f"[{mol_id}] ✓ Structure moléculaire validée")
         except ValueError as ve:
             send_error(f"[{mol_id}] Structure moléculaire invalide", error=str(ve))
             raise
 
     work_dir = ensure_dir(os.path.join(out_dir, f"tmp_{sanitize_filename(mol_id)}"))
 
-    if models.mean_std_1h is None:
-        models.mean_std_1h = load_std_mean("1H")
-    if models.mean_std_13c is None:
-        models.mean_std_13c = load_std_mean("13C")
+    with _MODEL_LOCK:
+        if models.mean_std_1h is None:
+            models.mean_std_1h = load_std_mean("1H")
+        if models.mean_std_13c is None:
+            models.mean_std_13c = load_std_mean("13C")
 
     train_y_mean_H, train_y_std_H = models.mean_std_1h
     train_y_mean_C, train_y_std_C = models.mean_std_13c
 
     # 1H
-    send_log(f"[{mol_id}] Préparation 1H...")
-    npz_1h, x_h_conn = save_as_npy_for_1H(mol, work_dir)
-    try:
-        [md] = np.load(npz_1h, allow_pickle=True)['data']
-        nb_groups = len(_sorted_h_groups(md.get('h_x_connectivity', [{}])[0])) if md.get('h_x_connectivity', []) else 0
-        send_log(f"[{mol_id}] NPZ 1H ok: n_node={md['n_node'].tolist()}, mask_true={int(np.sum(md['mask']))}, groupes_H={nb_groups}")
-    except Exception as dbg:
-        send_log(f"[{mol_id}] NPZ 1H debug fail: {dbg}")
+    npz_1h, x_h_conn, mol_with_h = save_as_npy_for_1H(mol, work_dir)
 
-    if models.net_1h is None:
-        send_log(f"[{mol_id}] Chargement modèle 1H...")
-        models.net_1h = load_model("1H", model_1h_path, npz_1h)
-    send_log(f"[{mol_id}] Inférence 1H...")
+    with _MODEL_LOCK:
+        if models.net_1h is None:
+            models.net_1h = load_model("1H", model_1h_path, npz_1h)
     pred_1h = inference_model(models.net_1h, npz_1h, "1H", train_y_mean_H, train_y_std_H)
 
     expected_groups = len(_sorted_h_groups(x_h_conn))
-    send_log(f"[{mol_id}] Groupes 1H attendus={expected_groups} | prédits={len(pred_1h)}")
+
+    # =========================================================================
+    # HIÉRARCHIE DE PRÉDICTION: Fingerprint → ML
+    # RÈGLE: Chaque atome utilise la première méthode qui fonctionne
+    # =========================================================================
+    fp_predictor = get_fingerprint_predictor()
+
+    fp_1h_used = 0
+    ml_1h_used = 0
+    fp_1h_exact = 0  # ✅ Compteur séparé pour exact-match (InChIKey, pas fingerprint)
+    fp_1h_r6 = 0
+    fp_1h_r5 = 0
+    fp_1h_r4 = 0
+    fp_1h_r3 = 0
+    fp_1h_r2 = 0
+    
+    solvent_for_db = (sim_params or {}).get('solvent', 'CDCl3')
+
+    # ✅ FIX: Utiliser mol_with_h retourné par save_as_npy_for_1H
+    # pour garantir la cohérence des indices d'atomes avec x_h_conn.
+    # Avant ce fix, on créait une nouvelle mol_with_h ici qui avait
+    # des indices différents de x_h_conn → prédictions fingerprint incorrectes.
+    # mol_with_h a déjà des coordonnées 3D (addCoords=True dans save_as_npy_for_1H)
+
+    # 1H: chercher par groupe avec hiérarchie Fingerprint → HOSE → ML
+    sorted_groups = _sorted_h_groups(x_h_conn)
+    new_pred_1h = list(pred_1h) if len(pred_1h) else []
+    prediction_source_1h = ['ML'] * len(new_pred_1h)  # Tracker la source de chaque prédiction
+    
+    # =========================================================================
+    # DÉTECTION DES GROUPES AMBIGUS (même fingerprint R4)
+    # =========================================================================
+    # DÉSACTIVÉ: Cette détection était trop conservatrice.
+    # Même si plusieurs groupes ont le même fingerprint (ex: CH3 symétriques),
+    # le fingerprint DB peut parfaitement les prédire avec la même valeur.
+    # C'est chimiquement correct et bien mieux que de fallback sur ML.
+    #
+    # Ex: Valine avec 2 CH3 symétriques → même FP → même shift (1.0 ppm)
+    #     Le fingerprint DB prédit correctement 1.0 ppm pour les deux.
+    #     ML prédit incorrectement 1.74 ppm.
+    #
+    # Conserver le code commenté pour référence:
+    # ambiguous_groups = set()
+    # if fp_predictor is not None and fp_predictor.is_available():
+    #     from collections import defaultdict
+    #     from fingerprint_db_predictor import get_atom_fingerprint
+    #
+    #     fp_to_groups = defaultdict(list)
+    #
+    #     for gi, (heavy_idx, h_list) in enumerate(sorted_groups):
+    #         if not h_list or gi >= len(new_pred_1h):
+    #             continue
+    #
+    #         try:
+    #             fp = get_atom_fingerprint(mol_with_h, heavy_idx, radius=4, heavy_only=False)
+    #             fp_to_groups[fp].append(gi)
+    #         except Exception as e:
+    #             send_log(f"[{mol_id}] ⚠️  Erreur calcul FP groupe {gi}: {e}")
+    #
+    #     for fp, group_list in fp_to_groups.items():
+    #         if len(group_list) > 1:
+    #             ambiguous_groups.update(group_list)
+    #             send_log(f"[{mol_id}] ⚠️  Détecté {len(group_list)} groupes avec FP identique: {group_list}")
+    #             send_log(f"[{mol_id}]     → Forcer ML (fingerprint ne peut pas les distinguer)")
+    #
+    #     if ambiguous_groups:
+    #         send_log(f"[{mol_id}] ⚠️  TOTAL: {len(ambiguous_groups)} groupes 1H ambigus → forcer ML")
+
+    # ✅ Stocker les shifts individuels pour les diastéréotopiques (utilisé plus tard dans le JSON)
+    # Format: {h_idx: shift_ppm} - seulement pour les H avec prédiction fingerprint
+    individual_h_shifts: Dict[int, float] = {}
+
+    for gi, (heavy_idx, h_list) in enumerate(sorted_groups):
+        if gi >= len(new_pred_1h):
+            break
+
+        if not h_list:
+            ml_1h_used += 1
+            continue
+
+        # Pour chaque groupe, prédire CHAQUE H individuellement
+        # et stocker le shift du premier H dans new_pred_1h[gi] (pour compatibilité create_shift_list_1H)
+        group_fp_found = False
+        for hi, h_idx in enumerate(h_list):
+            found = False
+
+            # ÉTAPE 1: Essayer Fingerprint (exact-match ou radius)
+            if fp_predictor is not None and fp_predictor.is_available():
+                result_fp = fp_predictor.predict_atom(mol_with_h, h_idx, solvent_for_db, '1H')
+                if result_fp is not None:
+                    shift_fp, std_fp, count_fp, radius_used = result_fp
+
+                    # Stocker le shift individuel (pour diastéréotopiques)
+                    individual_h_shifts[h_idx] = shift_fp
+
+                    # ✅ Compter chaque proton individuellement
+                    fp_1h_used += 1
+                    is_exact = (radius_used == 0 and count_fp == 99)
+                    if is_exact:
+                        fp_1h_exact += 1  # Exact-match par InChIKey (pas de fingerprint)
+                    elif radius_used == 6:
+                        fp_1h_r6 += 1
+                    elif radius_used == 5:
+                        fp_1h_r5 += 1
+                    elif radius_used == 4:
+                        fp_1h_r4 += 1
+                    elif radius_used == 3:
+                        fp_1h_r3 += 1
+                    else:
+                        fp_1h_r2 += 1
+
+                    # Pour le premier H du groupe, mettre dans new_pred_1h[gi]
+                    if hi == 0:
+                        new_pred_1h[gi] = shift_fp
+                        group_fp_found = True
+                        if gi < len(prediction_source_1h):
+                            prediction_source_1h[gi] = 'FP-EXACT' if is_exact else f'FP-R{radius_used}'
+                    found = True
+
+        # Si aucune prédiction fingerprint pour le groupe
+        if not group_fp_found:
+            ml_1h_used += 1
+
+    if fp_1h_used > 0:
+        pred_1h = np.array(new_pred_1h)
+        send_log(f"[{mol_id}] [OK] 1H sources: FP={fp_1h_used} (EXACT={fp_1h_exact}, R6={fp_1h_r6}, R5={fp_1h_r5}, R4={fp_1h_r4}, R3={fp_1h_r3}, R2={fp_1h_r2}), ML={ml_1h_used}")
+
+    # =========================================================================
+    # CORRECTION POST-PRÉDICTION: Vinyles terminaux (-CH=CH₂)
+    # =========================================================================
+    # DISABLED: Cette correction a été désactivée car elle sur-corrige les prédictions
+    # fingerprint qui sont déjà précises grâce aux données expérimentales.
+    # Les prédictions fingerprint R4 avec faible std sont déjà exactes (ex: 5.21 ppm)
+    # et n'ont pas besoin de correction (+0.85 ppm les ferait monter à ~6 ppm, incorrect).
+    #
+    # corrections_applied = 0
+    # for gi, (heavy_idx, h_list) in enumerate(sorted_groups):
+    #     if gi >= len(new_pred_1h) or not h_list:
+    #         continue
+    #
+    #     h_idx = h_list[0]
+    #     atom_h = mol_with_h.GetAtomWithIdx(h_idx)
+    #
+    #     # Vérifier si H attaché à un carbone sp2
+    #     carbon = atom_h.GetNeighbors()[0]
+    #     if carbon.GetSymbol() != 'C' or carbon.GetHybridization() != Chem.HybridizationType.SP2:
+    #         continue
+    #
+    #     # Vérifier si c'est une double liaison C=C
+    #     double_bond_partner = None
+    #     for bond in carbon.GetBonds():
+    #         if bond.GetBondType() == Chem.BondType.DOUBLE:
+    #             other_idx = bond.GetOtherAtomIdx(carbon.GetIdx())
+    #             other_atom = mol.GetAtomWithIdx(other_idx)
+    #             if other_atom.GetSymbol() == 'C':
+    #                 double_bond_partner = other_atom
+    #                 break
+    #
+    #     if double_bond_partner is None:
+    #         continue
+    #
+    #     # Compter les substituants (non-H) sur le carbone de la double liaison
+    #     substituents_on_partner = sum(1 for n in double_bond_partner.GetNeighbors()
+    #                                   if n.GetSymbol() != 'H' and n.GetIdx() != carbon.GetIdx())
+    #
+    #     # Si le partenaire a 0 substituants (seulement des H), c'est un =CH₂
+    #     # → vinyl terminal monosubstitué → doit être déblindé
+    #     if substituents_on_partner == 0:
+    #         old_shift = new_pred_1h[gi]
+    #         # Appliquer correction si shift < 5.8 ppm (typiquement 5.2-5.4)
+    #         if old_shift < 5.8:
+    #             correction = 0.85  # Déblindage empirique
+    #             new_pred_1h[gi] = old_shift + correction
+    #             pred_1h[gi] = new_pred_1h[gi]
+    #             corrections_applied += 1
+    #             send_log(f"[{mol_id}] Correction vinyl terminal H{h_idx}: {old_shift:.2f} → {new_pred_1h[gi]:.2f} ppm (+{correction:.2f})")
+    #
+    # if corrections_applied > 0:
+    #     send_log(f"[{mol_id}] ✓ {corrections_applied} correction(s) vinyl terminal appliquée(s)")
+
+    # =========================================================================
+    # CORRECTION POST-PRÉDICTION: CH₂ benzylique-indole-allylique
+    # =========================================================================
+    # Les CH₂ adjacents à (indole aromatique + double liaison C=C) sont
+    # systématiquement sous-estimés par le ML car l'effet benzylique-indole
+    # est plus fort qu'un benzène simple (+0.3 ppm supplémentaire)
+    # Pattern: Indole-CH₂-CH=C
+    corrections_ch2_indole = 0
+    pred_1h_mutable = list(pred_1h) if len(pred_1h) else []
+    
+    for gi, (heavy_idx, h_list) in enumerate(sorted_groups):
+        if gi >= len(pred_1h_mutable) or not h_list:
+            continue
+        
+        # DÉBOGAGE: Vérifier si c'est un CH₂
+        if len(h_list) == 2:
+            h_idx = h_list[0]
+            atom_h = mol_with_h.GetAtomWithIdx(h_idx)
+            
+            # Vérifier si H attaché à un carbone sp3 (CH₂)
+            neighbors_of_h = list(atom_h.GetNeighbors())
+            if not neighbors_of_h:
+                continue
+            carbon = neighbors_of_h[0]
+            
+            if carbon.GetSymbol() != 'C' or carbon.GetHybridization() != Chem.HybridizationType.SP3:
+                continue
+            
+            # Le CH₂ doit avoir exactement 2 voisins carbones (+ 2 H)
+            c_neighbors = [n for n in carbon.GetNeighbors() if n.GetSymbol() == 'C']
+            if len(c_neighbors) != 2:
+                continue
+            
+            # Vérifier les 2 voisins carbones
+            has_indole = False
+            has_vinyl = False
+            
+            for neighbor_c in c_neighbors:
+                # 1. Vérifier si voisin est sp2 (double liaison ou aromatique)
+                if neighbor_c.GetHybridization() == Chem.HybridizationType.SP2:
+                    # Vérifier si c'est un carbone aromatique d'indole
+                    # L'indole peut avoir le N à distance 1 ou 2 du CH₂
+                    if neighbor_c.GetIsAromatic():
+                        # Chercher N aromatique dans voisins directs
+                        for n2 in neighbor_c.GetNeighbors():
+                            if n2.GetSymbol() == 'N' and n2.GetIsAromatic():
+                                has_indole = True
+                                break
+                        
+                        # Si pas trouvé, chercher dans sphère 2 (voisins des voisins)
+                        if not has_indole:
+                            for n2 in neighbor_c.GetNeighbors():
+                                if n2.GetSymbol() == 'C' and n2.GetIsAromatic():
+                                    for n3 in n2.GetNeighbors():
+                                        if n3.GetSymbol() == 'N' and n3.GetIsAromatic():
+                                            has_indole = True
+                                            break
+                                if has_indole:
+                                    break
+                    
+                    # Vérifier si c'est un vinyle (C=C double liaison)
+                    for bond in neighbor_c.GetBonds():
+                        if bond.GetBondType() == Chem.BondType.DOUBLE:
+                            other_idx = bond.GetOtherAtomIdx(neighbor_c.GetIdx())
+                            other_atom = mol.GetAtomWithIdx(other_idx)
+                            if other_atom.GetSymbol() == 'C' and other_idx != carbon.GetIdx():
+                                has_vinyl = True
+                                break
+            
+            # Si le CH₂ est benzylique-indole ET allylique, appliquer correction
+            if has_indole and has_vinyl:
+                old_shift = pred_1h_mutable[gi]
+                # Appliquer correction si shift est dans la zone typique sous-estimée (3.0-3.6 ppm)
+                if 3.0 <= old_shift <= 3.6:
+                    correction = 0.30  # Déblindage empirique benzylique-indole
+                    pred_1h_mutable[gi] = old_shift + correction
+                    corrections_ch2_indole += 1
+
+    if corrections_ch2_indole > 0:
+        pred_1h = np.array(pred_1h_mutable)
+
 
     # 13C - avec gestion d'erreur pour les molécules problématiques
     pred_13c = np.array([])
     npz_13c = None
     try:
-        send_log(f"[{mol_id}] Préparation 13C...")
         npz_13c = save_as_npy_for_13C(mol, work_dir)
-        if models.net_13c is None:
-            send_log(f"[{mol_id}] Chargement modèle 13C...")
-            models.net_13c = load_model("13C", model_13c_path, npz_13c)
-        send_log(f"[{mol_id}] Inférence 13C...")
+        with _MODEL_LOCK:
+            if models.net_13c is None:
+                models.net_13c = load_model("13C", model_13c_path, npz_13c)
         pred_13c = inference_model(models.net_13c, npz_13c, "13C", train_y_mean_C, train_y_std_C)
     except Exception as e:
-        send_log(f"[{mol_id}] ⚠ Prédiction 13C échouée (kékulisation): {e}")
-        send_log(f"[{mol_id}] Continuation avec seulement 1H...")
-        pred_13c = np.zeros(sum(1 for a in mol.GetAtoms() if a.GetSymbol() == 'C'))
+        send_log(f"[{mol_id}] ⚠ Prédiction 13C échouée: {e}")
+        # Essayer une approche alternative avec nettoyage de la molécule
+        try:
+            mol_clean = Chem.Mol(mol)
+            Chem.SanitizeMol(mol_clean, sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL^Chem.SanitizeFlags.SANITIZE_KEKULIZE)
+            Chem.SetAromaticity(mol_clean, Chem.AromaticityModel.AROMATICITY_SIMPLE)
+            npz_13c = save_as_npy_for_13C(mol_clean, work_dir)
+            with _MODEL_LOCK:
+                if models.net_13c is None:
+                    models.net_13c = load_model("13C", model_13c_path, npz_13c)
+            pred_13c = inference_model(models.net_13c, npz_13c, "13C", train_y_mean_C, train_y_std_C)
+        except Exception as e2:
+            send_log(f"[{mol_id}] ⚠ Récupération 13C échouée: {e2}")
+            pred_13c = np.zeros(sum(1 for a in mol.GetAtoms() if a.GetSymbol() == 'C'))
+
+    # =========================================================================
+    # 13C HIÉRARCHIE: Fingerprint → HOSE → ML
+    # =========================================================================
+    hose_13c_used = 0
+    fp_13c_used = 0
+    ml_13c_used = 0
+    hose_13c_s4 = 0
+    hose_13c_s3 = 0
+    fp_13c_exact = 0  # ✅ Compteur séparé pour exact-match (InChIKey, pas fingerprint)
+    fp_13c_r6 = 0
+    fp_13c_r5 = 0
+    fp_13c_r4 = 0
+    fp_13c_r3 = 0
+    fp_13c_r2 = 0
+
+    if len(pred_13c) > 0:
+        
+        # Identifier les carbones dans l'ordre du masque
+        carbon_indices = [a.GetIdx() for a in mol.GetAtoms() if a.GetSymbol() == 'C']
+        
+        if len(carbon_indices) == len(pred_13c):
+            new_pred_13c = list(pred_13c)
+            mol_with_h_13c = Chem.AddHs(mol)
+            prediction_source_13c = ['ML'] * len(new_pred_13c)
+            
+            # =========================================================================
+            # DÉTECTION DES CARBONES AMBIGUS (même fingerprint, positions différentes)
+            # =========================================================================
+            # DÉSACTIVÉ: Même raison que pour 1H - les carbones symétriques avec le
+            # même fingerprint sont chimiquement équivalents et le fingerprint DB
+            # peut parfaitement les prédire avec la même valeur.
+            #
+            # Ex: Valine avec 2 CH3 symétriques → même FP 13C → même shift (~20 ppm)
+            #
+            # Conserver le code commenté pour référence:
+            # ambiguous_carbons = set()
+            # if fp_predictor is not None and fp_predictor.is_available():
+            #     from collections import defaultdict
+            #     fp_to_carbons = defaultdict(list)
+            #
+            #     for ci, c_idx in enumerate(carbon_indices):
+            #         try:
+            #             from rdkit.Chem import AllChem
+            #             fp_r4 = AllChem.GetMorganFingerprint(mol_with_h_13c, 4, fromAtoms=[c_idx])
+            #             fp_hash = hash(tuple(sorted(fp_r4.GetNonzeroElements().items())))
+            #             fp_to_carbons[fp_hash].append(ci)
+            #         except:
+            #             pass
+            #
+            #     for fp_hash, carbon_list in fp_to_carbons.items():
+            #         if len(carbon_list) > 1:
+            #             for ci in carbon_list:
+            #                 ambiguous_carbons.add(ci)
+            #     if len(ambiguous_carbons) > 0:
+            #         send_log(f"[{mol_id}] ⚠️  Détecté {len(ambiguous_carbons)} carbones 13C ambigus (même fingerprint) → forcer ML")
+            
+            for ci, c_idx in enumerate(carbon_indices):
+                ml_value = new_pred_13c[ci]
+                found = False
+                
+                # ÉTAPE 1: Essayer Fingerprint (R4 → R3 → R2)
+                if fp_predictor is not None and fp_predictor.is_available():
+                    result_fp = fp_predictor.predict_atom(mol_with_h_13c, c_idx, solvent_for_db, '13C')
+                    if result_fp is not None:
+                        shift_fp, std_fp, count_fp, radius_used = result_fp
+                        new_pred_13c[ci] = shift_fp
+                        fp_13c_used += 1
+                        # ✅ Compteurs séparés: EXACT (InChIKey) vs fingerprints (R6/R5/R4/R3/R2)
+                        is_exact = (radius_used == 0 and count_fp == 99)
+                        if is_exact:
+                            fp_13c_exact += 1  # Exact-match par InChIKey (pas de fingerprint)
+                        elif radius_used == 6:
+                            fp_13c_r6 += 1
+                        elif radius_used == 5:
+                            fp_13c_r5 += 1
+                        elif radius_used == 4:
+                            fp_13c_r4 += 1
+                        elif radius_used == 3:
+                            fp_13c_r3 += 1
+                        else:
+                            fp_13c_r2 += 1
+                        prediction_source_13c[ci] = 'FP-EXACT' if is_exact else f'FP-R{radius_used}'
+                        found = True
+
+                # ÉTAPE 2: Si Fingerprint échoue, garder ML
+                if not found:
+                    ml_13c_used += 1
+
+            if fp_13c_used > 0:
+                pred_13c = np.array(new_pred_13c)
+                send_log(f"[{mol_id}] [OK] 13C sources: FP={fp_13c_used} (EXACT={fp_13c_exact}, R6={fp_13c_r6}, R5={fp_13c_r5}, R4={fp_13c_r4}, R3={fp_13c_r3}, R2={fp_13c_r2}), ML={ml_13c_used}")
+            else:
+                ml_13c_used = len(carbon_indices)
+        else:
+            send_log(f"[{mol_id}] ⚠ Mismatch carbones ({len(carbon_indices)}) vs prédictions ({len(pred_13c)})")
+
+    # =========================================================================
+    # CORRECTIONS 13C AROMATIQUES (DÉSACTIVÉ)
+    # Module retiré - les shifts 13C utilisent uniquement Fingerprint DB + ML
+    # =========================================================================
+    # (Code de correction supprimé - non utilisé)
+
+    # =========================================================================
+    # CORRECTIONS 13C: Carbones diastéréotopiques aliphatiques (CH3 géminaux)
+    # =========================================================================
+    # Utilise la même logique de détection que pour les protons 1H
+    # Détecte les paires de CH3 sur le même carbone et applique une correction
+    # de +/-3.5 ppm pour différencier les environnements stéréochimiques
+    if len(pred_13c) > 0:
+        try:
+            carbon_indices_corr = [a.GetIdx() for a in mol.GetAtoms() if a.GetSymbol() == 'C']
+            
+            # Utiliser la fonction de détection réutilisable
+            geminal_dimethyl_pairs = _detect_geminal_dimethyl_13c(mol)
+            
+            corrections_applied_13c = 0
+            for c_central_idx, ch3_1_idx, ch3_2_idx in geminal_dimethyl_pairs:
+                try:
+                    # Trouver l'index dans carbon_indices_corr pour accéder à pred_13c
+                    ci_1 = carbon_indices_corr.index(ch3_1_idx)
+                    ci_2 = carbon_indices_corr.index(ch3_2_idx)
+                    
+                    # Récupérer les shifts actuels
+                    shift_1 = pred_13c[ci_1]
+                    shift_2 = pred_13c[ci_2]
+                    
+                    # Si les shifts sont très proches (< 1 ppm), appliquer correction
+                    if abs(shift_1 - shift_2) < 1.0:
+                        # CH3 en position cis (plus blindé): -3.5 ppm
+                        # CH3 en position trans (plus déblindé): +3.5 ppm
+                        # Convention: premier CH3 (indice plus bas) = +3.5, second = -3.5
+                        pred_13c[ci_1] = shift_1 + 3.5
+                        pred_13c[ci_2] = shift_2 - 3.5
+                        corrections_applied_13c += 1
+                except (ValueError, IndexError):
+                    pass
+        except Exception as e:
+            send_log(f"[{mol_id}] ⚠️ Erreur correction 13C diastéréotopique: {e}")
 
     # SDF final
     final_name = f"{sanitize_filename(mol_id)}_predicted.sdf"
-    send_log(f"[{mol_id}] Génération SDF final...")
     sdf_path = generate_sdf_with_shifts(
         smiles=original_input_smiles,  # ✅ Utiliser SMILES original
         mol_original=mol,
@@ -1005,36 +1895,105 @@ def process_one_smiles(
             if cfg:
                 cfg.separate_diastereotopic_protons = True
                 cfg.spectrometer_mhz = float(sp.get("freq_mhz", 700.0))
+                # ✅ NOUVEAU: Transférer les paramètres de conformères depuis sim_params
+                # Permet de contrôler le mode smart et l'averaging conformationnel
+                if "use_conformational_averaging" in sp:
+                    cfg.use_conformational_averaging = bool(sp["use_conformational_averaging"])
+                if "smart_conformer_mode" in sp:
+                    cfg.smart_conformer_mode = bool(sp["smart_conformer_mode"])
+                if "n_conformers" in sp:
+                    cfg.n_conformers = int(sp["n_conformers"])
+                if "fast_mode_for_large_molecules" in sp:
+                    cfg.fast_mode_for_large_molecules = bool(sp["fast_mode_for_large_molecules"])
 
-            # 2) Reconstruire la molécule avec H pour les indices
-            molH_for_sim = Chem.AddHs(mol, addCoords=True)
-            
-            # Générer géométrie 3D si demandé
-            if sp.get("use_3d", True) and molH_for_sim.GetNumConformers() == 0:
+            # 2) ✅ FIX: Utiliser mol_with_h (de save_as_npy_for_1H) au lieu de créer une nouvelle molécule
+            # Cela garantit que les indices d'atomes correspondent à x_h_conn et pred_1h
+            # mol_with_h est mol_read du SDF, avec les mêmes indices que x_h_conn
+            molH_for_sim = mol_with_h
+
+            # Générer géométrie 3D si demandé ET si molecule n'est pas trop grande
+            # ✅ SKIP EmbedMolecule pour molecules > 50 atomes lourds (trop couteux)
+            use_3d = sp.get("use_3d", True)
+            n_heavy_atoms_sim = molH_for_sim.GetNumHeavyAtoms()
+
+            if use_3d and molH_for_sim.GetNumConformers() == 0 and n_heavy_atoms_sim <= 50:
                 try:
                     AllChem.EmbedMolecule(molH_for_sim, randomSeed=42)
                     AllChem.MMFFOptimizeMolecule(molH_for_sim)
                 except Exception:
                     pass
-            
-            x_h_conn_sim = _build_x_h_connectivity_from_mol_with_H(molH_for_sim)
-            
+
+            # ✅ CORRECTION: Passer le solvant pour filtrer les protons échangeables (OH, NH, SH) en D2O/CD3OD
+            solvent_for_sim = sp.get("solvent", "CDCl3")
+            x_h_conn_sim = _build_x_h_connectivity_from_mol_with_H(molH_for_sim, solvent=solvent_for_sim)
+
+
             # 3) Créer le mapping des shifts ML PRÉDITS (pas les shifts heuristiques!)
             list_H = create_shift_list_1H(molH_for_sim, x_h_conn, pred_1h)
             proton_shifts_ppm = _proton_shifts_ppm_dict_from_list(molH_for_sim, list_H)
 
-            # ✅ 4) Utiliser simulate_multiplicity_per_proton() avec les VRAIS shifts ML
-            # Cela évite le bug de strong_coupling quand tous les shifts sont identiques
+            # ✅ 3bis) CORRECTION: Appliquer delta aux CH₃ géminaux sur C=C trisubstituée
+            # Ces CH₃ (groupe prényl/isoprényl) ont un Δδ typique de ~0.06 ppm
+            # N'appliquer que si les deux CH₃ ont le MÊME shift (prédiction ML non discriminante)
+            geminal_ch3_info = _detect_geminal_ch3_on_double_bond(molH_for_sim, x_h_conn_sim)
+            if geminal_ch3_info:
+                half_delta = DELTA_GEMINAL_CH3_DOUBLE_BOND / 2.0  # 0.03 ppm
+                # Trouver les paires pour vérifier si les shifts sont identiques
+                processed_pairs = set()
+                corrections_applied = 0
+                for heavy_idx, (partner_idx, position) in geminal_ch3_info.items():
+                    # Éviter de traiter la même paire deux fois
+                    pair_key = tuple(sorted([heavy_idx, partner_idx]))
+                    if pair_key in processed_pairs:
+                        continue
+                    processed_pairs.add(pair_key)
+
+                    # Obtenir les shifts moyens des deux CH₃
+                    h_list1 = x_h_conn_sim.get(heavy_idx, [])
+                    h_list2 = x_h_conn_sim.get(partner_idx, [])
+                    if h_list1 and h_list2:
+                        avg_shift1 = sum(proton_shifts_ppm.get(h, 0) for h in h_list1) / len(h_list1)
+                        avg_shift2 = sum(proton_shifts_ppm.get(h, 0) for h in h_list2) / len(h_list2)
+
+                        # Appliquer la correction SEULEMENT si les shifts sont quasi-identiques (< 0.01 ppm)
+                        if abs(avg_shift1 - avg_shift2) < 0.01:
+                            # Les shifts sont identiques → appliquer la correction diastéréotopique
+                            for h_idx in h_list1:
+                                if h_idx in proton_shifts_ppm:
+                                    if position == 'cis':
+                                        proton_shifts_ppm[h_idx] -= half_delta
+                                    else:
+                                        proton_shifts_ppm[h_idx] += half_delta
+                            # Appliquer aussi au partenaire
+                            partner_position = geminal_ch3_info[partner_idx][1]
+                            for h_idx in h_list2:
+                                if h_idx in proton_shifts_ppm:
+                                    if partner_position == 'cis':
+                                        proton_shifts_ppm[h_idx] -= half_delta
+                                    else:
+                                        proton_shifts_ppm[h_idx] += half_delta
+                            corrections_applied += 1
+
+            # ✅ 4) Mettre à jour proton_shifts_ppm avec les valeurs fingerprint exact-match
+            # Cela garantit que partner_shift_ppm utilisera les bonnes valeurs BMRB
+            for h_idx, fp_shift in individual_h_shifts.items():
+                if h_idx in proton_shifts_ppm:
+                    proton_shifts_ppm[h_idx] = fp_shift
+
+            # ✅ 5) Utiliser simulate_multiplicity_per_proton() avec les shifts corrigés
             per_proton = multiplicity_mod.simulate_multiplicity_per_proton(
-                mol=mol,
-                x_h_connectivity=x_h_conn_sim,
-                proton_shifts_ppm=proton_shifts_ppm,  # ← shifts ML prédits !
+                mol=molH_for_sim,  # Passer molH_for_sim qui a les H pour que les indices correspondent
+                x_h_connectivity=x_h_conn_sim,  # Construite à partir de molH_for_sim AVEC H
+                proton_shifts_ppm=proton_shifts_ppm,  # ← shifts avec fingerprint exact-match !
                 solvent=sp.get("solvent", "CDCl3"),
                 spectrometer_mhz=float(sp.get("freq_mhz", 700.0)),
                 temperature_k=float(sp.get("temperature_k", 298.15)),
                 include_heteronuclear=True,
                 use_3d=bool(sp.get("use_3d", True)),
                 config=cfg,
+                # ✅ NOUVEAU: Paramètres dynamics post-processeur
+                enable_dynamics=bool(sp.get("enable_dynamics", False)),
+                ph=float(sp.get("ph", 7.4)),
             )
 
             # ✅ 5) REGROUPEMENT INTELLIGENT DES PROTONS
@@ -1051,6 +2010,18 @@ def process_one_smiles(
             # Regrouper les protons par heavy_idx ET par pattern de multiplicité identique
             # Cela permet de séparer les protons vinyliques qui ont le même heavy mais des J différents
             heavy_to_groups: Dict[int, List[List[int]]] = {}
+            
+            # Identifier les CH₂ dont les deux protons sont dans per_proton (= diastéréotopiques traités séparément)
+            # Ces protons ne doivent JAMAIS être fusionnés, même s'ils ont les mêmes J
+            diastereotopic_heavy_set = set()
+            heavy_proton_count_in_per_proton: Dict[int, int] = {}
+            for h_idx, heavy_idx in repr_to_heavy.items():
+                heavy_proton_count_in_per_proton[heavy_idx] = heavy_proton_count_in_per_proton.get(heavy_idx, 0) + 1
+            for heavy_idx, count in heavy_proton_count_in_per_proton.items():
+                if count == 2:
+                    # Ce heavy a 2 protons traités séparément → diastéréotopiques
+                    diastereotopic_heavy_set.add(heavy_idx)
+            
             for h_idx, heavy_idx in repr_to_heavy.items():
                 data = per_proton[h_idx]
                 # Créer une clé unique basée sur label + J_couplings
@@ -1060,20 +2031,26 @@ def process_one_smiles(
                 if heavy_idx not in heavy_to_groups:
                     heavy_to_groups[heavy_idx] = []
                 
-                # Chercher un groupe existant avec le même pattern
-                found = False
-                for group in heavy_to_groups[heavy_idx]:
-                    repr_h = group[0]
-                    repr_data = per_proton[repr_h]
-                    repr_J_key = tuple(sorted([(j.get("J_hz", 0), j.get("n_equiv", 1)) for j in repr_data.get("J_couplings", [])]))
-                    repr_label_key = (repr_data.get("label", "s"), repr_J_key)
-                    if label_key == repr_label_key:
-                        group.append(h_idx)
-                        found = True
-                        break
-                
-                if not found:
+                # CORRECTION: Ne jamais fusionner les protons d'un CH₂ diastéréotopique
+                # même s'ils ont des J identiques - ils doivent rester séparés
+                if heavy_idx in diastereotopic_heavy_set:
+                    # Chaque proton diastéréotopique a son propre groupe
                     heavy_to_groups[heavy_idx].append([h_idx])
+                else:
+                    # Chercher un groupe existant avec le même pattern (comportement original)
+                    found = False
+                    for group in heavy_to_groups[heavy_idx]:
+                        repr_h = group[0]
+                        repr_data = per_proton[repr_h]
+                        repr_J_key = tuple(sorted([(j.get("J_hz", 0), j.get("n_equiv", 1)) for j in repr_data.get("J_couplings", [])]))
+                        repr_label_key = (repr_data.get("label", "s"), repr_J_key)
+                        if label_key == repr_label_key:
+                            group.append(h_idx)
+                            found = True
+                            break
+                    
+                    if not found:
+                        heavy_to_groups[heavy_idx].append([h_idx])
             
             # Ajouter les protons équivalents qui ne sont pas dans per_proton (CH₃, CH₂ équivalents)
             for heavy_idx, h_list in x_h_conn_sim.items():
@@ -1097,6 +2074,9 @@ def process_one_smiles(
             groups_items: List[dict] = []
             group_map_entries: List[str] = []
             group_id = 0
+            
+            # NOTE: Le delta diastéréotopique est maintenant calculé UNIQUEMENT dans
+            # sim_mult_rulebased.py via diastereotopic_delta_table.py (source unique de vérité)
 
             # Base sans H pour détection OH/NH/COOH
             base_for_exch = Chem.RemoveHs(molH_for_sim)
@@ -1158,10 +2138,20 @@ def process_one_smiles(
                     is_exchangeable = False
                     exch_type = None
                     try:
+                        # Méthode 1: Via multiplicity_mod (si disponible)
                         if hasattr(multiplicity_mod, "_is_exchangeable_H_on_X") and heavy_atom is not None:
                             exch_type = multiplicity_mod._is_exchangeable_H_on_X(base_for_exch, heavy_idx)
                             if exch_type:
                                 is_exchangeable = True
+                                note = "exchangeable"
+                        
+                        # Méthode 2: Fallback direct avec RDKit (si Méthode 1 n'a pas détecté)
+                        if not is_exchangeable and heavy_atom is not None:
+                            heavy_sym = heavy_atom.GetSymbol()
+                            # OH, NH, SH sont échangeables
+                            if heavy_sym in ('O', 'N', 'S'):
+                                is_exchangeable = True
+                                exch_type = f"{heavy_sym}H"
                                 note = "exchangeable"
                     except Exception:
                         pass
@@ -1172,7 +2162,56 @@ def process_one_smiles(
                             mult_per_atom[h] = label_str
 
                     # ✅ Collecter les shifts de tous les H du groupe
-                    h_shifts = [float(proton_shifts_ppm.get(h, 0.0)) for h in h_indices]
+                    # PRIORITÉ CORRIGÉE:
+                    # - Diastéréotopiques → TOUJOURS utiliser corrected_shift_ppm (avec delta appliqué)
+                    # - Autres → Fingerprint exact-match > corrected > ML fallback
+                    h_shifts_raw = []
+                    for h in h_indices:
+                        h_data = per_proton.get(h, {})
+                        corrected_shift = h_data.get("corrected_shift_ppm")
+                        h_note = h_data.get("note", "")
+
+                        # ✅ FIX: Pour protons NON-ÉQUIVALENTS, TOUJOURS utiliser corrected_shift_ppm
+                        # car le fingerprint exact-match retourne un shift moyenné (ex: 3.17 au lieu de 3.12/3.22)
+                        # Le corrected_shift_ppm contient le delta calculé
+                        # Types: "diastereotopic" (CH₂ prochiral), "vinyl_nonequiv" (=CH₂ géminal)
+                        NONEQUIV_NOTES = ("diastereotopic", "vinyl_nonequiv", "allyl_nonequiv")
+                        is_nonequiv = (note in NONEQUIV_NOTES or h_note in NONEQUIV_NOTES)
+
+                        if is_nonequiv and corrected_shift is not None:
+                            # ✅ Non-équivalent: utiliser le shift avec delta appliqué
+                            h_shifts_raw.append(float(corrected_shift))
+                        elif h in individual_h_shifts:
+                            # Fingerprint exact-match (pour protons équivalents uniquement)
+                            h_shifts_raw.append(float(individual_h_shifts[h]))
+                        elif corrected_shift is not None:
+                            # Shift corrigé du module de multiplicité
+                            h_shifts_raw.append(float(corrected_shift))
+                        else:
+                            # Fallback: Shift original de la prédiction ML
+                            h_shifts_raw.append(float(proton_shifts_ppm.get(h, 0.0)))
+
+                    # ✅ NOUVEAU: Pour les protons magnétiquement équivalents (même shift, singulet sans couplage),
+                    # on garde UN SEUL shift au lieu de dupliquer (ex: CH2 équivalent → [3.944] au lieu de [3.944, 3.944])
+                    # Cela évite les pics dupliqués dans le simulateur Hamiltonien
+                    h_shifts = []
+                    if label_str == "s" and len(h_shifts_raw) > 1:
+                        # Vérifier si tous les shifts sont identiques (tolérance 0.001 ppm)
+                        shifts_unique = set(round(s, 3) for s in h_shifts_raw)
+                        if len(shifts_unique) == 1:
+                            # Tous identiques → UN SEUL shift (moyenne pour précision)
+                            avg_shift = sum(h_shifts_raw) / len(h_shifts_raw)
+                            h_shifts = [avg_shift]
+                        else:
+                            # Différents → garder tous (cas diastéréotopique)
+                            h_shifts = h_shifts_raw
+                    else:
+                        # Pas un singulet OU un seul H → garder tous les shifts
+                        h_shifts = h_shifts_raw
+                    
+                    # NOTE: Le delta diastéréotopique est calculé et appliqué UNIQUEMENT dans
+                    # sim_mult_rulebased.py via get_diastereotopic_delta() de diastereotopic_delta_table.py
+                    # Cela évite la duplication de code et garantit une source unique de vérité.
 
                     # Construction de l'entrée JSON
                     groups_items.append({
@@ -1208,11 +2247,15 @@ def process_one_smiles(
                     "temperature_K": float(sp.get("temperature_k", 298.15)),
                     "groups": groups_items,
                     "nb_groups": len(groups_items),
-                    "nb_protons": sum(len(g["H_indices"]) for g in groups_items),  # ✅ Total des H
+                    "nb_protons": (nb_protons := sum(len(g["H_indices"]) for g in groups_items)),  # ✅ Total des H
                     "note": "Protons grouped by heavy atom; diastereotopic protons separated only if truly different",
-                    "typical_linewidth_hz": float(cfg.line_width_hz) if cfg else 0.8,
+                    "typical_linewidth_hz": float(cfg.line_width_hz) if cfg else 1.2,
                     "tolerance_grouping_hz": float(getattr(multiplicity_mod, "TOLERANCE_J_HZ", 0.15)),
-                    "digital_resolution_hz": float(cfg.digital_resolution_hz) if cfg and cfg.digital_resolution_hz else None
+                    "digital_resolution_hz": float(cfg.digital_resolution_hz) if cfg and cfg.digital_resolution_hz else 0.05,
+                    # Paramètres Hamiltonien (utilisés par simulate_spectrum_api.py)
+                    "include_connected_groups": True,   # ✅ Inclure groupes 1er ordre connectés aux 2nd ordre (chaîne complète)
+                    "max_hamiltonian_spins": 8,         # Limite de spins (8=256×256 rapide, 10=1024×1024 lent)
+                    "force_all_hamiltonian": nb_protons <= 8  # ✅ Auto: petites molécules (≤8 spins) → Hamiltonien complet
                 }
                 # Write individual file only if NOT in batch mode (return_payload=False)
                 if write_mult_json and not return_payload:
@@ -1226,6 +2269,10 @@ def process_one_smiles(
                     "H1_MULT_MAP": " ".join(group_map_entries),
                 }
                 _append_props_to_sdf(sdf_path, props)
+            
+            # 8) ✅ NOUVEAU: Mettre à jour le SDF avec les shifts 1H corrigés (delta diastéréotopique)
+            if groups_items:
+                _update_sdf_with_corrected_shifts(sdf_path, groups_items, property_key)
 
         except Exception as e:
             send_log(f"[{mol_id}] ⚠️ Simulation multiplicités échouée: {e}")
@@ -1398,11 +2445,53 @@ def run_csv(
     multiplicity_mod=None,
     sim_params: Optional[dict] = None,
     num_workers: int = 1,  # Number of parallel workers (1 = sequential)
+    resume_from_dir: Optional[str] = None,  # Dossier précédent pour reprise incrémentale
 ) -> None:
     ensure_dir(out_dir)
 
     if not os.path.exists(csv_path):
         raise FileNotFoundError(f"CSV not found: {csv_path}")
+
+    # =========================================================================
+    # REPRISE INCRÉMENTALE: Charger prédictions existantes si resume_from_dir
+    # =========================================================================
+    existing_mol_data = {}
+    existing_params = {}
+    current_params = {}
+    skipped_count = 0
+    reused_payloads = []
+    reused_manifest_rows = []
+
+    if resume_from_dir and os.path.isdir(resume_from_dir):
+        send_log(f"[RESUME] Chargement des prédictions existantes depuis: {resume_from_dir}")
+        existing_mol_data, existing_params = _load_existing_predictions(resume_from_dir)
+        send_log(f"[RESUME] {len(existing_mol_data)} molécules trouvées dans le dossier précédent")
+        if existing_params:
+            send_log(f"[RESUME] Paramètres précédents: freq={existing_params.get('freq_mhz')}MHz, "
+                     f"solvent={existing_params.get('solvent')}, T={existing_params.get('temperature_k')}K, "
+                     f"pH={existing_params.get('ph')}")
+
+    # Construire paramètres actuels pour comparaison
+    if sim_params:
+        current_params = {
+            "freq_mhz": sim_params.get("freq_mhz", 700.0),
+            "solvent": sim_params.get("solvent", "CDCl3"),
+            "temperature_k": sim_params.get("temperature_k", 298.15),
+            "ph": sim_params.get("ph", 7.4),
+        }
+    else:
+        current_params = {"freq_mhz": 700.0, "solvent": "CDCl3", "temperature_k": 298.15, "ph": 7.4}
+
+    # Vérifier si les paramètres correspondent
+    params_match = _params_match(existing_params, current_params) if existing_params else False
+    if resume_from_dir and existing_params:
+        if params_match:
+            send_log(f"[RESUME] ✓ Paramètres identiques - réutilisation des molécules déjà prédites")
+        else:
+            send_log(f"[RESUME] ⚠️ Paramètres différents - toutes les molécules seront re-prédites")
+            send_log(f"[RESUME] Nouveaux paramètres: freq={current_params.get('freq_mhz')}MHz, "
+                     f"solvent={current_params.get('solvent')}, T={current_params.get('temperature_k')}K, "
+                     f"pH={current_params.get('ph')}")
 
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -1410,12 +2499,7 @@ def run_csv(
         if smiles_col not in headers or id_col not in headers:
             raise ValueError(f"CSV must contain columns '{id_col}' and '{smiles_col}' (found: {headers})")
 
-    total = sum(1 for _ in open(csv_path, encoding="utf-8")) - 1
-    
-    # [OK] Initialize the global counter
-    _GLOBAL_MOLECULE_COUNTER["total"] = total
-    _GLOBAL_MOLECULE_COUNTER["done"] = 0
-    
+    # total is set after dedup below
     done = 0
 
     models = ModelBundle(net_1h=None, net_13c=None, mean_std_1h=None, mean_std_13c=None)
@@ -1424,95 +2508,133 @@ def run_csv(
     ok = 0
     ko = 0
 
-    # Read all molecules first
-    molecules_to_process = []
+    # Read all molecules first (deduplicate by mol_id)
+    all_molecules = []
+    seen_ids = set()
+    duplicates = 0
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for idx, row in enumerate(reader, start=1):
             mol_id = (row.get(id_col) or f"mol_{idx}").strip()
             smi = (row.get(smiles_col) or "").strip()
-            molecules_to_process.append({'mol_id': mol_id, 'smiles': smi, 'index': idx})
+            if mol_id in seen_ids:
+                duplicates += 1
+                continue
+            seen_ids.add(mol_id)
+            all_molecules.append({'mol_id': mol_id, 'smiles': smi, 'index': idx})
+    if duplicates > 0:
+        send_log(f"[DEDUP] {duplicates} doublons ignores ({len(all_molecules)} molecules uniques sur {len(all_molecules) + duplicates})")
+    total = len(all_molecules)
 
-    # Choose parallel or sequential processing
-    if num_workers > 1 and len(molecules_to_process) > 1:
-        send_log(f"[PARALLEL] Using {num_workers} workers for {len(molecules_to_process)} molecules")
-        _run_csv_parallel(
-            molecules_to_process, out_dir, model_1h_path, model_13c_path,
-            property_key, sim_params, num_workers,
-            manifest_rows, all_multiplicity_payloads
-        )
-        # Count ok/ko from manifest_rows
-        ok = sum(1 for r in manifest_rows if not r['error'])
-        ko = sum(1 for r in manifest_rows if r['error'])
-    else:
-        # Sequential processing (original code)
-        if num_workers > 1:
-            send_log("[INFO] Parallel processing requested but only 1 molecule - using sequential mode")
+    # [OK] Initialize the global counter (after dedup)
+    _GLOBAL_MOLECULE_COUNTER["total"] = total
+    _GLOBAL_MOLECULE_COUNTER["done"] = 0
 
-        for mol_data in molecules_to_process:
-            done = mol_data['index']
-            mol_id = mol_data['mol_id']
-            smi = mol_data['smiles']
+    # =========================================================================
+    # REPRISE INCRÉMENTALE: Filtrer les molécules à traiter
+    # =========================================================================
+    molecules_to_process = []
+    for mol_data in all_molecules:
+        mol_id = mol_data['mol_id']
 
-            try:
-                # NEW: use return_payload=True to get payload without writing individual file
-                sdf_path, nH, nC, models, _, payload = process_one_smiles(
-                    smiles=smi, mol_id=mol_id, out_dir=out_dir, models=models,
-                    model_1h_path=model_1h_path, model_13c_path=model_13c_path,
-                    property_key=property_key,
-                    multiplicity_mod=multiplicity_mod,
-                    sim_params=sim_params,
-                    return_payload=True,  # Don't write individual JSON, return payload
-                )
-                ok += 1
-                
-                # Collect payload for consolidated JSON
-                if payload is not None:
-                    all_multiplicity_payloads.append(payload)
-                
-                # [OK] Increment and emit progress
-                _GLOBAL_MOLECULE_COUNTER["done"] += 1
-                send_log(f"[OK] Molecule {_GLOBAL_MOLECULE_COUNTER['done']}/{_GLOBAL_MOLECULE_COUNTER['total']} processed: {os.path.basename(sdf_path)}")
-                
-                progress_pct = (_GLOBAL_MOLECULE_COUNTER['done'] / _GLOBAL_MOLECULE_COUNTER['total']) * 98
-                send_progress(
-                    progress_pct, 
-                    f"Molecule {_GLOBAL_MOLECULE_COUNTER['done']}/{_GLOBAL_MOLECULE_COUNTER['total']} (SDF)",
-                    completed=_GLOBAL_MOLECULE_COUNTER['done'],
-                    total=_GLOBAL_MOLECULE_COUNTER['total']
-                )
-                
-                send_log(f"[{mol_id}] SDF : {os.path.basename(sdf_path)}")
-                manifest_rows.append({
-                    "mol_id": mol_id,
-                    "smiles": smi,
-                    "sdf": sdf_path,
-                    "nb_predicted_H": nH,
-                    "nb_predicted_C": nC,
-                    "error": ""
-                })
-            except Exception as e:
-                ko += 1
-                send_log(f"[{mol_id}] Error: {e}")
+        # Vérifier si cette molécule peut être réutilisée
+        if params_match and mol_id in existing_mol_data:
+            existing = existing_mol_data[mol_id]
+            existing_sdf = existing.get("sdf_path", "")
 
-                # [KO] Increment and emit progress even on error
-                _GLOBAL_MOLECULE_COUNTER["done"] += 1
-                progress_pct = (_GLOBAL_MOLECULE_COUNTER['done'] / _GLOBAL_MOLECULE_COUNTER['total']) * 98
-                send_progress(
-                    progress_pct,
-                    f"Molecule {_GLOBAL_MOLECULE_COUNTER['done']}/{_GLOBAL_MOLECULE_COUNTER['total']} (Error)",
-                    completed=_GLOBAL_MOLECULE_COUNTER['done'],
-                    total=_GLOBAL_MOLECULE_COUNTER['total']
-                )
+            # Vérifier que le fichier SDF existe toujours
+            if existing_sdf and os.path.exists(existing_sdf):
+                # Copier le SDF vers le nouveau dossier
+                new_sdf_path = _copy_sdf_to_output(existing_sdf, out_dir)
+                if new_sdf_path:
+                    # Réutiliser cette molécule
+                    skipped_count += 1
+                    ok += 1
+                    _GLOBAL_MOLECULE_COUNTER["done"] += 1
 
-                manifest_rows.append({
-                    "mol_id": mol_id,
-                    "smiles": smi,
-                    "sdf": "",
-                    "nb_predicted_H": 0,
-                    "nb_predicted_C": 0,
-                    "error": str(e)
-                })
+                    # Ajouter au manifest
+                    reused_manifest_rows.append({
+                        "mol_id": mol_id,
+                        "smiles": mol_data['smiles'],
+                        "sdf": new_sdf_path,
+                        "nb_predicted_H": existing.get("nb_predicted_H", 0),
+                        "nb_predicted_C": existing.get("nb_predicted_C", 0),
+                        "error": "",
+                        "reused": True,  # Marqueur pour indiquer réutilisation
+                    })
+
+                    # Réutiliser le payload si disponible
+                    if "payload" in existing and existing["payload"]:
+                        reused_payloads.append(existing["payload"])
+
+                    send_log(f"[RESUME] ✓ {mol_id}: réutilisé (paramètres identiques)")
+                    continue  # Ne pas ajouter à molecules_to_process
+
+        # Cette molécule doit être (re)prédite
+        molecules_to_process.append(mol_data)
+
+    if skipped_count > 0:
+        send_log(f"[RESUME] {skipped_count} molécules réutilisées, {len(molecules_to_process)} à (re)prédire")
+
+    # Ajouter les manifest rows réutilisés
+    manifest_rows.extend(reused_manifest_rows)
+    all_multiplicity_payloads.extend(reused_payloads)
+
+    # =========================================================================
+    # TRAITEMENT SÉQUENTIEL (GIL Python empêche le vrai parallélisme CPU)
+    # =========================================================================
+    for mol_data in molecules_to_process:
+        mol_id = mol_data['mol_id']
+        smi = mol_data['smiles']
+
+        send_log(f"[{mol_id}] Starting prediction...")
+        try:
+            sdf_path, nH, nC, models, _, payload = process_one_smiles(
+                smiles=smi, mol_id=mol_id, out_dir=out_dir, models=models,
+                model_1h_path=model_1h_path, model_13c_path=model_13c_path,
+                property_key=property_key,
+                multiplicity_mod=multiplicity_mod,
+                sim_params=sim_params,
+                return_payload=True,
+            )
+            ok += 1
+
+            if payload is not None:
+                all_multiplicity_payloads.append(payload)
+
+            _GLOBAL_MOLECULE_COUNTER["done"] += 1
+            current_done = _GLOBAL_MOLECULE_COUNTER["done"]
+            send_log(f"[OK] Molecule {current_done}/{total} processed: {os.path.basename(sdf_path)}")
+            progress_pct = (current_done / total) * 98
+            send_progress(
+                progress_pct,
+                f"Molecule {current_done}/{total} (SDF)",
+                completed=current_done,
+                total=total
+            )
+
+            manifest_rows.append({
+                "mol_id": mol_id, "smiles": smi, "sdf": sdf_path,
+                "nb_predicted_H": nH, "nb_predicted_C": nC, "error": ""
+            })
+        except Exception as e:
+            ko += 1
+            _GLOBAL_MOLECULE_COUNTER["done"] += 1
+            current_done = _GLOBAL_MOLECULE_COUNTER["done"]
+
+            send_log(f"[{mol_id}] Error: {e}")
+            progress_pct = (current_done / total) * 98
+            send_progress(
+                progress_pct,
+                f"Molecule {current_done}/{total} (Error)",
+                completed=current_done,
+                total=total
+            )
+
+            manifest_rows.append({
+                "mol_id": mol_id, "smiles": smi, "sdf": "",
+                "nb_predicted_H": 0, "nb_predicted_C": 0, "error": str(e)
+            })
 
     # Write consolidated multiplicity JSON (ONE file for ALL molecules)
     consolidated_multiplicity_path = os.path.join(out_dir, "all_multiplicities.json")
@@ -1586,9 +2708,20 @@ def build_argparser() -> argparse.ArgumentParser:
     ap.add_argument("--property_key", default="(1)", help="Clé de propriété SDF pour stocker la liste de shifts")
     ap.add_argument("--task_id", default=None, help="ID de tâche externe (optionnel, pour logs)")
 
+    # --- Reprise incrémentale
+    ap.add_argument("--resume-from-dir", default=None, dest="resume_from_dir",
+                    help="Dossier d'une prédiction précédente pour reprise incrémentale. "
+                         "Les molécules déjà prédites avec les mêmes paramètres seront réutilisées.")
+
+    # --- Paramètres expérimentaux
+    ap.add_argument("--solvent", default="CDCl3", help="Solvant (CDCl3, DMSO-d6, D2O, etc.)")
+    ap.add_argument("--spectrometer_mhz", type=float, default=700.0, help="Fréquence du spectromètre (MHz)")
+    ap.add_argument("--temperature_k", type=float, default=298.15, help="Température (K)")
+    ap.add_argument("--ph", type=float, default=7.4, help="pH de la solution")
+
     # --- Parallélisation
-    ap.add_argument("--workers", type=int, default=1,
-                    help="Nombre de workers parallèles pour CSV (1=séquentiel, 2-8 recommandé pour parallélisation)")
+    ap.add_argument("--workers", type=int, default=0,
+                    help="Nombre de threads parallèles pour CSV (0=auto, 1=séquentiel)")
 
     # --- Multiplicités 1H (rule-based)
     ap.add_argument("--simulate_multiplicity", action="store_true",
@@ -1605,6 +2738,11 @@ def build_argparser() -> argparse.ArgumentParser:
                     help="Tente une géométrie 3D (ETKDG) pour Karplus/vinyliques.")
     ap.add_argument("--sim_debug", action="store_true",
                     help="Enregistre les détails (J/groupes/second ordre) dans le JSON.")
+    # ✅ NOUVEAU: Paramètres dynamics post-processeur
+    ap.add_argument("--sim_enable_dynamics", action="store_true",
+                    help="Active le post-processeur dynamique (pH, échange, ring flipping).")
+    ap.add_argument("--sim_ph", type=float, default=7.4,
+                    help="pH de la solution pour le post-processeur dynamique (défaut: 7.4).")
 
     return ap
 
@@ -1644,12 +2782,23 @@ def main(argv: Optional[List[str]] = None) -> None:
             send_log("⚠️ --simulate_multiplicity activé mais --simulator_path non fourni")
         
         if multiplicity_mod:
+            # Debug: afficher les valeurs des arguments
+            # Récupérer le pH depuis les arguments (sim_ph prioritaire sur ph)
+            ph_value = float(getattr(args, 'sim_ph', getattr(args, 'ph', 7.4)))
+            
+            # Validation basique du pH (plage chimique valide)
+            if not isinstance(ph_value, (int, float)) or ph_value < 0.0 or ph_value > 14.0:
+                send_log(f"[WARNING] pH invalide: {ph_value}, fallback vers 7.4")
+                ph_value = 7.4
+
             sim_params = {
                 "solvent": args.sim_solvent,
                 "freq_mhz": args.sim_freq_mhz,
                 "temperature_k": args.sim_temperature_k,
                 "use_3d": bool(args.sim_use_3d),
                 "debug": bool(args.sim_debug),
+                "enable_dynamics": bool(getattr(args, 'sim_enable_dynamics', False)),
+                "ph": ph_value,
             }
 
     try:
@@ -1675,7 +2824,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                 property_key=args.property_key,
                 multiplicity_mod=multiplicity_mod,
                 sim_params=sim_params,
-                num_workers=getattr(args, 'workers', 1)
+                num_workers=getattr(args, 'workers', 0),
+                resume_from_dir=getattr(args, 'resume_from_dir', None)
             )
     except Exception as e:
         send_error("Erreur fatale", error=str(e), traceback=traceback.format_exc())

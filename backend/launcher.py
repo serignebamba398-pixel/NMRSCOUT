@@ -29,5 +29,22 @@ if getattr(sys, 'frozen', False) and sys.platform == 'win32':
 
 # Run main directly
 if __name__ == "__main__":
-    import nmr_engine_entry
+    # Check if there's an external override for nmr_engine_entry
+    # This allows hot-patching without recompiling the bundle
+    override_path = os.environ.get('NMR_SCRIPTS_OVERRIDE', '')
+    override_entry = os.path.join(override_path, 'nmr_engine_entry.py') if override_path else ''
+    
+    if override_path and os.path.isfile(override_entry):
+        print(f"[launcher] Loading nmr_engine_entry from override: {override_entry}", file=sys.stderr)
+        # Insert override path at beginning so imports find corrected scripts
+        sys.path.insert(0, override_path)
+        # Load from override
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("nmr_engine_entry", override_entry)
+        nmr_engine_entry = importlib.util.module_from_spec(spec)
+        sys.modules['nmr_engine_entry'] = nmr_engine_entry
+        spec.loader.exec_module(nmr_engine_entry)
+    else:
+        import nmr_engine_entry
+    
     nmr_engine_entry.main()

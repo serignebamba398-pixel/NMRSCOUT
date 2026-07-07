@@ -10,10 +10,14 @@ import './MainView.css';
  */
 export const MainView = ({ onMoleculeSelect }) => {
   const { viewerData, customColors, setCustomColors } = useAppState();
-  const [molecules, setMolecules] = useState([]);
+  const [moleculesRaw, setMoleculesRaw] = useState([]);
   const [selectedMolecule, setSelectedMolecule] = useState(null);
   const [loading, setLoading] = useState(false);
   const [filterQuery, setFilterQuery] = useState('');
+  const [coverageMin, setCoverageMin] = useState('');
+  const [coverageMax, setCoverageMax] = useState('');
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [selectedMethodsForCoverage, setSelectedMethodsForCoverage] = useState(["1H", "13C", "COSY", "HSQC"]);
 
   const normalizedCsvs = useMemo(() => {
     const csvs = viewerData?.csvs;
@@ -81,12 +85,57 @@ export const MainView = ({ onMoleculeSelect }) => {
     return String(name).replace(/^(?:1H|13C|COSY|HSQC)[\s_\-:]+/i, '');
   }, []);
 
-  // Filter molecules based on search
+  // Recalcul de avgRansy selon les méthodes sélectionnées
+  const molecules = useMemo(() => {
+    const methodsToUse = selectedMethodsForCoverage.length > 0
+      ? selectedMethodsForCoverage
+      : ["1H", "13C", "COSY", "HSQC"];
+
+    const list = moleculesRaw.map(mol => {
+      let sumRansy = 0, countRansy = 0;
+      let sumSub = 0, countSub = 0;
+
+      for (const type of methodsToUse) {
+        if (mol.ransy[type] != null) { sumRansy += mol.ransy[type]; countRansy++; }
+        if (mol.sub[type] != null)   { sumSub   += mol.sub[type];   countSub++;   }
+      }
+
+      return {
+        ...mol,
+        avgRansy: countRansy > 0 ? sumRansy / countRansy : 0,
+        avgSub:   countSub   > 0 ? sumSub   / countSub   : 0,
+      };
+    });
+
+    list.sort((a, b) => (b.avgRansy - a.avgRansy) || a.source.localeCompare(b.source));
+    return list;
+  }, [moleculesRaw, selectedMethodsForCoverage]);
+
+  // Filter molecules based on search and coverage range
   const filteredMolecules = useMemo(() => {
-    if (!filterQuery.trim()) return molecules;
-    const q = filterQuery.toLowerCase();
-    return molecules.filter(m => m.source.toLowerCase().includes(q));
-  }, [molecules, filterQuery]);
+    let filtered = molecules;
+    
+    // Text filter
+    if (filterQuery.trim()) {
+      const q = filterQuery.toLowerCase();
+      filtered = filtered.filter(m => m.source.toLowerCase().includes(q));
+    }
+    
+    // Coverage filter (uses avgRansy as the coverage value)
+    const minCov = parseFloat(coverageMin);
+    const maxCov = parseFloat(coverageMax);
+    
+    if (!isNaN(minCov) || !isNaN(maxCov)) {
+      filtered = filtered.filter(m => {
+        const coverage = m.avgRansy ?? 0;
+        if (!isNaN(minCov) && coverage < minCov) return false;
+        if (!isNaN(maxCov) && coverage > maxCov) return false;
+        return true;
+      });
+    }
+    
+    return filtered;
+  }, [molecules, filterQuery, coverageMin, coverageMax]);
 
   // Load molecules from annotation CSVs
   useEffect(() => {
@@ -98,7 +147,7 @@ export const MainView = ({ onMoleculeSelect }) => {
       
       if (!viewerData?.csvs || Object.keys(viewerData.csvs).length === 0) {
         console.log('[MainView] No CSVs available - exiting');
-        setMolecules([]);
+        setMoleculesRaw([]);
         return;
       }
 
@@ -145,20 +194,29 @@ export const MainView = ({ onMoleculeSelect }) => {
             console.log(`[MainView] ${type} sourceIdx:`, sourceIdx);
             
             const lowerHeaders = headers.map(h => h.toLowerCase());
-            // Chercher coverage_ransy (plusieurs variantes)
-            const ransyCandidates = [
-              'coverage_ransy',
-              'coverage_ransy_mean',
-              'coverage_ransy_avg',
-              'coverage_ransy_percent',
-            ];
-            let ransyIdx = ransyCandidates
-              .map(k => lowerHeaders.indexOf(k))
-              .find(i => i >= 0);
-            if (ransyIdx === undefined) ransyIdx = -1;
-            if (ransyIdx < 0) {
-              // fallback: any column that contains both "ransy" and "coverage"
-              ransyIdx = lowerHeaders.findIndex(h => h.includes('ransy') && h.includes('coverage'));
+            // Pour 1H et 13C: utiliser intersection_coverage en priorité
+            // Pour COSY et HSQC: utiliser coverage_ransy
+            const is1D = type === '1H' || type === '13C';
+            let ransyIdx = -1;
+
+            if (is1D) {
+              // TOUJOURS intersection_coverage pour 1H/13C (pas de fallback)
+              ransyIdx = lowerHeaders.indexOf('intersection_coverage');
+            } else {
+              // Pour COSY/HSQC: coverage_ransy
+              const ransyCandidates = [
+                'coverage_ransy',
+                'coverage_ransy_mean',
+                'coverage_ransy_avg',
+                'coverage_ransy_percent',
+              ];
+              ransyIdx = ransyCandidates
+                .map(k => lowerHeaders.indexOf(k))
+                .find(i => i >= 0) ?? -1;
+              if (ransyIdx < 0) {
+                // fallback: any column that contains both "ransy" and "coverage"
+                ransyIdx = lowerHeaders.findIndex(h => h.includes('ransy') && h.includes('coverage'));
+              }
             }
 
             // Chercher coverage_sub (plusieurs variantes)
@@ -228,25 +286,19 @@ export const MainView = ({ onMoleculeSelect }) => {
           }
         }
 
-        // Convertir en tableau et calculer les moyennes
-        const moleculeList = Array.from(allMolecules.values()).map(mol => ({
-          ...mol,
-          avgRansy: Object.values(mol.ransy).length > 0 
-            ? Object.values(mol.ransy).reduce((a, b) => a + b, 0) / Object.values(mol.ransy).length 
-            : 0,
-          avgSub: Object.values(mol.sub).length > 0 
-            ? Object.values(mol.sub).reduce((a, b) => a + b, 0) / Object.values(mol.sub).length 
-            : 0,
-        }));
+        // Stocker les données brutes (ransy et sub par type) sans calcul de poids
+        const rawList = Array.from(allMolecules.values());
+        setMoleculesRaw(rawList);
 
-        // Sort by descending RANSY average (stable tie-break)
-        moleculeList.sort((a, b) => (b.avgRansy - a.avgRansy) || a.source.localeCompare(b.source));
-        
-        setMolecules(moleculeList);
-        
-        // Automatically select first molecule by default
-        if (moleculeList.length > 0) {
-          setSelectedMolecule(moleculeList[0]);
+        // Automatically select first molecule by default (après tri initial)
+        if (rawList.length > 0) {
+          // Tri initial par moyenne simple sur toutes méthodes disponibles
+          const sorted = [...rawList].sort((a, b) => {
+            const avgA = Object.values(a.ransy).reduce((s, v) => s + v, 0) / (Object.keys(a.ransy).length || 1);
+            const avgB = Object.values(b.ransy).reduce((s, v) => s + v, 0) / (Object.keys(b.ransy).length || 1);
+            return (avgB - avgA) || a.source.localeCompare(b.source);
+          });
+          setSelectedMolecule(sorted[0]);
         }
       } catch (err) {
         console.error('Error loading molecules:', err);
@@ -293,6 +345,64 @@ export const MainView = ({ onMoleculeSelect }) => {
           )}
         </div>
         
+        {/* Coverage range filter */}
+        <div className="coverage-filter-container">
+          <label className="coverage-filter-label">Coverage %</label>
+          <div className="coverage-inputs">
+            <input
+              type="number"
+              placeholder="Min"
+              value={coverageMin}
+              onChange={(e) => setCoverageMin(e.target.value)}
+              className="coverage-input"
+              min="0"
+              max="100"
+              step="1"
+            />
+            <span className="coverage-separator">-</span>
+            <input
+              type="number"
+              placeholder="Max"
+              value={coverageMax}
+              onChange={(e) => setCoverageMax(e.target.value)}
+              className="coverage-input"
+              min="0"
+              max="100"
+              step="1"
+            />
+            {(coverageMin || coverageMax) && (
+              <button 
+                className="coverage-clear"
+                type="button"
+                onClick={() => { setCoverageMin(''); setCoverageMax(''); }}
+                title="Clear coverage filter"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Bouton filtrage méthodes pour le tri */}
+        <div style={{ display: "flex", alignItems: "center", padding: "4px 8px 2px", gap: 6 }}>
+          <span style={{ fontSize: 10, color: "#64748b", flex: 1 }}>
+            {filteredMolecules.length} / {molecules.length}
+          </span>
+          <button
+            onClick={() => setFilterModalOpen(true)}
+            style={{
+              fontSize: 10, padding: "2px 8px", borderRadius: 4,
+              border: `1px solid #4a90d9`,
+              background: selectedMethodsForCoverage.length < 4 ? "#4a90d9" : "#f8fafc",
+              color: selectedMethodsForCoverage.length < 4 ? "#fff" : "#4a90d9",
+              cursor: "pointer", fontWeight: 600,
+            }}
+            title="Choisir les méthodes pour le tri par coverage"
+          >
+            Sort by
+          </button>
+        </div>
+
         <div className="molecule-list">
           {loading ? (
             <div className="loading-state">Loading...</div>
@@ -328,6 +438,7 @@ export const MainView = ({ onMoleculeSelect }) => {
             bgOptions={viewerData.bgOptions || {}}
             externalSource={selectedMolecule.originalSource || selectedMolecule.source}
             hideSidebar={true}
+            coverageMethods={selectedMethodsForCoverage}
             customColors={customColors}
             onColorChange={handleColorChange}
           />
@@ -346,6 +457,86 @@ export const MainView = ({ onMoleculeSelect }) => {
           />
         )}
       </div>
+
+      {/* Modal — filtrage méthodes pour le tri par coverage */}
+      {filterModalOpen && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 11000,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={() => setFilterModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 12, padding: 24,
+              width: 320, boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#1e293b" }}>
+              Tri par coverage combiné
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 16 }}>
+              Sélectionner les méthodes à inclure dans le calcul
+            </div>
+            {["1H", "13C", "COSY", "HSQC"].map(method => {
+              const hasData = moleculesRaw.some(m => m.ransy[method] != null);
+              const checked = selectedMethodsForCoverage.includes(method);
+              return (
+                <label key={method} style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  padding: "7px 0", fontSize: 13,
+                  color: hasData ? "#1e293b" : "#94a3b8",
+                  cursor: hasData ? "pointer" : "not-allowed",
+                  borderBottom: "1px solid #f1f5f9",
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={!hasData}
+                    onChange={() => {
+                      setSelectedMethodsForCoverage(prev =>
+                        prev.includes(method)
+                          ? prev.filter(m => m !== method)
+                          : [...prev, method]
+                      );
+                    }}
+                    style={{ width: 14, height: 14 }}
+                  />
+                  <span style={{ fontWeight: 600 }}>{method}</span>
+                  {!hasData && (
+                    <span style={{ fontSize: 10, color: "#94a3b8" }}>(non disponible)</span>
+                  )}
+                </label>
+              );
+            })}
+            <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setSelectedMethodsForCoverage(["1H", "13C", "COSY", "HSQC"])}
+                style={{
+                  padding: "5px 14px", borderRadius: 6, fontSize: 12,
+                  border: "1px solid #cbd5e1", background: "#f8fafc",
+                  cursor: "pointer", color: "#475569",
+                }}
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => setFilterModalOpen(false)}
+                style={{
+                  padding: "5px 14px", borderRadius: 6, fontSize: 12,
+                  border: "1px solid #0ea5e9", background: "#0ea5e9",
+                  cursor: "pointer", color: "#fff", fontWeight: 600,
+                }}
+              >
+                Appliquer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

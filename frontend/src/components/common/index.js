@@ -4,3 +4,4 @@ export { ParameterInput } from './ParameterInput.jsx';
 export { LockOverlay } from './LockOverlay.jsx';
 export { LogConsole } from './LogConsole.jsx';
 export { GlobalProgressOverlay } from './GlobalProgressOverlay.jsx';
+export { PendingTasksNotification } from './PendingTasksNotification.jsx';

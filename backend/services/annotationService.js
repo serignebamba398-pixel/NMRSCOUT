@@ -5,7 +5,7 @@ const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 const { Semaphore } = require('async-mutex');
 
-const { DEFAULT_LIGHT_PARAMS, MEMORY_LIMIT_MB, PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE } = require('../config');
+const { DEFAULT_LIGHT_PARAMS, MEMORY_LIMIT_MB, PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE, ENABLE_TASK_PERSISTENCE } = require('../config');
 const { scriptsDir, outputsDir, uploadsDir, scriptMap, legacyOut } = require('../config/paths');
 const { ensureDir, safeResolve } = require('../utils/filesystem');
 const { getRscript, buildREnv } = require('../utils/spawn');
@@ -13,8 +13,28 @@ const { logWithMemory } = require('../utils/logger');
 const { sseInit, sseSend } = require('../middleware/sse');
 const { addTask, deleteTask, killProcessGracefully } = require('./processManager');
 const projectService = require('./projectService');
+const { saveCheckpoint, markTaskCompleted, markTaskFailed, TaskStatus } = require('./taskPersistence');
+const { startPreventSleep, stopPreventSleep } = require('../utils/sleepPrevention');
 
 const ANNOTATION_SEM = new Semaphore(2);
+
+/**
+ * Generate tolerance string for filename
+ * Examples:
+ *   1H/13C: "tol_0.05" or "tol_0.5"
+ *   COSY/HSQC: "tol_f1_0.05_f2_0.1"
+ */
+function getToleranceStringForFilename(annotationType, params) {
+  if (annotationType === '1H' || annotationType === '13C') {
+    const tol = params.tol_correspondence || params.tol_correspondance || 0;
+    return `tol_${tol}`.replace(/\./g, '_');
+  } else if (annotationType === 'COSY' || annotationType === 'HSQC') {
+    const tolF1 = params.tol_correspondence_f1 || params.tol_correspondance_F1 || 0;
+    const tolF2 = params.tol_correspondence_f2 || params.tol_correspondance_F2 || 0;
+    return `tol_f1_${tolF1}_f2_${tolF2}`.replace(/\./g, '_');
+  }
+  return 'tol_unknown';
+}
 
 async function handleAnnotation(req, res, method) {
   const [val, release] = await ANNOTATION_SEM.acquire();
@@ -158,6 +178,28 @@ async function handleAnnotation(req, res, method) {
     };
     addTask(taskId, taskInfo);
 
+    // ✅ SLEEP PREVENTION: Empêcher la mise en veille pendant l'annotation
+    startPreventSleep(taskId);
+
+    // ✅ PERSISTENCE: Sauvegarder checkpoint initial
+    if (ENABLE_TASK_PERSISTENCE) {
+      saveCheckpoint(taskId, {
+        type: 'annotation',
+        status: TaskStatus.RUNNING,
+        annotationType,
+        progress: { current: 0, total: 100, percent: 0 },
+        options: optimizedParams,
+        workDir,
+        projectId,
+        resumeData: {
+          tableauFile,
+          matrixFile,
+          annotationType,
+          parameters: optimizedParams,
+        },
+      });
+    }
+
     child.stdout.on('data', buf => {
       outputBuffer += buf.toString();
       const lines = outputBuffer.split('\n');
@@ -169,6 +211,24 @@ async function handleAnnotation(req, res, method) {
           // Update lastPercent when the script emits progress
           if (parsed.type === 'progress' && typeof parsed.percent === 'number') {
             lastPercent = parsed.percent;
+            // ✅ PERSISTENCE: Mise à jour du checkpoint à chaque progression
+            if (ENABLE_TASK_PERSISTENCE && parsed.percent % 10 === 0) {
+              saveCheckpoint(taskId, {
+                type: 'annotation',
+                status: TaskStatus.RUNNING,
+                annotationType,
+                progress: { current: parsed.percent, total: 100, percent: parsed.percent },
+                options: optimizedParams,
+                workDir,
+                projectId,
+                resumeData: {
+                  tableauFile,
+                  matrixFile,
+                  annotationType,
+                  parameters: optimizedParams,
+                },
+              });
+            }
           }
           sseSend(res, parsed);
         } catch {
@@ -222,6 +282,10 @@ async function handleAnnotation(req, res, method) {
       const task = deleteTask(taskId);
       if (task?.safetyTimeout) clearTimeout(task.safetyTimeout);
       clearInterval(hb);
+      
+      // ✅ SLEEP PREVENTION: Réactiver la veille
+      stopPreventSleep(taskId);
+      
       const durationMin = Math.round((Date.now() - startTime) / 60000 * 10) / 10;
 
       if (task?.canceled) {
@@ -242,6 +306,10 @@ async function handleAnnotation(req, res, method) {
         return;
       }
       if (code !== 0) {
+        // ✅ PERSISTENCE: Marquer comme échouée
+        if (ENABLE_TASK_PERSISTENCE) {
+          markTaskFailed(taskId, `R script exited with code ${code}`);
+        }
         sseSend(res, {
           type: 'completed',
           success: false,
@@ -262,6 +330,12 @@ async function handleAnnotation(req, res, method) {
       if (outputFile) {
         const outputPath = path.join(workDir, outputFile);
         const sz = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+        
+        // ✅ PERSISTENCE: Marquer comme complétée
+        if (ENABLE_TASK_PERSISTENCE) {
+          markTaskCompleted(taskId, { outputFile, downloadUrl: `/outputs/${taskId}/${outputFile}` });
+        }
+        
         sseSend(res, {
           type: 'completed',
           success: true,
@@ -276,6 +350,12 @@ async function handleAnnotation(req, res, method) {
         const csvFiles = fs
           .readdirSync(workDir)
           .filter(f => f.endsWith('.csv') && !['tableau.csv', 'matrix.csv'].includes(f));
+        
+        // ✅ PERSISTENCE: Marquer comme échouée (pas de fichier output)
+        if (ENABLE_TASK_PERSISTENCE) {
+          markTaskFailed(taskId, 'No output file found');
+        }
+        
         sseSend(res, {
           type: 'completed',
           success: false,
@@ -288,6 +368,10 @@ async function handleAnnotation(req, res, method) {
     });
 
     child.on('error', err => {
+      // ✅ PERSISTENCE: Marquer comme échouée
+      if (ENABLE_TASK_PERSISTENCE) {
+        markTaskFailed(taskId, `R spawn error: ${err.message}`);
+      }
       deleteTask(taskId);
       if (taskInfo.safetyTimeout) clearTimeout(taskInfo.safetyTimeout);
       clearInterval(hb);
@@ -306,6 +390,9 @@ async function handleAnnotation(req, res, method) {
       if (KILL_ON_CLIENT_CLOSE) {
         killProcessGracefully(child, taskId);
         deleteTask(taskId);
+      } else if (ENABLE_TASK_PERSISTENCE) {
+        // ✅ PERSISTENCE: La tâche continue en arrière-plan
+        logWithMemory(`[${taskId}] Client disconnected - annotation continues in background`, 'INFO');
       }
     });
   } catch (e) {
@@ -324,6 +411,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
     const predictionTaskId = isGet ? req.query.predictionTaskId : req.body.predictionTaskId;
     const matrixFile = isGet ? req.query.matrixFile : req.body.matrixFile;
     const annotationType = (isGet ? req.query.annotationType : req.body.annotationType) || '1H';
+    const isOptimization = isGet ? req.query.isOptimization === 'true' : !!req.body.isOptimization;
     const rawParams = isGet ? req.query.parameters : req.body.parameters;
     let parameters = {};
     if (rawParams) {
@@ -372,7 +460,9 @@ async function handleAnnotationFromPrediction(req, res, method) {
     const taskId = uuidv4();
     const workDir = predictionDir;
 
-    const annotationsDir = path.join(workDir, 'annotations');
+    // Use separate folder for optimization to avoid overwriting annotation results
+    const outputSubfolder = isOptimization ? 'optimization' : 'annotations';
+    const annotationsDir = path.join(workDir, outputSubfolder);
     ensureDir(annotationsDir);
 
     const timestamp = new Date()
@@ -457,6 +547,9 @@ async function handleAnnotationFromPrediction(req, res, method) {
       heartbeat: hb,
     };
     addTask(taskId, taskInfo);
+
+    // ✅ SLEEP PREVENTION: Empêcher la mise en veille
+    startPreventSleep(taskId);
 
     child.stdout.on('data', buf => {
       outputBuffer += buf.toString();
@@ -565,6 +658,10 @@ async function handleAnnotationFromPrediction(req, res, method) {
       const task = deleteTask(taskId);
       if (task?.safetyTimeout) clearTimeout(task.safetyTimeout);
       clearInterval(hb);
+      
+      // ✅ SLEEP PREVENTION: Réactiver la veille
+      stopPreventSleep(taskId);
+      
       const durationMin = Math.round((Date.now() - startTime) / 60000 * 10) / 10;
 
       if (task?.canceled) {
@@ -620,10 +717,19 @@ async function handleAnnotationFromPrediction(req, res, method) {
 
       if (outputFile && sourcePath) {
         try {
-          const latestFilename = `annotation_${annotationType}_latest.csv`;
+          // Generate filename with tolerance info for optimization runs
+          let latestFilename;
+          if (isOptimization) {
+            // Extract tolerance from parameters for filename
+            const tolStr = getToleranceStringForFilename(annotationType, optimizedParams);
+            latestFilename = `annotation_${annotationType}_${tolStr}.csv`;
+          } else {
+            latestFilename = `annotation_${annotationType}_latest.csv`;
+          }
           const latestPath = path.join(annotationsDir, latestFilename);
 
-          if (fs.existsSync(latestPath)) {
+          // Only create history for normal annotations, not for optimization runs
+          if (!isOptimization && fs.existsSync(latestPath)) {
             const historyDir = path.join(annotationsDir, 'history');
             ensureDir(historyDir);
 
@@ -683,7 +789,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
           sseSend(res, {
             type: 'completed',
             success: true,
-            downloadUrl: `/outputs/${predictionTaskId}/annotations/${latestFilename}?v=${fileTimestamp}`,
+            downloadUrl: `/outputs/${predictionTaskId}/${outputSubfolder}/${latestFilename}?v=${fileTimestamp}`,
             taskId,
             annotationType,
             predictionTaskId,
@@ -693,6 +799,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
             outputSizeMB: Math.round((sz / 1024 / 1024) * 100) / 100,
             workDir: workDir,
             annotationsDir: annotationsDir,
+            isOptimization: isOptimization,
             timestamp: fileTimestamp,
           });
         } catch (copyErr) {
@@ -748,6 +855,9 @@ async function handleAnnotationFromPrediction(req, res, method) {
       if (KILL_ON_CLIENT_CLOSE) {
         killProcessGracefully(child, taskId);
         deleteTask(taskId);
+      } else if (ENABLE_TASK_PERSISTENCE) {
+        // ✅ PERSISTENCE: La tâche continue en arrière-plan
+        logWithMemory(`[${taskId}] Client disconnected - annotation continues in background`, 'INFO');
       }
     });
   } catch (e) {

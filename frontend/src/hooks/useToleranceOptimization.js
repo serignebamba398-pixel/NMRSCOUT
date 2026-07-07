@@ -5,6 +5,8 @@ import {
   isValidCsvForType,
   listUploads,
   uploadFile,
+  saveToleranceResults,
+  loadToleranceResults,
 } from "../api";
 import { createReconnectingSSE } from "../createReconnectingSSE";
 import { ProgressTracker, normalizeStaticUrl, parseCSVSmart, shortCsvLabel } from "../utils";
@@ -77,6 +79,25 @@ export const useToleranceOptimization = ({
     }
   }, [addLog, annotationState.selectedTask, setAnnotationState]);
 
+  const loadSavedToleranceResults = useCallback(async (taskId) => {
+    if (!taskId) return;
+    try {
+      const { results } = await loadToleranceResults(taskId);
+      if (results && results.length > 0) {
+        setAnnotationState((prev) => ({
+          ...prev,
+          toleranceResults: results,
+        }));
+        addLog(`[OK] Loaded ${results.length} saved tolerance optimization result(s) from task ${taskId}`, "info");
+      }
+    } catch (e) {
+      // Don't log errors if file doesn't exist (normal case)
+      if (!e.message.includes('not found') && !e.message.includes('404')) {
+        addLog(`[WARN] Failed to load tolerance results: ${e.message}`, "warn");
+      }
+    }
+  }, [addLog, setAnnotationState]);
+
   const uploadMatrix = useCallback(
     async (type, file) => {
       if (!file) return;
@@ -140,10 +161,12 @@ export const useToleranceOptimization = ({
         totalCoverageSum += coverage;
 
         if (row.RANSY_signals && String(row.RANSY_signals).trim() !== "") {
-          const expSignals = String(row.RANSY_signals)
-            .split("|")
-            .map((s) => s.trim())
-            .filter((s) => s !== "");
+          const rawSignals = String(row.RANSY_signals).trim();
+          // Detect 2D format (COSY/HSQC uses "||" to separate signal pairs)
+          const is2D = rawSignals.includes("||");
+          const expSignals = is2D
+            ? rawSignals.split("||").map((s) => s.trim()).filter((s) => s !== "")
+            : rawSignals.split("|").map((s) => s.trim()).filter((s) => s !== "");
 
           expSignals.forEach((sig) => matchedExpSignals.add(sig));
         }
@@ -199,6 +222,12 @@ export const useToleranceOptimization = ({
         },
         onProgress: () => {},
         onLog: () => {},
+        onTaskId: (taskId) => {
+          // Store taskId for cancellation
+          if (sse) {
+            sse._taskId = taskId;
+          }
+        },
         onError: (err) => {
           if (currentRejectRef.current === reject) currentRejectRef.current = null;
           reject(new Error(String(err)));
@@ -222,8 +251,21 @@ export const useToleranceOptimization = ({
 
     try {
       // Try to cancel server-side first, then close SSE.
-      if (currentSseRef.current?.cancelTask) await currentSseRef.current.cancelTask();
-      if (currentSseRef.current?.cancel) currentSseRef.current.cancel();
+      const taskId = currentSseRef.current?.getTaskId?.() || currentSseRef.current?._taskId;
+      if (taskId) {
+        addLog(`Killing server task: ${taskId}`, "warn");
+        if (currentSseRef.current?.cancelTask) {
+          await currentSseRef.current.cancelTask();
+          addLog(`Task ${taskId} cancelled on server`, "info");
+        }
+      } else {
+        addLog("No taskId found - cannot kill server process", "warn");
+      }
+
+      if (currentSseRef.current?.cancel) {
+        currentSseRef.current.cancel();
+        addLog("SSE connection closed", "info");
+      }
     } catch (e) {
       addLog(`Optimization cancellation error: ${e.message}`, "error");
     } finally {
@@ -316,6 +358,7 @@ export const useToleranceOptimization = ({
         const roundedTol = parseFloat(tol.toFixed(3));
         testCombinations.push({
           tol_correspondence: roundedTol,
+          tol_correspondance: roundedTol,  // spelling used by R scripts
           tol_match: roundedTol,
         });
       }
@@ -336,8 +379,12 @@ export const useToleranceOptimization = ({
           testCombinations.push({
             tol_correspondence_f1: roundedF1,
             tol_correspondence_f2: roundedF2,
+            tol_correspondance_F1: roundedF1,  // spelling + case used by R scripts
+            tol_correspondance_F2: roundedF2,
             tol_match_f1: roundedF1,
             tol_match_f2: roundedF2,
+            tol_match_F1: roundedF1,
+            tol_match_F2: roundedF2,
           });
         }
       }
@@ -454,10 +501,22 @@ export const useToleranceOptimization = ({
         label: `${type} - ${new Date().toLocaleString()}`,
       };
 
+      const updatedResults = [...annotationState.toleranceResults, newResult];
+
       setAnnotationState((prev) => ({
         ...prev,
-        toleranceResults: [...prev.toleranceResults, newResult],
+        toleranceResults: updatedResults,
       }));
+
+      // Save results to disk
+      if (annotationState.selectedTask) {
+        try {
+          await saveToleranceResults(annotationState.selectedTask, updatedResults);
+          addLog(`[OK] Tolerance results saved to outputs/${annotationState.selectedTask}/tolerance_results.json`, "info");
+        } catch (e) {
+          addLog(`[WARN] Failed to save tolerance results: ${e.message}`, "warn");
+        }
+      }
 
       setProgress(100);
       setCurrentTest("Completed");
@@ -492,6 +551,13 @@ export const useToleranceOptimization = ({
     return ok.map((t) => `${t}: ${shortCsvLabel(csvMap[t])}`).join(" • ");
   }, [annotationState.selectedTask, selectedTaskData]);
 
+  // Load saved tolerance results when selectedTask changes
+  useEffect(() => {
+    if (annotationState.selectedTask) {
+      loadSavedToleranceResults(annotationState.selectedTask);
+    }
+  }, [annotationState.selectedTask, loadSavedToleranceResults]);
+
   return {
     running,
     progress,
@@ -506,5 +572,6 @@ export const useToleranceOptimization = ({
     refreshMatrixUploads,
     uploadMatrix,
     getStatusLabel,
+    loadSavedToleranceResults,
   };
 };

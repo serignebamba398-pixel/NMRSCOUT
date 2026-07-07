@@ -14,15 +14,19 @@ import React, {
   useCallback,
   useRef,
 } from "react";
+import { jsPDF } from "jspdf";
 
 import {
   interactive1H,
   interactive13C,
   interactiveCOSY,
   interactiveHSQC,
-  relevelByWheelCancelable,
-  zoom1DFromPixels,
   API_BASE_URL,
+  extractBrukerSpectrum,
+  extractBruker2D,
+  getMultiplicityData,
+  simulateSpectrum,
+  simulateSpectrumBatch,
 } from "./api";
 
 // ========================================
@@ -42,6 +46,8 @@ import {
 // Utilitaires
 import { debugLog, debugWarn } from "./utils/debug";
 import { fetchWithRetry } from "./utils/imageUtils";
+import { parseCSVSmart } from "./utils/csvParser";
+import { findBondsInPath } from "./utils/molParser";
 import { 
   loadRDKitFromCDN, 
   load3DmolFromCDN, 
@@ -68,123 +74,6 @@ if (typeof window !== 'undefined' && !window.hasOwnProperty('DEBUG_NMR')) {
 /* ===========================
    CSV parsing + petits helpers
    =========================== */
-
-function parseCSVSmart(text) {
-  if (!text || typeof text !== "string") {
-    return { headers: [], data: [] };
-  }
-  const first = text.split(/\r?\n/).slice(0, 5).join("\n");
-  const cand = [";", ",", "\t"];
-  let best = ";";
-  let bestCount = -1;
-
-  for (const d of cand) {
-    const counts = first
-      .split(/\r?\n/)
-      .map(l => (l.match(new RegExp(`\\${d}`, "g")) || []).length);
-    const cnt = Math.max(...counts, 0);
-    if (cnt > bestCount) {
-      best = d;
-      bestCount = cnt;
-    }
-  }
-
-  const rows = [];
-  let cur = [];
-  let val = "";
-  let inQuotes = false;
-
-  const pushVal = () => {
-    if (val && val.charCodeAt(0) === 0xfeff) val = val.slice(1);
-    cur.push(val);
-    val = "";
-  };
-  const pushRow = () => { rows.push(cur); cur = []; };
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') { val += '"'; i++; }
-        else inQuotes = false;
-      } else {
-        val += ch;
-      }
-      continue;
-    }
-    if (ch === '"') inQuotes = true;
-    else if (ch === best) pushVal();
-    else if (ch === "\n") { pushVal(); pushRow(); }
-    else if (ch !== "\r") val += ch;
-  }
-  if (val.length > 0 || cur.length > 0) {
-    pushVal();
-    pushRow();
-  }
-  if (rows.length === 0) return { headers: [], data: [] };
-
-  const headers = rows[0].map(h => (h || "").trim());
-  const data = rows
-    .slice(1)
-    .filter(r => r.some(x => (x || "").trim() !== ""))
-    .map(r => {
-      const o = {};
-      headers.forEach((h, i) => { o[h] = (r[i] ?? "").trim(); });
-      return o;
-    });
-
-  return { headers, data };
-}
-
-
-/* ===========================
-   Graph helpers (bonds)
-   =========================== */
-
-function findBondsInPath(molblock, atomPairs) {
-  if (!molblock || !atomPairs.length) return [];
-  const lines = molblock.split(/\r?\n/);
-  const counts = lines[3] || "";
-  const nAtoms = parseInt(counts.slice(0, 3).trim(), 10);
-  const nBonds = parseInt(counts.slice(3, 6).trim(), 10);
-
-  const adjacency = new Map();
-  for (let i = 0; i < nAtoms; i++) adjacency.set(i, []);
-
-  for (let i = 0; i < nBonds; i++) {
-    const l = lines[4 + nAtoms + i] || "";
-    const a1 = parseInt(l.slice(0, 3).trim(), 10) - 1;
-    const a2 = parseInt(l.slice(3, 6).trim(), 10) - 1;
-    if (a1 >= 0 && a2 >= 0 && a1 < nAtoms && a2 < nAtoms) {
-      adjacency.get(a1).push({ neighbor: a2, bondIndex: i });
-      adjacency.get(a2).push({ neighbor: a1, bondIndex: i });
-    }
-  }
-
-  const findShortestPath = (start, end) => {
-    if (start === end) return [];
-    const q = [{ atom: start, path: [] }];
-    const seen = new Set([start]);
-    while (q.length > 0) {
-      const { atom, path } = q.shift();
-      for (const { neighbor, bondIndex } of adjacency.get(atom) || []) {
-        if (neighbor === end) return [...path, bondIndex];
-        if (!seen.has(neighbor) && path.length < 4) {
-          seen.add(neighbor);
-          q.push({ atom: neighbor, path: [...path, bondIndex] });
-        }
-      }
-    }
-    return [];
-  };
-
-  const hi = new Set();
-  for (const [a, b] of atomPairs) {
-    const p = findShortestPath(a, b);
-    p.forEach(idx => hi.add(idx));
-  }
-  return Array.from(hi);
-}
 
 
 
@@ -466,63 +355,182 @@ function MoleculePane({
     const cIdx   = atoms.map((s,i)=>s==="C"?i:-1).filter(i=>i>=0);
 
     const sets   = { H1:new Set(), C13:new Set(), COSY:new Set(), HSQC:new Set() };
+    const cosyDiagonalProtons = new Set();  // Protons avec match diagonal COSY
+    const cosyDiagonalCarbons = new Set();  // Carbones parents des protons diagonaux COSY
+    const cosyCrosspeakCarbons = new Set(); // Carbones parents des protons cross-peak COSY
     let bondsCOSY = [];
+    let bondsCOSYDiagonal = [];  // Liaisons C-H des matchs diagonaux COSY
     let bondsHSQC = [];
 
-    // 1H
-    if (flags.H1 && rowsByType["1H"]) {
-      const m = (rowsByType["1H"].ppm_molecule_matched||"")
-        .split("|").map(v=>parseFloat(String(v).replace(",","."))).filter(Number.isFinite);
-      const r = new Set(m.map(v=>Math.round(v*1000)/1000));
-      for (const ppm of r) for (const i of hIdx)
-        if (i<=maxIdx && (Math.round(shifts[i]*1000)/1000)===ppm) sets.H1.add(i);
-    }
+    // Helper: round to 3 decimals for exact matching
+    const r3 = v => Math.round(v * 1000) / 1000;
     
-    // 13C
-    if (flags.C13 && rowsByType["13C"]) {
-      const m = (rowsByType["13C"].ppm_molecule_matched||"")
-        .split("|").map(v=>parseFloat(String(v).replace(",","."))).filter(Number.isFinite);
-      const r = new Set(m.map(v=>Math.round(v*1000)/1000));
-      for (const ppm of r) for (const i of cIdx)
-        if (i<=maxIdx && (Math.round(shifts[i]*1000)/1000)===ppm) sets.C13.add(i);
-    }
-    
-    // COSY (chemins min)
-    if (flags.COSY && rowsByType["COSY"]) {
-      const pairs = (rowsByType["COSY"].ppm_molecule_matched||"")
-        .split("||").map(p=>p.split("|")).filter(a=>a.length===2)
-        .map(([f1,f2])=>[+String(f1).replace(",","."),+String(f2).replace(",","." )])
-        .filter(([a,b])=>Number.isFinite(a)&&Number.isFinite(b));
-      const matched = [];
-      for (const [d1,d2] of pairs) {
-        const r1=Math.round(d1*1000)/1000, r2=Math.round(d2*1000)/1000;
-        const a1=[], a2=[];
-        for (const i of hIdx) if (i<=maxIdx&&(Math.round(shifts[i]*1000)/1000)===r1) a1.push(i);
-        for (const i of hIdx) if (i<=maxIdx&&(Math.round(shifts[i]*1000)/1000)===r2) a2.push(i);
-        for (const x of a1) for (const y of a2) if (x!==y) matched.push([x,y]);
+    // Helper: trouver le carbone parent d'un proton dans le molblock
+    const findCarbonParent = (hIdx) => {
+      const lines = resolved.molblock.split(/\r?\n/);
+      const counts = lines[3] || "";
+      const nAtoms = parseInt(counts.slice(0,3).trim(),10);
+      const nBonds = parseInt(counts.slice(3,6).trim(),10);
+      
+      for (let bi=0; bi<nBonds; bi++) {
+        const l = lines[4+nAtoms+bi] || "";
+        const a1 = parseInt(l.slice(0,3).trim(),10)-1;
+        const a2 = parseInt(l.slice(3,6).trim(),10)-1;
+        if (a1 === hIdx || a2 === hIdx) {
+          const other = a1 === hIdx ? a2 : a1;
+          // Vérifier si l'autre atome est un carbone
+          const atomLine = lines[4+other] || "";
+          const symbol = atomLine.slice(31,34).trim();
+          if (symbol === "C") {
+            return other;
+          }
+        }
       }
-      if (matched.length) {
-        bondsCOSY = findBondsInPath(resolved.molblock, matched);
-        const lines = resolved.molblock.split(/\r?\n/);
-        const nAtoms = parseInt((lines[3]||"").slice(0,3).trim(),10);
-        for (const b of bondsCOSY) {
-          const l = lines[4+nAtoms+b]||"";
-          const a1 = parseInt(l.slice(0,3).trim(),10)-1;
-          const a2 = parseInt(l.slice(3,6).trim(),10)-1;
-          if (a1>=0) sets.COSY.add(a1);
-          if (a2>=0) sets.COSY.add(a2);
+      return -1;
+    };
+
+    // 1H - Try matched_atom_indices first
+    if (flags.H1 && rowsByType["1H"]) {
+      const atomIndicesStr = rowsByType["1H"].matched_atom_indices || "";
+      if (atomIndicesStr) {
+        // Format: "idx1|idx2|idx3|..." where indices are separated by pipes
+        const parts = atomIndicesStr.split("|").filter(Boolean);
+        for (const part of parts) {
+          const indices = [parseInt(part, 10)].filter(Number.isFinite);
+          for (const idx of indices) if (idx >= 0) sets.H1.add(idx);
+        }
+      } else {
+        // Fallback: match by shift
+        const m = (rowsByType["1H"].ppm_molecule_matched||"")
+          .split("|").map(v=>parseFloat(String(v).replace(",","."))).filter(Number.isFinite);
+        const r = new Set(m.map(r3));
+        for (const ppm of r) for (const i of hIdx)
+          if (i<=maxIdx && r3(shifts[i])===ppm) sets.H1.add(i);
+      }
+    }
+    
+    // 13C - Try matched_atom_indices first
+    if (flags.C13 && rowsByType["13C"]) {
+      const atomIndicesStr = rowsByType["13C"].matched_atom_indices || "";
+      if (atomIndicesStr) {
+        // Format: "idx1~idx2|idx3~idx4|..." where ~ separates equivalent carbons, | separates groups
+        const parts = atomIndicesStr.split("|").filter(Boolean);
+        for (const part of parts) {
+          // Parse tilde-separated indices for equivalent carbons
+          const indices = part.split("~").map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
+          for (const idx of indices) if (idx >= 0) sets.C13.add(idx);
+        }
+      } else {
+        // Fallback: match by shift
+        const m = (rowsByType["13C"].ppm_molecule_matched||"")
+          .split("|").map(v=>parseFloat(String(v).replace(",","."))).filter(Number.isFinite);
+        const r = new Set(m.map(r3));
+        for (const ppm of r) for (const i of cIdx)
+          if (i<=maxIdx && r3(shifts[i])===ppm) sets.C13.add(i);
+      }
+    }
+    
+    // COSY - Try matched_atom_indices first
+    if (flags.COSY && rowsByType["COSY"]) {
+      const atomIndicesStr = rowsByType["COSY"].matched_atom_indices || "";
+      const lines = resolved.molblock.split(/\r?\n/);
+      const nAtoms = parseInt((lines[3]||"").slice(0,3).trim(),10);
+
+      if (atomIndicesStr) {
+        // Format: "H1_all:H2_all||..." where H1_all/H2_all can be "34" or "34~35~36" for equivalent protons
+        const entries = atomIndicesStr.split("||").filter(Boolean);
+        const matchedNormal = [];
+        const matchedDiagonal = [];
+        for (const entry of entries) {
+          const [h1Str, h2Str] = entry.split(":");
+          if (!h1Str || !h2Str) continue;
+          
+          // Parse tilde-separated indices for equivalent protons (using ~ to avoid all conflicts)
+          const h1List = h1Str.split("~").map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
+          const h2List = h2Str.split("~").map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
+          
+          if (h1List.length === 0 || h2List.length === 0) continue;
+          
+          // Check if diagonal (all H1 same as all H2, or same group)
+          const isDiagonal = (h1List.length === h2List.length && 
+                            h1List.every((h, i) => h === h2List[i])) ||
+                            (h1List.length === 1 && h2List.length === 1 && h1List[0] === h2List[0]);
+          
+          if (isDiagonal) {
+            // Diagonal: ALL protons appear on the COSY diagonal (CH, CH2, CH3, aromatics...)
+            // This is the echo of the 1D 1H spectrum - every proton should be colored
+            for (const h of h1List) {
+              if (h >= 0) {
+                cosyDiagonalProtons.add(h);
+                const carbonIdx = findCarbonParent(h);
+                if (carbonIdx >= 0) {
+                  cosyDiagonalCarbons.add(carbonIdx);
+                }
+              }
+            }
+            // Use first pair for path finding
+            matchedDiagonal.push([h1List[0], h2List[0]]);
+          } else {
+            // Normal correlation (cross-peak): add all protons to COSY set
+            // Also add their parent carbons for full stick coloring
+            for (const h of h1List) {
+              if (h >= 0) {
+                sets.COSY.add(h);
+                // Add parent carbon for full C-H stick coloring
+                const carbonIdx = findCarbonParent(h);
+                if (carbonIdx >= 0) {
+                  cosyCrosspeakCarbons.add(carbonIdx);
+                }
+              }
+            }
+            for (const h of h2List) {
+              if (h >= 0) {
+                sets.COSY.add(h);
+                // Add parent carbon for full C-H stick coloring
+                const carbonIdx = findCarbonParent(h);
+                if (carbonIdx >= 0) {
+                  cosyCrosspeakCarbons.add(carbonIdx);
+                }
+              }
+            }
+            // Use first pair for path finding (or could expand to all combinations)
+            matchedNormal.push([h1List[0], h2List[0]]);
+          }
+        }
+        if (matchedNormal.length) {
+          bondsCOSY = findBondsInPath(resolved.molblock, matchedNormal);
+        }
+        if (matchedDiagonal.length) {
+          // Pour les diagonaux, on obtient les liaisons C-H séparément
+          bondsCOSYDiagonal = findBondsInPath(resolved.molblock, matchedDiagonal);
+        }
+      } else {
+        // Fallback: match by shift
+        const pairs = (rowsByType["COSY"].ppm_molecule_matched||"")
+          .split("||").map(p=>p.split("|")).filter(a=>a.length===2)
+          .map(([f1,f2])=>[+String(f1).replace(",","."),+String(f2).replace(",","." )])
+          .filter(([a,b])=>Number.isFinite(a)&&Number.isFinite(b));
+        const matched = [];
+        for (const [d1,d2] of pairs) {
+          const r1=r3(d1), r2=r3(d2);
+          const a1=[], a2=[];
+          for (const i of hIdx) if (i<=maxIdx && r3(shifts[i])===r1) a1.push(i);
+          for (const i of hIdx) if (i<=maxIdx && r3(shifts[i])===r2) a2.push(i);
+          for (const x of a1) for (const y of a2) {
+            matched.push([x,y]);
+            // Ajouter les protons au set COSY pour coloration
+            sets.COSY.add(x);
+            sets.COSY.add(y);
+          }
+        }
+        if (matched.length) {
+          bondsCOSY = findBondsInPath(resolved.molblock, matched);
         }
       }
     }
     
     // HSQC (liaison directe C–H)
     if (flags.HSQC && rowsByType["HSQC"]) {
-      const pairs = (rowsByType["HSQC"].ppm_molecule_matched_unfolded ||
-                     rowsByType["HSQC"].ppm_molecule_matched || "")
-        .split("||").map(p=>p.split("|")).filter(a=>a.length===2)
-        .map(([c,h])=>[+String(c).replace(",","."), +String(h).replace(",","." )])
-        .filter(([c,h])=>Number.isFinite(c)&&Number.isFinite(h));
-
       const lines = resolved.molblock.split(/\r?\n/);
       const counts = lines[3] || "";
       const nAtoms = parseInt(counts.slice(0,3).trim(),10);
@@ -538,31 +546,63 @@ function MoleculePane({
         }
       }
 
-      for (const [cppm,hppm] of pairs) {
-        const rc = Math.round(cppm*1000)/1000;
-        const rh = Math.round(hppm*1000)/1000;
-
-        const cCandidates = [];
-        const hCandidates = [];
-
-        for (const ci of cIdx)
-          if (ci<=maxIdx && (Math.round(shifts[ci]*1000)/1000)===rc) cCandidates.push(ci);
-
-        for (const hi of hIdx)
-          if (hi<=maxIdx && (Math.round(shifts[hi]*1000)/1000)===rh) {
-            hCandidates.push(hi);
-            sets.HSQC.add(hi);
+      // Try matched_atom_indices first (format: "C_idx~C_idx:H_idx1|H_idx2||..." for equivalent atoms)
+      const atomIndicesStr = rowsByType["HSQC"].matched_atom_indices || "";
+      if (atomIndicesStr) {
+        const entries = atomIndicesStr.split("||").filter(Boolean);
+        for (const entry of entries) {
+          const [cPart, hPart] = entry.split(":");
+          // Support multiple equivalent carbons separated by ~ 
+          const cIndices = (cPart || "").split("~").map(s => parseInt(s, 10)).filter(Number.isFinite);
+          const hIndices = (hPart || "").split("|").map(s => parseInt(s, 10)).filter(Number.isFinite);
+          // Add all C-H pairs for equivalent atoms
+          for (const ci of cIndices) {
+            if (ci < 0) continue;
+            // Don't add carbon to HSQC set - only color proton stick, not carbon sphere/stick
+            for (const hi of hIndices) {
+              if (hi >= 0) {
+                sets.HSQC.add(hi);  // Only color the proton
+                const key = `${Math.min(ci,hi)}-${Math.max(ci,hi)}`;
+                const b = bondMap.get(key);
+                if (b != null) bondsHSQC.push(b);
+              }
+            }
           }
+        }
+      } else {
+        // Fallback: match by shift values
+        const pairs = (rowsByType["HSQC"].ppm_molecule_matched_unfolded ||
+                       rowsByType["HSQC"].ppm_molecule_matched || "")
+          .split("||").map(p=>p.split("|")).filter(a=>a.length===2)
+          .map(([c,h])=>[+String(c).replace(",","."), +String(h).replace(",","." )])
+          .filter(([c,h])=>Number.isFinite(c)&&Number.isFinite(h));
 
-        for (const ci of cCandidates) for (const hi of hCandidates) {
-          const key = `${Math.min(ci,hi)}-${Math.max(ci,hi)}`;
-          const b = bondMap.get(key);
-          if (b!=null) bondsHSQC.push(b);
+        for (const [cppm,hppm] of pairs) {
+          const rc = r3(cppm);
+          const rh = r3(hppm);
+
+          const cCandidates = [];
+          const hCandidates = [];
+
+          for (const ci of cIdx)
+            if (ci<=maxIdx && r3(shifts[ci])===rc) cCandidates.push(ci);
+
+          for (const hi of hIdx)
+            if (hi<=maxIdx && r3(shifts[hi])===rh) {
+              hCandidates.push(hi);
+              sets.HSQC.add(hi);
+            }
+
+          for (const ci of cCandidates) for (const hi of hCandidates) {
+            const key = `${Math.min(ci,hi)}-${Math.max(ci,hi)}`;
+            const b = bondMap.get(key);
+            if (b!=null) bondsHSQC.push(b);
+          }
         }
       }
     }
     
-    return { highlightByType: sets, bondsCOSY, bondsHSQC };
+    return { highlightByType: sets, bondsCOSY, bondsCOSYDiagonal, bondsHSQC, cosyDiagonalProtons, cosyDiagonalCarbons, cosyCrosspeakCarbons };
   }, [flags]);
   // ---------------------------------------------------------------------------
 
@@ -570,8 +610,9 @@ function MoleculePane({
     setLoading(true);
     try {
       const RDKit = await loadRDKitFromCDN();
+
+      // Utiliser le molblock original avec H - les indices matched_atom_indices du backend sont H-inclusifs
       const mol = RDKit.get_mol(resolved.molblock);
-      try { mol.generate_aligned_coords(); } catch { try { mol.set_new_coords(); } catch {} }
 
       let highlightAtoms=[], atomColorsMap={}, highlightBonds=[], bondColorsMap={};
 
@@ -579,40 +620,59 @@ function MoleculePane({
         const { highlightByType, bondsCOSY, bondsHSQC } =
           computeMultiHighlights(resolved, multi.rowsByType);
 
-        // Atom colors (priority HSQC > COSY > H1 for H atoms)
-        if (flags.C13)
-          for (const i of highlightByType.C13)
-            atomColorsMap[String(i)] = COLORS_RDK.C13;
-
-        const h1List = Array.from(highlightByType.H1);
         const cosySet = highlightByType.COSY;
         const hsqcSet = highlightByType.HSQC;
 
-        for (const i of h1List) {
-          if (flags.HSQC && hsqcSet.has(i))      atomColorsMap[String(i)] = COLORS_RDK.HSQC;
-          else if (flags.COSY && cosySet.has(i)) atomColorsMap[String(i)] = COLORS_RDK.COSY;
-          else if (flags.H1)                     atomColorsMap[String(i)] = COLORS_RDK.H1;
+        // Les indices sont directs - pas besoin de remapping
+        if (flags.C13)
+          for (const i of highlightByType.C13)
+            atomColorsMap[String(i)] = COLORS_RDK.C13;
+        if (flags.H1)
+          for (const i of highlightByType.H1)
+            atomColorsMap[String(i)] = COLORS_RDK.H1;
+        if (flags.HSQC)
+          for (const i of hsqcSet)
+            atomColorsMap[String(i)] = COLORS_RDK.HSQC;
+        if (flags.COSY)
+          for (const i of cosySet)
+            atomColorsMap[String(i)] = COLORS_RDK.COSY;
+
+        highlightAtoms = Array.from(new Set(Object.keys(atomColorsMap).map(Number)));
+
+        // Union de tous les atomes matchés avec leur couleur prioritaire
+        const atomPriorityColor = {};
+        const priority = [COLORS_RDK.COSY, COLORS_RDK.HSQC, COLORS_RDK.H1, COLORS_RDK.C13];
+        for (const [idxStr, color] of Object.entries(atomColorsMap)) {
+          const idx = Number(idxStr);
+          if (!atomPriorityColor[idx] ||
+              priority.indexOf(color) < priority.indexOf(atomPriorityColor[idx])) {
+            atomPriorityColor[idx] = color;
+          }
+        }
+        const allMatched = new Set(Object.keys(atomPriorityColor).map(Number));
+
+        // Colorer les liaisons directes entre atomes matchés (molblock original avec H)
+        const origLines = resolved.molblock.split(/\r?\n/);
+        const nAtO = parseInt((origLines[3]||'').slice(0,3).trim(), 10) || 0;
+        const nBdO = parseInt((origLines[3]||'').slice(3,6).trim(), 10) || 0;
+        for (let bi = 0; bi < nBdO; bi++) {
+          const l = origLines[4 + nAtO + bi] || '';
+          const a1 = parseInt(l.slice(0,3).trim(), 10) - 1;
+          const a2 = parseInt(l.slice(3,6).trim(), 10) - 1;
+          if (allMatched.has(a1) && allMatched.has(a2)) {
+            highlightBonds.push(bi);
+            const c1 = atomPriorityColor[a1];
+            const c2 = atomPriorityColor[a2];
+            const chosen = priority.find(p => p === c1 || p === c2) || c1 || c2;
+            bondColorsMap[String(bi)] = chosen;
+          }
         }
 
-        // Atoms to highlight
-        const all = new Set([
-          ...(flags.H1   ? Array.from(highlightByType.H1)   : []),
-          ...(flags.C13  ? Array.from(highlightByType.C13)  : []),
-          ...(flags.COSY ? Array.from(highlightByType.COSY) : []),
-          ...(flags.HSQC ? Array.from(highlightByType.HSQC) : []),
-        ]);
-        highlightAtoms = Array.from(all);
+        if (flags.HSQC)
+          for (const b of bondsHSQC) { highlightBonds.push(b); bondColorsMap[String(b)] = COLORS_RDK.HSQC; }
+        if (flags.COSY)
+          for (const b of bondsCOSY) { highlightBonds.push(b); bondColorsMap[String(b)] = COLORS_RDK.COSY; }
 
-        // Liaisons (COSY chemins + HSQC liaison directe C–H)
-        if (flags.COSY) {
-          highlightBonds.push(...bondsCOSY);
-          for (const b of bondsCOSY) bondColorsMap[String(b)] = COLORS_RDK.COSY;
-        }
-        if (flags.HSQC) {
-          highlightBonds.push(...bondsHSQC);
-          for (const b of bondsHSQC) bondColorsMap[String(b)] = COLORS_RDK.HSQC;
-        }
-        // Deduplication
         highlightBonds = Array.from(new Set(highlightBonds));
       }
 
@@ -621,8 +681,13 @@ function MoleculePane({
       const pad = Math.max(0.04, 0.24 / Math.max(1, molZoom));
 
       const opts = {
-        width: sizePx, height: sizePx, useMolBlockCoords: false,
-        padding: pad, bondLineWidth: 1.4, atomLabelFontSize: 10, annotationFontScale: .9,
+        width: sizePx, height: sizePx,
+        useMolBlockCoords: false,
+        padding: pad, bondLineWidth: 1.5, atomLabelFontSize: 11,
+        addStereoAnnotation: false,
+        explicitMethyl: false,
+        annotationFontScale: 0.9,
+        backgroundColour: [1, 1, 1, 1],
       };
 
       let svgStr;
@@ -633,11 +698,9 @@ function MoleculePane({
           highlight_atom_colors: atomColorsMap,
           bonds: highlightBonds,
           highlight_bond_colors: bondColorsMap,
-          highlightRadius: 0.35,
-          explicitMethyl: true,
-          addStereoAnnotation: true,
+          highlightRadius: 0.2,
           atomHighlightsAreCircles: true,
-          highlightBondWidthMultiplier: 1.5,
+          highlightBondWidthMultiplier: 8,
         }));
       } catch {
         svgStr = mol.get_svg(JSON.stringify(opts));
@@ -719,83 +782,131 @@ function MoleculePane({
         throw new Error("Failed to load 3D model");
       }
       
-      model.setStyle({}, { 
-        stick:{radius:0.15,color:"#808080"}, 
-        sphere:{scale:0.2,color:"#808080"} 
+      model.setStyle({}, {
+        stick:{radius:0.15,color:"#808080"},
+        sphere:{scale:0.2,color:"#808080"}
       });
 
       if (multi?.fromAll && multi?.rowsByType) {
-        const { highlightByType } = computeMultiHighlights(resolved, multi.rowsByType);
+        const { highlightByType, cosyDiagonalCarbons: diagCarbons, cosyDiagonalProtons: diagProtons, cosyCrosspeakCarbons: crossCarbons } = computeMultiHighlights(resolved, multi.rowsByType);
         const CAtoms = flags.C13 ? Array.from(highlightByType.C13) : [];
         const cosySet = flags.COSY ? new Set(highlightByType.COSY) : new Set();
         const hsqcSet = flags.HSQC ? new Set(highlightByType.HSQC) : new Set();
         const h1List  = flags.H1   ? Array.from(highlightByType.H1)  : [];
+        
+        // Carbones parents des protons diagonaux COSY
+        const cosyDiagonalCarbons = flags.COSY ? diagCarbons : new Set();
+        // Protons diagonaux COSY (pour colorier leur stick en COSY)
+        const cosyDiagonalProtons = flags.COSY ? diagProtons : new Set();
+        // Carbones parents des protons cross-peak COSY (pour colorier leur stick C-H)
+        const cosyCrosspeakCarbons = flags.COSY ? crossCarbons : new Set();
 
-        // [FIX] Colorier les atomes C13
-        for (const i of CAtoms) {
-          if (typeof i === 'number' && i >= 0) {
-            try {
+        // ========== PRIORITÉS DE COLORATION ==========
+        // Sphère: H1 (vert) > HSQC (rouge) > C13 (bleu) > COSY (jaune)
+        // Stick: COSY (jaune) pour les liaisons COSY, sinon couleur de la sphère
+        // ===============================================
+
+        // Créer des Sets pour vérification rapide
+        const c13Set = new Set(CAtoms);
+        const h1Set = new Set(h1List);
+
+        // Collecter tous les atomes à colorier
+        const allAtoms = new Set([
+          ...CAtoms,
+          ...cosySet,
+          ...hsqcSet,
+          ...h1List,
+          ...cosyDiagonalCarbons,
+          ...cosyDiagonalProtons,
+          ...cosyCrosspeakCarbons  // Carbones parents des protons cross-peak
+        ]);
+
+        // Appliquer le style pour chaque atome avec la bonne priorité
+        for (const i of allAtoms) {
+          if (typeof i !== 'number' || i < 0) continue;
+          
+          const inCOSY = cosySet.has(i);  // Cross-peak COSY (hors-diagonale) - protons
+          const inCOSYCrossC = cosyCrosspeakCarbons.has(i);  // Carbone parent d'un proton cross-peak
+          const inCOSYDiagC = cosyDiagonalCarbons.has(i);  // Carbone parent d'un proton diagonal
+          const inCOSYDiagH = cosyDiagonalProtons.has(i);  // Proton sur la diagonale
+          const inC13 = c13Set.has(i);
+          // HSQC: vérifier si dans hsqcSet (pas besoin de flags.HSQC car déjà filtré à la création du set)
+          const inHSQC = hsqcSet.has(i);
+          const inH1 = h1Set.has(i);
+          const inAnyCOSY = inCOSY || inCOSYCrossC || inCOSYDiagC || inCOSYDiagH;
+          
+          // Déterminer si c'est un hydrogène COSY (dans COSY protons ou diagonal protons)
+          const isHydrogenCOSY = inCOSYDiagH || (inCOSY && !inC13 && !inCOSYDiagC);
+          // Carbone COSY cross-peak: sphère SI cross-peak (priorité sur diagonal)
+          // Si un carbone est à la fois diagonal ET cross-peak, on privilégie cross-peak → sphère
+          const isCarbonCOSYCross = inCOSYCrossC;  // Cross-peak prioritaire!
+          // Carbone UNIQUEMENT diagonal (pas cross-peak): pas de sphère
+          const isCarbonCOSYDiagOnly = inCOSYDiagC && !inCOSYCrossC;
+
+          // Déterminer la couleur de la SPHÈRE (priorité: H1 > HSQC > C13 > COSY carbone cross-peak)
+          // Pour COSY diagonal UNIQUEMENT: pas de sphère sur le carbone, seulement stick C-H
+          let sphereColor = null, sphereRadius = 0;
+          if (inH1) {
+            sphereColor = COLORS_3D.H1;
+            sphereRadius = 0.35;
+          } else if (inHSQC) {
+            // HSQC prioritaire sur COSY pour les sphères
+            sphereColor = COLORS_3D.HSQC;
+            sphereRadius = 0.35;
+          } else if (inC13) {
+            sphereColor = COLORS_3D.C13;
+            sphereRadius = 0.4;
+          } else if (isCarbonCOSYCross) {
+            // Sphère COSY pour cross-peak (priorité sur diagonal)
+            sphereColor = COLORS_3D.COSY;
+            sphereRadius = 0.4;
+          } else if (isCarbonCOSYDiagOnly) {
+            // Carbone UNIQUEMENT diagonal COSY: PAS de sphère, seulement stick C-H
+            sphereColor = null;
+            sphereRadius = 0;
+          } else if (inAnyCOSY && isHydrogenCOSY) {
+            // Hydrogène COSY: pas de sphère, seulement stick (on continue pour appliquer le stick)
+            sphereColor = null;
+            sphereRadius = 0;
+          } else {
+            continue; // Pas dans aucune liste, skip
+          }
+
+          // Déterminer la couleur du STICK (priorité: HSQC rouge > COSY jaune > gris)
+          // Pour COSY: colorer le stick des protons ET de leurs carbones parents
+          // Cela permet d'avoir la barre C-H complètement colorée (pas à moitié)
+          let stickColor, stickRadius;
+          if (inHSQC) {
+            // HSQC prioritaire sur COSY pour le stick aussi
+            stickColor = COLORS_3D.HSQC;
+            stickRadius = 0.2;
+          } else if (inCOSY || inCOSYCrossC) {
+            // Cross-peaks COSY: colorer les sticks des protons ET de leurs carbones parents
+            stickColor = COLORS_3D.COSY;
+            stickRadius = 0.25;
+          } else if (inCOSYDiagH || inCOSYDiagC) {
+            // Diagonal COSY: colorer le stick du proton ET du carbone parent
+            stickColor = COLORS_3D.COSY;
+            stickRadius = 0.2;
+          } else {
+            stickColor = "#808080";
+            stickRadius = 0.15;
+          }
+
+          try {
+            // Si pas de sphère (hydrogène COSY), appliquer seulement le stick
+            if (sphereColor === null) {
               model.setStyle({ index:i }, { 
-                stick:{radius:0.15,color:"#808080"}, 
-                sphere:{radius:0.4,color:COLORS_3D.C13} 
-              });
-            } catch (e) {
-              debugWarn(`[WARN] C13 setStyle error for atom ${i}:`, e.message);
-            }
-          }
-        }
-
-        // [FIX] Colorier les atomes COSY
-        if (flags.COSY) {
-          for (const i of cosySet) {
-            if (typeof i === 'number' && i >= 0) {
-              try {
-                model.setStyle({ index:i }, { 
-                  stick:{radius:0.25,color:COLORS_3D.COSY}, 
-                  sphere:{radius:0.4,color:CAtoms.includes(i)?COLORS_3D.C13:"#808080"} 
-                });
-              } catch (e) {
-                debugWarn(`[WARN] COSY setStyle error for atom ${i}:`, e.message);
-              }
-            }
-          }
-        }
-
-        // [FIX] Colorier les atomes HSQC
-        if (flags.HSQC) {
-          for (const i of hsqcSet) {
-            if (typeof i === 'number' && i >= 0) {
-              try {
-                model.setStyle({ index:i }, { 
-                  stick:{radius:0.2,color:COLORS_3D.HSQC}, 
-                  sphere:{radius:0.35,color:COLORS_3D.HSQC} 
-                });
-              } catch (e) {
-                debugWarn(`[WARN] HSQC setStyle error for atom ${i}:`, e.message);
-              }
-            }
-          }
-        }
-
-        // [FIX] Colorier les atomes H1
-        for (const i of h1List) {
-          if (typeof i === 'number' && i >= 0) {
-            let stickColor="#808080", stickRadius=0.15;
-            if (flags.HSQC && hsqcSet.has(i)) { 
-              stickColor=COLORS_3D.HSQC; 
-              stickRadius=0.2; 
-            } else if (flags.COSY && cosySet.has(i)) { 
-              stickColor=COLORS_3D.COSY; 
-              stickRadius=0.25; 
-            }
-            try {
-              model.setStyle({ index:i }, { 
-                sphere:{radius:0.3,color:COLORS_3D.H1}, 
                 stick:{radius:stickRadius,color:stickColor} 
               });
-            } catch (e) {
-              debugWarn(`[WARN] H1 setStyle error for atom ${i}:`, e.message);
+            } else {
+              model.setStyle({ index:i }, { 
+                sphere:{radius:sphereRadius,color:sphereColor}, 
+                stick:{radius:stickRadius,color:stickColor} 
+              });
             }
+          } catch (e) {
+            debugWarn(`[WARN] setStyle error for atom ${i}:`, e.message);
           }
         }
       }
@@ -824,7 +935,7 @@ function MoleculePane({
             position: { x: a.x, y: a.y, z: a.z },
             alignment: "center",
             showBackground: false,
-            fontSize: 16,
+            fontSize: 22,
             fontFamily: "sans-serif",
             fontColor: "white",
             inFront: true,
@@ -890,7 +1001,7 @@ function MoleculePane({
   }
 
   return (
-    <div style={{ border:"1px solid #e5e7eb", borderRadius:8, background:"#fff", overflow:"hidden", padding:8 }}>
+    <div style={{ border:"1px solid #e5e7eb", borderRadius:8, background:"#fff", overflow:"visible", padding:8 }}>
       <div style={{ display:"grid", gridTemplateColumns: show3D?"1fr 1fr":"1fr", gap:12, height: molHeight }}>
         {/* 2D */}
         <div style={{ border:"1px solid #e5e7eb", borderRadius:8, background:"#fff", overflow:"hidden", position:"relative" }}>
@@ -995,10 +1106,16 @@ function MoleculePane({
    Metrics from a CSV row
    =========================== */
 
-const extractMetricsFromRow = (row) => {
+const extractMetricsFromRow = (row, specType = null) => {
   if (!row) return {};
   const metrics = {};
-  if (row.coverage_ransy !== undefined && row.coverage_ransy !== "") {
+  // Pour 1H et 13C: utiliser ransy_score au lieu de coverage_ransy
+  // Pour COSY et HSQC: garder coverage_ransy
+  const use1D = specType === "1H" || specType === "13C";
+  if (use1D && row.ransy_score !== undefined && row.ransy_score !== "") {
+    const v = Number(row.ransy_score || 0).toFixed(1);
+    metrics.ransy_score = v;
+  } else if (row.coverage_ransy !== undefined && row.coverage_ransy !== "") {
     const v = Number(row.coverage_ransy || 0).toFixed(2) + "%";
     metrics.coverage_ransy = v;
   }
@@ -1013,13 +1130,19 @@ const extractMetricsFromRow = (row) => {
 };
 
 /* ===========================
-    MODAL — All molecules (visual grid)
+    MODAL - All molecules (visual grid)
    =========================== */
+
+function stripMethodPrefix(name) {
+  if (!name) return name;
+  return String(name).replace(/^(?:1H|13C|COSY|HSQC)[\s_\-:]+/i, "");
+}
 
 function ShowAllMoleculesModal({
   isOpen,
   onClose,
   sources = [],
+  sourcesWithScore = [],
   page = 1,
   setPage,
   pageSize = 20,
@@ -1029,17 +1152,217 @@ function ShowAllMoleculesModal({
   taskId,
   customColors,
 }) {
-  const stripMethodPrefix = (name) => {
-    if (!name) return name;
-    // Ex: "1H_MOL", "13C - MOL", "COSY: MOL", "HSQC MOL"
-    return String(name).replace(/^(?:1H|13C|COSY|HSQC)[\s_\-:]+/i, "");
-  };
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const [showPdfOptions, setShowPdfOptions] = useState(false);
+  const [pdfCount, setPdfCount] = useState(50);
+  const [maximized, setMaximized] = useState(false);
+  const gridRef = useRef(null);
+
 
   const totalPages = Math.max(1, Math.ceil(sources.length / pageSize));
   const clampedPage = Math.min(Math.max(1, page), totalPages);
   const start = (clampedPage - 1) * pageSize;
   const end = Math.min(sources.length, start + pageSize);
   const pageSources = sources.slice(start, end);
+
+  const scoreMap = useMemo(() => {
+    const m = new Map();
+    for (const { source, avgCoverage } of sourcesWithScore) {
+      m.set(source, avgCoverage);
+    }
+    return m;
+  }, [sourcesWithScore]);
+
+  const exportPDF = useCallback(async () => {
+    setPdfExporting(true);
+    setPdfProgress(0);
+    setShowPdfOptions(false);
+
+    const savedPage = page; // remember current page to restore later
+
+    try {
+      const toExport = sourcesWithScore.slice(0, pdfCount);
+      const COLS = 5;
+      const ROWS_PER_PAGE = 5;
+      const PER_PAGE = COLS * ROWS_PER_PAGE;
+      const PAGE_W = 210; // A4 mm
+      const PAGE_H = 297;
+      const MARGIN = 6;
+      const GAP = 2; // mm gap between cells
+      const HEADER_H = 12; // mm for page title
+      const NAME_H = 5;  // mm for molecule name above structure
+      const SCORE_H = 8; // mm for score lines below structure
+      const CELL_W = (PAGE_W - MARGIN * 2 - GAP * (COLS - 1)) / COLS;
+      const CELL_H = (PAGE_H - MARGIN * 2 - HEADER_H - GAP * (ROWS_PER_PAGE - 1)) / ROWS_PER_PAGE;
+      const MOL_H = CELL_H - NAME_H - SCORE_H;
+
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+
+      // Title page header
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text("NMRScout - Molecule Report", PAGE_W / 2, MARGIN + 4, { align: "center" });
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(80);
+      doc.text(`${toExport.length} molecules • sorted by RANSY average score`, PAGE_W / 2, MARGIN + 8, { align: "center" });
+      doc.setTextColor(0);
+
+      // Générer les SVGs directement depuis RDKit - pas de capture DOM
+      const RDKit = await loadRDKitFromCDN();
+      const SVG_PX = 400; // taille interne SVG RDKit
+
+      let posInPdfPage = 0;
+
+      for (let globalIdx = 0; globalIdx < toExport.length; globalIdx++) {
+        const { source, avgCoverage } = toExport[globalIdx];
+        const name = stripMethodPrefix(source.replace(/_predicted$/i, ""));
+
+        // Nouvelle page PDF si nécessaire
+        if (posInPdfPage === PER_PAGE) {
+          doc.addPage();
+          posInPdfPage = 0;
+          doc.setFontSize(7);
+          doc.setFont("helvetica", "normal");
+          doc.setTextColor(150);
+          doc.text(`NMRScout - Page ${doc.getNumberOfPages()}`, PAGE_W - MARGIN, MARGIN - 1, { align: "right" });
+          doc.setTextColor(0);
+        }
+
+        const col = posInPdfPage % COLS;
+        const row = Math.floor(posInPdfPage / COLS);
+        const x = MARGIN + col * (CELL_W + GAP);
+        const cellY = MARGIN + HEADER_H + row * (CELL_H + GAP);
+
+        const molY = cellY;
+
+        // Générer SVG depuis RDKit avec highlights
+        try {
+          const resolved = await resolveMolForSource(csvUrl, source, taskId);
+          const molBlock = resolved?.molblock;
+          if (molBlock) {
+            // Utiliser le molblock original avec H - indices matched_atom_indices sont H-inclusifs
+            const rdkMol = RDKit.get_mol(molBlock);
+            if (rdkMol) {
+              const PDF_COLORS = {
+                H1:   customColors.H1.rgb,
+                C13:  customColors.C13.rgb,
+                COSY: customColors.COSY.rgb,
+                HSQC: customColors.HSQC.rgb,
+              };
+              let svgStr;
+              try {
+                const rowsByType = getRowsByType(source);
+
+                // rowsByType keys: "1H", "13C", "COSY", "HSQC"
+                // matched_atom_indices are H-inclusive (backend uses AddHs)
+                const getIndices = (key) => {
+                  const str = rowsByType[key]?.matched_atom_indices || '';
+                  if (!str) return [];
+                  return str.split(/\|\||\|/).filter(Boolean)
+                    .flatMap(p => p.split(':')[0].split('~').map(s => parseInt(s.trim(),10)).filter(Number.isFinite));
+                };
+
+                const atomColors = {};
+                const order = [['13C', PDF_COLORS.C13], ['1H', PDF_COLORS.H1], ['HSQC', PDF_COLORS.HSQC], ['COSY', PDF_COLORS.COSY]];
+                for (const [key, color] of order)
+                  for (const i of getIndices(key)) if (!atomColors[String(i)]) atomColors[String(i)] = color;
+
+                const bondColors = {};
+                const allMatched = new Set(Object.keys(atomColors).map(Number));
+                const origLines = molBlock.split(/\r?\n/);
+                const nAtO = parseInt((origLines[3]||'').slice(0,3).trim(),10)||0;
+                const nBdO = parseInt((origLines[3]||'').slice(3,6).trim(),10)||0;
+                for (let bi=0; bi<nBdO; bi++) {
+                  const l = origLines[4+nAtO+bi]||'';
+                  const a1 = parseInt(l.slice(0,3).trim(),10)-1;
+                  const a2 = parseInt(l.slice(3,6).trim(),10)-1;
+                  if (allMatched.has(a1) && allMatched.has(a2))
+                    bondColors[String(bi)] = atomColors[String(a1)] || atomColors[String(a2)];
+                }
+
+                const highlightAtoms = Object.keys(atomColors).map(Number);
+                const highlightBonds = Object.keys(bondColors).map(Number);
+                svgStr = rdkMol.get_svg_with_highlights(JSON.stringify({
+                  width: SVG_PX, height: SVG_PX,
+                  atoms: highlightAtoms,
+                  highlight_atom_colors: atomColors,
+                  bonds: highlightBonds,
+                  highlight_bond_colors: bondColors,
+                  highlightRadius: 0.2,
+                  atomHighlightsAreCircles: true,
+                  highlightBondWidthMultiplier: 8,
+                }));
+              } catch {
+                svgStr = rdkMol.get_svg(SVG_PX, SVG_PX);
+              }
+              rdkMol.delete();
+
+              // Convertir SVG → PNG via canvas, puis addImage dans jsPDF
+              await new Promise((resolve) => {
+                const img = new Image();
+                const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                img.onload = () => {
+                  const canvas = document.createElement('canvas');
+                  canvas.width = SVG_PX;
+                  canvas.height = SVG_PX;
+                  const ctx = canvas.getContext('2d');
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(0, 0, SVG_PX, SVG_PX);
+                  ctx.drawImage(img, 0, 0, SVG_PX, SVG_PX);
+                  URL.revokeObjectURL(url);
+                  const png = canvas.toDataURL('image/png');
+                  doc.addImage(png, 'PNG', x, molY, CELL_W, MOL_H);
+                  resolve();
+                };
+                img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+                img.src = url;
+              });
+            }
+          }
+        } catch (pdfErr) { console.error('[PDF cell error]', source, pdfErr); }
+
+        // Nom en bas (italic bold)
+        const label = name.length > 20 ? name.slice(0, 19) + "…" : name;
+        const textY = molY + MOL_H;
+        doc.setFontSize(6);
+        doc.setFont("helvetica", "bolditalic");
+        doc.setTextColor(20);
+        doc.text(label, x + CELL_W / 2, textY + 3.5, { align: "center" });
+
+        // Score NMR
+        doc.setFontSize(5.5);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(60);
+        doc.text(`NMR score: ${avgCoverage >= 0 ? avgCoverage.toFixed(0) : "N/A"}`, x + CELL_W / 2, textY + 7, { align: "center" });
+        doc.setTextColor(0);
+
+        posInPdfPage++;
+        setPdfProgress(Math.round(((globalIdx + 1) / toExport.length) * 100));
+      }
+
+      // Page numbers footer
+      const totalPdfPages = doc.getNumberOfPages();
+      for (let p = 1; p <= totalPdfPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(7);
+        doc.setTextColor(150);
+        doc.text(`${p} / ${totalPdfPages}`, PAGE_W / 2, PAGE_H - 4, { align: "center" });
+      }
+
+      doc.save(`NMRScout_molecules_${toExport.length}.pdf`);
+    } catch (e) {
+      console.error("[PDF export error]", e);
+      alert("PDF export failed: " + (e?.message || String(e)));
+    } finally {
+      // Restore original modal page
+      setPage(savedPage);
+      setPdfExporting(false);
+      setPdfProgress(0);
+    }
+  }, [sourcesWithScore, pdfCount, page, setPage, csvUrl, taskId, getRowsByType, customColors]);
 
   if (!isOpen) return null;
 
@@ -1050,8 +1373,16 @@ function ShowAllMoleculesModal({
       onClick={onClose}
     >
       <div
-        style={{ width:"min(1100px, 96vw)", maxHeight:"92vh", background:"#fff", borderRadius:12,
-                 boxShadow:"0 24px 80px rgba(0,0,0,.35)", display:"flex", flexDirection:"column" }}
+        style={{
+          width: maximized ? "100vw" : "min(1100px, 96vw)",
+          maxHeight: maximized ? "100vh" : "92vh",
+          height: maximized ? "100vh" : undefined,
+          background:"#fff",
+          borderRadius: maximized ? 0 : 12,
+          boxShadow: maximized ? "none" : "0 24px 80px rgba(0,0,0,.35)",
+          display:"flex", flexDirection:"column",
+          transition: "all 0.2s ease",
+        }}
         onClick={(e)=>e.stopPropagation()}
       >
         {/* Header */}
@@ -1071,6 +1402,54 @@ function ShowAllMoleculesModal({
                 {[20,30,50].map(n=><option key={n} value={n}>{n}</option>)}
               </select>
             </label>
+
+            {/* PDF Export */}
+            <div style={{ position:"relative" }}>
+              <button
+                onClick={() => setShowPdfOptions(v => !v)}
+                disabled={pdfExporting}
+                style={{ padding:"6px 12px", borderRadius:8, border:"1px solid #3b82f6",
+                         background: pdfExporting ? "#e2e8f0" : "#3b82f6", color:"#fff",
+                         cursor: pdfExporting ? "not-allowed" : "pointer", fontWeight:600, fontSize:12 }}
+              >
+                {pdfExporting ? `Exporting… ${pdfProgress}%` : "⬇ PDF"}
+              </button>
+              {showPdfOptions && !pdfExporting && (
+                <div style={{ position:"absolute", right:0, top:"110%", background:"#fff",
+                              border:"1px solid #cbd5e1", borderRadius:10, padding:14,
+                              boxShadow:"0 8px 24px rgba(0,0,0,0.15)", zIndex:100, minWidth:220 }}>
+                  <div style={{ fontSize:12, fontWeight:600, marginBottom:8 }}>Export PDF</div>
+                  <label style={{ fontSize:12, color:"#475569", display:"flex", flexDirection:"column", gap:4 }}>
+                    Number of molecules to export:
+                    <select
+                      value={pdfCount}
+                      onChange={e => setPdfCount(+e.target.value)}
+                      style={{ padding:"4px 8px", borderRadius:6, border:"1px solid #cbd5e1", marginTop:2 }}
+                    >
+                      {[25, 50, 100, 200, sources.length].filter((v,i,a) => a.indexOf(v)===i && v > 0).map(n => (
+                        <option key={n} value={n}>{n === sources.length ? `All (${n})` : n}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div style={{ fontSize:11, color:"#94a3b8", margin:"6px 0" }}>
+                    {Math.ceil(pdfCount / 25)} PDF page(s) • 5×5 grid
+                  </div>
+                  <button
+                    onClick={exportPDF}
+                    style={{ width:"100%", padding:"7px 0", borderRadius:8, border:"none",
+                             background:"#3b82f6", color:"#fff", fontWeight:700, fontSize:13, cursor:"pointer" }}
+                  >
+                    Generate PDF
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => setMaximized(m => !m)}
+              title={maximized ? "Restore" : "Fullscreen"}
+              style={{ padding:"6px 10px", borderRadius:8, border:"1px solid #cbd5e1", background:"#fff", cursor:"pointer", fontWeight:700, fontSize:14 }}>
+              {maximized ? "⧉" : "⛶"}
+            </button>
             <button onClick={onClose}
               style={{ padding:"6px 10px", borderRadius:8, border:"1px solid #cbd5e1", background:"#fff", cursor:"pointer", fontWeight:700 }}>
               Close
@@ -1092,20 +1471,20 @@ function ShowAllMoleculesModal({
 
         {/* Visual molecules grid */}
         <div style={{ flex:1, overflow:"auto", padding:"12px" }}>
-          <div style={{ 
-            display:"grid", 
-            gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", 
-            gap:12 
+          <div ref={gridRef} style={{
+            display:"grid",
+            gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))",
+            gap:12
           }}>
             {pageSources.map((source, idx) => {
               const globalIdx = start + idx + 1;
               const moleculeName = stripMethodPrefix(source.replace(/_predicted$/i, ""));
-              
+
               return (
-                <div key={source} style={{ 
-                  border:"1px solid #e5e7eb", 
-                  borderRadius:8, 
-                  padding:8, 
+                <div key={source} data-mol-source={source} style={{
+                  border:"1px solid #e5e7eb",
+                  borderRadius:8,
+                  padding:8,
                   background:"#fff",
                   boxShadow:"0 1px 3px rgba(0,0,0,0.1)",
                   transition:"transform 0.2s ease, box-shadow 0.2s ease",
@@ -1154,7 +1533,7 @@ function ShowAllMoleculesModal({
                     wordBreak:"break-word",
                     textAlign:"center"
                   }}>
-                    #{globalIdx} {moleculeName}
+                    {moleculeName}
                   </div>
                 </div>
               );
@@ -1196,6 +1575,7 @@ export default function Viewer({
   // NEW: Props for external source control (SIRIUS-style)
   externalSource = null,
   hideSidebar = false,
+  coverageMethods = ["1H", "13C", "COSY", "HSQC"],
 }) {
   // Use colors passed as props or default values
   const customColors = propsCustomColors || DEFAULT_COLORS;
@@ -1215,39 +1595,6 @@ export default function Viewer({
   const [internalSource, setInternalSource] = useState(null);
   const selectedSource = externalSource || internalSource;
 
-  // Extract taskId from CSV URLs if not provided
-  const derivedTaskId = useMemo(() => {
-    console.log('[Viewer] derivedTaskId calculation - taskId prop:', taskId);
-    if (taskId) {
-      console.log('[Viewer] Using provided taskId:', taskId);
-      return taskId;
-    }
-
-    // Try to extract from annotationResults (annotation workflow includes predictionTaskId)
-    const annotationValues = Object.values(annotationResults || {});
-    console.log('[Viewer] Trying to extract predictionTaskId from annotationResults:', annotationValues);
-    for (const result of annotationValues) {
-      if (result && result.predictionTaskId) {
-        console.log('[Viewer] Found predictionTaskId in annotationResults:', result.predictionTaskId);
-        return result.predictionTaskId;
-      }
-    }
-
-    // Try to extract taskId from CSV URLs (format: /outputs/{uuid}/...)
-    const csvValues = Object.values(csvs || {});
-    console.log('[Viewer] Trying to extract taskId from CSV URLs:', csvValues);
-    for (const csv of csvValues) {
-      if (typeof csv === 'string') {
-        const match = csv.match(/\/outputs\/([a-f0-9-]{36})\//i);
-        if (match) {
-          console.log('[Viewer] Derived taskId from CSV URL:', match[1]);
-          return match[1];
-        }
-      }
-    }
-    console.log('[Viewer] No taskId found');
-    return null;
-  }, [taskId, csvs, annotationResults]);
   const setSelectedSource = useCallback(
     (next) => {
       if (externalSource) return;
@@ -1273,8 +1620,6 @@ export default function Viewer({
     setRefreshKeyByType(k => ({ ...k, [type]: (k[type] ?? 0) + 1 }));
   }, []);
 
-  const wheelRequestRef = useRef({});
-  
   const presentTypes = useMemo(
     () => Object.keys(csvs || {}).filter(Boolean),
     [csvs]
@@ -1286,6 +1631,38 @@ export default function Viewer({
     () => annotationResults || {}
   );
   const [busyByType, setBusyByType] = useState({});
+
+  // State for raw spectrum data (for direct canvas rendering without PNG)
+  const [rawDataByType, setRawDataByType] = useState({
+    "1H": null,
+    "13C": null,
+    COSY: null,
+    HSQC: null,
+  });
+  
+  // State for current zoom range (ppm) per type
+  const [zoomRangeByType, setZoomRangeByType] = useState({
+    "1H": null,   // {min, max} for 1D
+    "13C": null,  // {min, max} for 1D
+    COSY: null,   // {f1: {min, max}, f2: {min, max}} for 2D
+    HSQC: null,   // {f1: {min, max}, f2: {min, max}} for 2D
+  });
+
+  // State for intensity scale (controlled by mouse wheel)
+  // TopSpin-style: scale controls how many contour levels are visible
+  // Uses logarithmic mapping: log10(scale) determines threshold
+  // Full range from 0.0001 to 10000:
+  // - Scale = 0.0001 → 0% of contours (nothing visible)
+  // - Scale = 0.01 → ~25% of contours
+  // - Scale = 1.0 → ~50% of contours (center)
+  // - Scale = 100 → ~75% of contours  
+  // - Scale = 10000 → 100% of contours (all noise visible)
+  const [intensityScaleByType, setIntensityScaleByType] = useState({
+    "1H": 1.0,
+    "13C": 1.0,
+    COSY: 1.0,   // Start at center - scroll up for more, down for less
+    HSQC: 1.0,   // Start at center - scroll up for more, down for less
+  });
 
   // Local state for resolution and level parameters
   const [resByType, setResByType] = useState({
@@ -1338,6 +1715,153 @@ export default function Viewer({
       }
     }
   }, [selectedSource, bgByType]);
+
+  // Ref to track which pdata paths have been loaded (prevents infinite loop)
+  // Stores the path that was loaded, not just a boolean
+  const loadedRawDataRef = useRef({});
+
+  // Effect to load raw spectrum data when pdataDirs change
+  useEffect(() => {
+    const loadRawData = async () => {
+      const types1D = ["1H", "13C"];
+      const types2D = ["COSY", "HSQC"];
+
+      // Load 1D spectra
+      for (const type of types1D) {
+        const pd = pdataDirs?.[type];
+        // Reload if path changed or if never loaded
+        const pathChanged = pd && loadedRawDataRef.current[type] !== pd;
+        if (pd && pathChanged) {
+          loadedRawDataRef.current[type] = pd; // Store the loaded path
+          try {
+            setBusyByType(prev => ({ ...prev, [type]: true }));
+            const data = await extractBrukerSpectrum(pd);
+            if (data?.status === "ok") {
+              setRawDataByType(prev => ({
+                ...prev,
+                [type]: {
+                  ppm: data.ppm,
+                  intensity: data.intensity,
+                  sf: data.sf
+                }
+              }));
+              // Initialize zoom: use bgOptions bounds if available, otherwise full data range
+              const opts = bgOptions?.[type] || {};
+              const userPpmMin = Number(opts.ppm_min);
+              const userPpmMax = Number(opts.ppm_max);
+              
+              if (Number.isFinite(userPpmMin) && Number.isFinite(userPpmMax)) {
+                // Use user-defined bounds from annotation parameters
+                setZoomRangeByType(prev => ({
+                  ...prev,
+                  [type]: {
+                    min: Math.min(userPpmMin, userPpmMax),
+                    max: Math.max(userPpmMin, userPpmMax)
+                  }
+                }));
+              } else if (data.ppm?.length) {
+                // Fall back to full data range
+                const ppmMin = data.ppm.reduce((a, b) => a < b ? a : b, data.ppm[0]);
+                const ppmMax = data.ppm.reduce((a, b) => a > b ? a : b, data.ppm[0]);
+                setZoomRangeByType(prev => ({
+                  ...prev,
+                  [type]: {
+                    min: ppmMin,
+                    max: ppmMax
+                  }
+                }));
+              }
+            }
+          } catch (err) {
+            console.error(`Error loading raw ${type} data:`, err);
+          } finally {
+            setBusyByType(prev => ({ ...prev, [type]: false }));
+          }
+        }
+      }
+      
+      // Load 2D spectra
+      for (const type of types2D) {
+        const pd = pdataDirs?.[type];
+        const opts = bgOptions?.[type] || {};
+
+        // Create cache key including both path AND bgOptions
+        // This ensures reload when axis windows change, not just when path changes
+        const cacheKey = JSON.stringify({
+          path: pd,
+          f1_min: opts.f1_ppm_min,
+          f1_max: opts.f1_ppm_max,
+          f2_min: opts.f2_ppm_min,
+          f2_max: opts.f2_ppm_max
+        });
+
+        const needsReload = pd && loadedRawDataRef.current[type] !== cacheKey;
+        if (pd && needsReload) {
+          loadedRawDataRef.current[type] = cacheKey; // Store cache key with path + options
+          try {
+            setBusyByType(prev => ({ ...prev, [type]: true }));
+            // Use default lvl of 0.005 for initial load
+            const lvl = 0.005;
+            const data = await extractBruker2D(pd, {
+              levelStart: lvl,   // Use lvl as levelStart (0.005 = 0.5% of max)
+              nLevels: 60,
+              decimate: 2
+            });
+            if (data?.status === "ok") {
+              setRawDataByType(prev => ({
+                ...prev,
+                [type]: {
+                  contours: data.contours,
+                  f1_range: data.f1_range,
+                  f2_range: data.f2_range
+                }
+              }));
+              // Initialize zoom: use bgOptions bounds if available, otherwise full data range
+              // opts already defined above in the loop scope
+              const userF1Min = Number(opts.f1_ppm_min);
+              const userF1Max = Number(opts.f1_ppm_max);
+              const userF2Min = Number(opts.f2_ppm_min);
+              const userF2Max = Number(opts.f2_ppm_max);
+              
+              const hasUserF1 = Number.isFinite(userF1Min) && Number.isFinite(userF1Max);
+              const hasUserF2 = Number.isFinite(userF2Min) && Number.isFinite(userF2Max);
+              
+              if (hasUserF1 || hasUserF2) {
+                // Use user-defined bounds from annotation parameters
+                setZoomRangeByType(prev => ({
+                  ...prev,
+                  [type]: {
+                    f1: hasUserF1 
+                      ? { min: Math.min(userF1Min, userF1Max), max: Math.max(userF1Min, userF1Max) }
+                      : { min: data.f1_range[0], max: data.f1_range[1] },
+                    f2: hasUserF2
+                      ? { min: Math.min(userF2Min, userF2Max), max: Math.max(userF2Min, userF2Max) }
+                      : { min: data.f2_range[0], max: data.f2_range[1] }
+                  }
+                }));
+              } else if (data.f1_range && data.f2_range) {
+                // Fall back to full data range
+                setZoomRangeByType(prev => ({
+                  ...prev,
+                  [type]: {
+                    f1: { min: data.f1_range[0], max: data.f1_range[1] },
+                    f2: { min: data.f2_range[0], max: data.f2_range[1] }
+                  }
+                }));
+              }
+            }
+          } catch (err) {
+            console.error(`Error loading raw ${type} data:`, err);
+          } finally {
+            setBusyByType(prev => ({ ...prev, [type]: false }));
+          }
+        }
+      }
+    };
+    
+    loadRawData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdataDirs, bgOptions]);
 
   const loadAll = useCallback(async () => {
     if (!csvs) return;
@@ -1410,9 +1934,18 @@ export default function Viewer({
     });
     let arr = [...union];
 
-    const parseCoverage = (row) => {
+    const parseCoverage = (row, type) => {
       if (!row) return null;
-      // Accept a few possible field names (CSV variations)
+      // Pour 1H et 13C: TOUJOURS utiliser intersection_coverage (score d'intersection des groupes STOCSY)
+      const use1D = type === "1H" || type === "13C";
+      if (use1D) {
+        if (row.intersection_coverage !== undefined && row.intersection_coverage !== null && row.intersection_coverage !== "") {
+          const v = parseFloat(String(row.intersection_coverage).replace(",", "."));
+          if (Number.isFinite(v)) return v;
+        }
+        return 0; // Pas de intersection_coverage = score 0
+      }
+      // Pour COSY/HSQC: coverage_ransy
       const candidates = [
         row.coverage_ransy,
         row.coverage_ransy_mean,
@@ -1428,15 +1961,18 @@ export default function Viewer({
     };
 
     const withCov = arr.map(source => {
-      const coverages = [];
+      let weightedSum = 0;
+      let totalWeight = 0;
+
       for (const type of ["1H", "13C", "COSY", "HSQC"]) {
         const row = mapsByType[type]?.get(source);
-        const cov = parseCoverage(row);
-        if (cov != null) coverages.push(cov);
+        const cov = parseCoverage(row, type);
+        if (cov != null) {
+          weightedSum += cov;
+          totalWeight += 1;
+        }
       }
-      const avg = coverages.length > 0
-        ? coverages.reduce((s, v) => s + v, 0) / coverages.length
-        : -1;
+      const avg = totalWeight > 0 ? weightedSum / totalWeight : -1;
       return { source, avgCoverage: avg };
     });
 
@@ -1448,16 +1984,41 @@ export default function Viewer({
     return arr.filter(s => s.toLowerCase().includes(q));
   }, [mapsByType, query]);
 
+  // Auto-sélectionner la première molécule (meilleur coverage) après chargement
+  const hasAutoSelectedRef = useRef(false);
+  useEffect(() => {
+    // Sélectionner automatiquement la première molécule une seule fois après le chargement
+    if (!loading && allSources.length > 0 && !selectedSource && !hasAutoSelectedRef.current) {
+      debugLog('[Viewer] Auto-selecting first molecule:', allSources[0]);
+      setSelectedSource(allSources[0]);
+      hasAutoSelectedRef.current = true;
+    }
+    // Reset le flag si les sources changent (nouveau chargement)
+    if (allSources.length === 0) {
+      hasAutoSelectedRef.current = false;
+    }
+  }, [loading, allSources, selectedSource, setSelectedSource]);
+
   // 🔥 Global sorted list (without search filter) for the modal
-  const sortedSourcesAll = useMemo(() => {
+  const sortedSourcesWithScore = useMemo(() => {
     const union = new Set();
     Object.values(mapsByType).forEach(m => {
       for (const s of m.keys()) union.add(s);
     });
     const arr = [...union];
 
-    const parseCoverage = (row) => {
+    const parseCoverage = (row, type) => {
       if (!row) return null;
+      // Pour 1H et 13C: TOUJOURS utiliser intersection_coverage (score d'intersection des groupes STOCSY)
+      const use1D = type === "1H" || type === "13C";
+      if (use1D) {
+        if (row.intersection_coverage !== undefined && row.intersection_coverage !== null && row.intersection_coverage !== "") {
+          const v = parseFloat(String(row.intersection_coverage).replace(",", "."));
+          if (Number.isFinite(v)) return v;
+        }
+        return 0; // Pas de intersection_coverage = score 0
+      }
+      // Pour COSY/HSQC: coverage_ransy
       const candidates = [
         row.coverage_ransy,
         row.coverage_ransy_mean,
@@ -1473,19 +2034,30 @@ export default function Viewer({
     };
 
     const withCov = arr.map(source => {
-      const covs = [];
-      for (const type of ["1H", "13C", "COSY", "HSQC"]) {
+      let weightedSum = 0;
+      let totalWeight = 0;
+
+      const methodsToUse = coverageMethods.length > 0 ? coverageMethods : ["1H", "13C", "COSY", "HSQC"];
+      for (const type of methodsToUse) {
         const row = mapsByType[type]?.get(source);
-        const v = parseCoverage(row);
-        if (v != null) covs.push(v);
+        const v = parseCoverage(row, type);
+        if (v != null) {
+          weightedSum += v;
+          totalWeight += 1;
+        }
       }
-      const avg = covs.length ? (covs.reduce((s,v)=>s+v,0)/covs.length) : -1;
+      const avg = totalWeight > 0 ? weightedSum / totalWeight : -1;
       return { source, avgCoverage: avg };
     });
 
     withCov.sort((a,b) => (b.avgCoverage - a.avgCoverage) || a.source.localeCompare(b.source));
-    return withCov.map(x => x.source);
-  }, [mapsByType]);
+    return withCov;
+  }, [mapsByType, coverageMethods]);
+
+  const sortedSourcesAll = useMemo(
+    () => sortedSourcesWithScore.map(x => x.source),
+    [sortedSourcesWithScore]
+  );
 
   // Helper lines by method for a source (modal)
   const rowsByTypeForSource = useCallback((source) => ({
@@ -1507,7 +2079,7 @@ export default function Viewer({
         .split("|")
         .map(v => parseFloat(String(v).replace(",", ".")))
         .filter(Number.isFinite),
-      expX: (r.RANSY_signals || "")
+      expX: (r.intersection_ppms || r.RANSY_signals || "")
         .split("|")
         .map(v => parseFloat(String(v).replace(",", ".")))
         .filter(Number.isFinite),
@@ -1519,7 +2091,7 @@ export default function Viewer({
         .split("|")
         .map(v => parseFloat(String(v).replace(",", ".")))
         .filter(Number.isFinite),
-      metrics: extractMetricsFromRow(r),
+      metrics: extractMetricsFromRow(r, "1H"),
       smiles: r.smiles || r.SMILES || r.Smiles || r.smi || "",  // SMILES for spectrum simulation
       source: r.Source || selectedSource || "",  // Source name
     } : null;
@@ -1531,7 +2103,7 @@ export default function Viewer({
       theory: (r.ppm_molecule || "")
         .split("|").map(v => parseFloat(String(v).replace(",", ".")))
         .filter(Number.isFinite),
-      expX: (r.RANSY_signals || "")
+      expX: (r.intersection_ppms || r.RANSY_signals || "")
         .split("|").map(v => parseFloat(String(v).replace(",", ".")))
         .filter(Number.isFinite),
       expI: (r.RANSY_mean_intensities || r.intensity_ratios || "")
@@ -1540,7 +2112,7 @@ export default function Viewer({
       matches: (r.ppm_molecule_matched || "")
         .split("|").map(v => parseFloat(String(v).replace(",", ".")))
         .filter(Number.isFinite),
-      metrics: extractMetricsFromRow(r),
+      metrics: extractMetricsFromRow(r, "13C"),
     } : null;
   }, [rowFor]);
 
@@ -1566,7 +2138,7 @@ export default function Viewer({
         .map(p => p.split("|")
         .map(v => parseFloat(String(v).replace(",", "."))))
         .filter(a => a.length === 2 && a.every(Number.isFinite)),
-      metrics: extractMetricsFromRow(r),
+      metrics: extractMetricsFromRow(r, "COSY"),
     } : null;
   }, [rowFor]);
 
@@ -1595,7 +2167,7 @@ export default function Viewer({
         .map(p => p.split("|")
         .map(v => parseFloat(String(v).replace(",", "."))))
         .filter(a => a.length === 2 && a.every(Number.isFinite)),
-      metrics: extractMetricsFromRow(r),
+      metrics: extractMetricsFromRow(r, "HSQC"),
     } : null;
   }, [rowFor]);
 
@@ -1728,451 +2300,6 @@ export default function Viewer({
     }
   }, [pdataDirs, setBusy, resByType, bgByType, storeResult, taskId, levelByType]);
 
-  // FIX: Added safety timeout for doZoom1DPixels
-  const doZoom1DPixels = useCallback(async (type, rectPxDOM, display) => {
-    const pd = pdataDirs?.[type];
-    const meta = getMeta(bgByType?.[type]);
-    if (!pd || !meta || !rectPxDOM || !(rectPxDOM.w > 1)) return;
-
-    try {
-      setBusy(type, true);
-      
-      // Safety timeout
-      const timeoutId = setTimeout(() => {
-        console.warn(`Timeout for zoom1DPixels ${type}, forced unlock`);
-        setBusy(type, false);
-      }, 30000);
-      
-      const size = resByType[type] || {};
-      const line = { width: 1.5 };
-      const { displayWidth, displayHeight } = display || {};
-      const res = await zoom1DFromPixels(
-        type, pd, meta, rectPxDOM,
-        { taskId, size, line, displayWidth, displayHeight }
-      );
-      
-      clearTimeout(timeoutId);
-      storeResult(type, res);
-    } catch (e) {
-      console.error(`ZoomPixels ${type} error:`, e);
-    } finally {
-      setBusy(type, false);
-    }
-  }, [pdataDirs, bgByType, setBusy, resByType, taskId, storeResult]);
-
-  // FIX: Added safety timeout for doZoom1D
-  const doZoom1D = useCallback(async (type, ppmMin, ppmMax) => {
-    const pd = pdataDirs?.[type];
-
-    if (!pd) {
-      setBgByType(prev => ({
-        ...prev,
-        [type]: {
-          ...prev[type],
-          meta: {
-            ...prev[type]?.meta,
-            ppm_min: Math.min(ppmMin, ppmMax),
-            ppm_max: Math.max(ppmMin, ppmMax),
-            ppm_left: Math.max(ppmMin, ppmMax),
-            ppm_right: Math.min(ppmMin, ppmMax),
-            nonce: `${Date.now()}`
-          },
-        },
-      }));
-      bumpKey(type);
-      return;
-    }
-
-    try {
-      setBusy(type, true);
-      
-      // Safety timeout
-      const timeoutId = setTimeout(() => {
-        console.warn(`Timeout for zoom1D ${type}, forced unlock`);
-        setBusy(type, false);
-      }, 30000);
-      
-      const size = resByType[type] || {};
-      const line = { width: 1.5 };
-      const fn = type === "1H" ? interactive1H : interactive13C;
-      const payload = {
-        ppm_min: Math.min(ppmMin, ppmMax),
-        ppm_max: Math.max(ppmMin, ppmMax),
-        ppmMin: Math.min(ppmMin, ppmMax),
-        ppmMax: Math.max(ppmMin, ppmMax),
-        size, line, taskId,
-      };
-      const res = await fn(pd, payload);
-      
-      clearTimeout(timeoutId);
-      storeResult(type, res);
-    } catch (e) {
-      console.error(`Zoom ${type} error:`, e);
-    } finally {
-      setBusy(type, false);
-    }
-  }, [pdataDirs, bumpKey, setBusy, resByType, taskId, storeResult]);
-
-  // *** FIXED *** : doReset1D prefers backend recalculation if possible, otherwise restores snapshot
-  const doReset1D = useCallback(async (type) => {
-    const pd = pdataDirs?.[type];
-    const snap = originalBgRef.current?.[type]?.[selectedSource];
-
-    // [FIX] Retrieve USER-DEFINED bounds
-    const userWindow = bgOptions?.[type] || {};
-    const hasUserWindow = 
-      (type === "1H" || type === "13C") &&
-      userWindow.ppm_min != null && 
-      userWindow.ppm_max != null;
-
-    // If backend interaction available → request image with defined bounds
-    if (pd) {
-      try {
-        setBusy(type, true);
-        const timeoutId = setTimeout(() => {
-          console.warn(`Timeout for reset1D ${type}, forced unlock`);
-          setBusy(type, false);
-        }, 30000);
-
-        const size = resByType[type] || {};
-        const line = { width: 1.5 };
-        const fn = type === "1H" ? interactive1H : interactive13C;
-        
-        // [FIX] USE USER BOUNDS if defined
-        const payload = { size, line, taskId };
-        
-        if (hasUserWindow) {
-          // Bornes utilisateur
-          payload.ppm_min = Math.min(userWindow.ppm_min, userWindow.ppm_max);
-          payload.ppm_max = Math.max(userWindow.ppm_min, userWindow.ppm_max);
-          payload.ppmMin = payload.ppm_min;
-          payload.ppmMax = payload.ppm_max;
-        }
-        // Sinon, pas de bornes = plein champ natif du backend
-
-        const res = await fn(pd, payload);
-
-        clearTimeout(timeoutId);
-        storeResult(type, res);
-        bumpKey(type); // force remount canvas
-        return;
-      } catch (e) {
-        console.error(`Reset ${type} via backend error:`, e);
-      } finally {
-        setBusy(type, false);
-      }
-    }
-
-    // Otherwise, fallback to local snapshot state
-    if (snap) {
-      const restored = {
-        ...snap,
-        meta: { ...snap.meta, nonce: `${Date.now()}` },
-      };
-      setBgByType(prev => ({ ...prev, [type]: restored }));
-      originalBgRef.current[type] = originalBgRef.current[type] || {};
-      originalBgRef.current[type][selectedSource] = restored;
-      bumpKey(type); // force remount
-    }
-  }, [pdataDirs, selectedSource, bgOptions, setBusy, resByType, taskId, storeResult, bumpKey]);
-
-  // FIX: Added safety timeout for doZoom2D
-  const doZoom2D = useCallback(async (type, { f2_min, f2_max, f1_min, f1_max }) => {
-    const pd = pdataDirs?.[type];
-    if (!pd) return;
-    
-    try {
-      setBusy(type, true);
-      
-      // Safety timeout
-      const timeoutId = setTimeout(() => {
-        console.warn(`Timeout for zoom2D ${type}, forced unlock`);
-        setBusy(type, false);
-      }, 30000);
-      
-      const size = resByType[type] || {};
-      const contour = {
-        level_start: levelByType[type] ?? 0.005,
-        n_levels: 20,
-        transparent: true,
-      };
-      const fn = type === "COSY" ? interactiveCOSY : interactiveHSQC;
-      const res = await fn(
-        pd,
-        {
-          f2Min: f2_min, f2Max: f2_max,
-          f1Min: f1_min, f1Max: f1_max,
-          size, contour, taskId,
-        }
-      );
-      
-      clearTimeout(timeoutId);
-      storeResult(type, res);
-    } catch (e) {
-      console.error(`Zoom ${type} error:`, e);
-    } finally {
-      setBusy(type, false);
-    }
-  }, [pdataDirs, setBusy, resByType, levelByType, taskId, storeResult]);
-
-
-  const doWheel2D = useCallback(async (type, deltaY) => {
-    // If 2D relevel is disabled, do nothing
-    if (!relevel2DEnabled) return;
-    
-    const pd = pdataDirs?.[type];
-    const meta = getMeta(bgByType?.[type]);
-    if (!pd || !meta) return;
-    
-    if (wheelRequestRef.current[type]) {
-      try {
-        wheelRequestRef.current[type].cancel();
-      } catch {}
-    }
-    
-    try {
-      setBusy(type, true);
-      
-      const timeoutId = setTimeout(() => {
-        console.warn(`Timeout wheel2D ${type}, annulation`);
-        wheelRequestRef.current[type]?.cancel();
-        setBusy(type, false);
-      }, 10000);
-      
-      // [FIX] CORRECTION : toujours envoyer size
-      const request = relevelByWheelCancelable(
-        type, pd, meta, deltaY,
-        { 
-          nLevels: 20, 
-          transparent: true, 
-          taskId,
-          size: resByType[type] || {} // ← AJOUT
-        }
-      );
-      
-      wheelRequestRef.current[type] = request;
-      const res = await request;
-      
-      clearTimeout(timeoutId);
-      storeResult(type, res);
-      wheelRequestRef.current[type] = null;
-    } catch (e) {
-      if (e?.name === 'AbortError') {
-        console.log(`Request wheel2D ${type} cancelled`);
-        return;
-      }
-      
-      console.error(`Wheel relevel ${type}:`, e);
-      
-      // Fallback local (garder tel quel)
-      if (e?.response?.status === 500 || e?.code === "ERR_BAD_RESPONSE") {
-        console.warn(`Backend failed, local level adjustment for ${type}`);
-        
-        const currentLevel = meta?.level_start ?? levelByType[type] ?? 0.005;
-        const direction = deltaY > 0 ? 1.2 : 0.8;
-        const newLevel = Math.max(1e-6, currentLevel * direction);
-        
-        setLevelByType(p => ({ ...p, [type]: newLevel }));
-        
-        if (bgByType[type]?.meta) {
-          setBgByType(prev => ({
-            ...prev,
-            [type]: {
-              ...prev[type],
-              meta: {
-                ...prev[type].meta,
-                level_start: newLevel,
-                nonce: `${Date.now()}`
-              },
-            },
-          }));
-          bumpKey(type);
-        }
-      }
-    } finally {
-      setBusy(type, false);
-    }
-  }, [pdataDirs, bgByType, setBusy, taskId, storeResult, levelByType, bumpKey, resByType, relevel2DEnabled]);
-  useEffect(() => {
-    return () => {
-      Object.values(wheelRequestRef.current).forEach(request => {
-        try {
-          request?.cancel();
-        } catch {}
-      });
-      wheelRequestRef.current = {};
-    };
-  }, []);
-    
-  // Reliable 2D reset: keeps current background while waiting for backend
-  // Instant 2D reset + conditional lightweight recalculation in background
-  const doReset2D = useCallback(async (type) => {
-    const snap = originalBgRef.current?.[type]?.[selectedSource];
-    const pd   = pdataDirs?.[type];
-
-    // [FIX] Retrieve USER-DEFINED bounds
-    const userWindow = bgOptions?.[type] || {};
-    const hasUserWindow = 
-      (type === "COSY" || type === "HSQC") &&
-      [userWindow.f1_ppm_min, userWindow.f1_ppm_max,
-      userWindow.f2_ppm_min, userWindow.f2_ppm_max].every(v => v != null);
-
-    // Starting level
-    const currentLevelStart =
-      (snap?.meta?.level_start) ??
-      bgByType[type]?.meta?.level_start ??
-      levelByType[type] ?? 0.005;
-
-    // Instant snapshot display
-    if (snap) {
-      const restored = {
-        ...snap,
-        meta: {
-          ...snap.meta,
-          level_start: currentLevelStart,
-          nonce: `${Date.now()}`,
-        },
-      };
-      setBgByType(prev => ({ ...prev, [type]: restored }));
-      bumpKey(type);
-    }
-
-    // If no backend, stop here
-    if (!pd) return;
-
-    setBusy(type, true);
-
-    try {
-      const timeoutId = setTimeout(() => {
-        console.warn(`Timeout for reset2D ${type}, forced unlock`);
-        setBusy(type, false);
-      }, 30000);
-
-      const lightSize = {
-        width_px:  Math.min(900,  (resByType[type]?.width_px  ?? 1000)),
-        height_px: Math.min(700,  (resByType[type]?.height_px ?? 800)),
-        dpi:       Math.min(120,  (resByType[type]?.dpi       ?? 150)),
-      };
-      const lightContour = {
-        level_start: currentLevelStart,
-        n_levels: 12,
-        transparent: true,
-      };
-
-      const fn = type === "COSY" ? interactiveCOSY : interactiveHSQC;
-
-      // [FIX] UTILISER LES BORNES UTILISATEUR au lieu de "full: true"
-      const payload = {
-        size: lightSize,
-        contour: lightContour,
-        taskId,
-        with_bbox: true,
-        return_bbox: true,
-      };
-
-      // [FIX] If user has defined bounds, use them
-      if (hasUserWindow) {
-        payload.f1Min = userWindow.f1_ppm_min;
-        payload.f1Max = userWindow.f1_ppm_max;
-        payload.f2Min = userWindow.f2_ppm_min;
-        payload.f2Max = userWindow.f2_ppm_max;
-      } else {
-        // Sinon, plein champ
-        payload.reset = true;
-        payload.full = true;
-      }
-
-      const resLight = await fn(pd, payload);
-
-      clearTimeout(timeoutId);
-
-      // Normaliser bbox
-      if (resLight?.meta && !resLight.meta.plot_bbox_px) {
-        const bb =
-          resLight.meta.axis_bbox_px ||
-          resLight.meta.axisRect?.pixel ||
-          resLight.meta.axisRect?.px || null;
-        if (bb && [bb.x, bb.y, bb.w, bb.h].every(Number.isFinite)) {
-          resLight.meta.plot_bbox_px = { x: bb.x, y: bb.y, w: bb.w, h: bb.h };
-        }
-      }
-
-      storeResult(type, resLight);
-      bumpKey(type);
-
-      // HD quality in background if needed
-      const targetSize = resByType[type] || {};
-      const wantQuality =
-        // eslint-disable-next-line no-mixed-operators
-        targetSize.width_px  && targetSize.width_px  > lightSize.width_px ||
-        // eslint-disable-next-line no-mixed-operators
-        targetSize.height_px && targetSize.height_px > lightSize.height_px ||
-        (resByType[type]?.dpi ?? 150) > lightSize.dpi;
-
-      if (wantQuality) {
-        const qualityContour = {
-          level_start: currentLevelStart,
-          n_levels: 20,
-          transparent: true,
-        };
-        
-        const payloadHD = {
-          size: resByType[type] || {},
-          contour: qualityContour,
-          taskId,
-          with_bbox: true,
-          return_bbox: true,
-        };
-
-        // [FIX] Même logique pour la qualité HD
-        if (hasUserWindow) {
-          payloadHD.f1Min = userWindow.f1_ppm_min;
-          payloadHD.f1Max = userWindow.f1_ppm_max;
-          payloadHD.f2Min = userWindow.f2_ppm_min;
-          payloadHD.f2Max = userWindow.f2_ppm_max;
-        } else {
-          payloadHD.reset = true;
-          payloadHD.full = true;
-        }
-
-        fn(pd, payloadHD)
-          .then((resHi) => {
-            if (resHi?.meta && !resHi.meta.plot_bbox_px) {
-              const bb =
-                resHi.meta.axis_bbox_px ||
-                resHi.meta.axisRect?.pixel ||
-                resHi.meta.axisRect?.px || null;
-              if (bb && [bb.x, bb.y, bb.w, bb.h].every(Number.isFinite)) {
-                resHi.meta.plot_bbox_px = { x: bb.x, y: bb.y, w: bb.w, h: bb.h };
-              }
-            }
-            storeResult(type, resHi);
-            bumpKey(type);
-          })
-          .catch((e) => {
-            console.warn(`Qualité ${type} échouée:`, e?.message || e);
-          })
-          .finally(() => setBusy(type, false));
-      } else {
-        setBusy(type, false);
-      }
-    } catch (e) {
-      console.error(`Reset ${type} error:`, e);
-      setBusy(type, false);
-    }
-  }, [
-    pdataDirs,
-    resByType,
-    taskId,
-    levelByType,
-    bgByType,
-    bgOptions,  // [FIX] AJOUT dépendance
-    bumpKey,
-    selectedSource,
-    storeResult,
-    setBusy,
-  ]);
-
   const canInteract1H   = !!pdataDirs?.["1H"];
   const canInteract13C  = !!pdataDirs?.["13C"];
   const canInteractCOSY = !!pdataDirs?.["COSY"];
@@ -2186,172 +2313,270 @@ export default function Viewer({
   // État pour le modal de spectre 1H détaillé
   const [spectrumDetailOpen, setSpectrumDetailOpen] = useState(false);
 
-  /* petits panneaux de réglage */
-  const renderControls1D = (type) => (
-    <div style={{
-      display: "flex", gap: 6, alignItems: "center",
-      flexWrap: "wrap", marginBottom: 6, fontSize: 11,
-    }}>
-      <label style={{ fontSize: 10 }}>
-        W:
-        <input
-          type="number" min={300}
-          value={resByType[type].width_px}
-          onChange={(e) =>
-            setResByType(p => ({
-              ...p,
-              [type]: {
-                ...p[type],
-                width_px: Math.max(300, +e.target.value || 300),
-              },
-            }))
-          }
-          style={{ width: 70, fontSize: 10, padding: "1px 3px" }}
-        />
-      </label>
-      <label style={{ fontSize: 10 }}>
-        H:
-        <input
-          type="number" min={200}
-          value={resByType[type].height_px}
-          onChange={(e) =>
-            setResByType(p => ({
-              ...p,
-              [type]: {
-                ...p[type],
-                height_px: Math.max(200, +e.target.value || 200),
-              },
-            }))
-          }
-          style={{ width: 70, fontSize: 10, padding: "1px 3px" }}
-        />
-      </label>
-      <label style={{ fontSize: 10 }}>
-        DPI:
-        <input
-          type="number" min={72}
-          value={resByType[type].dpi}
-          onChange={(e) =>
-            setResByType(p => ({
-              ...p,
-              [type]: {
-                ...p[type],
-                dpi: Math.max(72, +e.target.value || 72),
-              },
-            }))
-          }
-          style={{ width: 60, fontSize: 10, padding: "1px 3px" }}
-        />
-      </label>
-      <button
-        onClick={() => applySettings(type)}
-        style={{
-          padding: "2px 6px", borderRadius: 4,
-          border: "1px solid #cbd5e1",
-          background: "#fff", cursor: "pointer", fontSize: 10,
-        }}
-        disabled={!pdataDirs?.[type] || !!busyByType?.[type]}
-      >
-        Appliquer
-      </button>
-    </div>
-  );
+  // ============================================
+  // PRÉ-CHARGEMENT BATCH DES SPECTRES SIMULÉS
+  // ============================================
+  // Cache pour les spectres simulés (par molécule) - rempli par le batch
+  const simulatedSpectrumCache = useRef({});
+  // Données pour la molécule sélectionnée
+  const [preloadedMultiplicityData, setPreloadedMultiplicityData] = useState(null);
+  const [preloadedSpectrumData, setPreloadedSpectrumData] = useState(null);
+  const [preloadingSpectrum, setPreloadingSpectrum] = useState(false);
+  const [preloadingMultiplicity, setPreloadingMultiplicity] = useState(false);
+  // Flag pour savoir si le batch a été lancé pour ce taskId
+  const batchLoadedForTask = useRef(null);
 
-  const renderControls2D = (type) => {
-    const currentLevel = bgByType[type]?.meta?.level_start ?? levelByType[type] ?? 0.005;
+  // Charger TOUS les spectres en batch quand taskId change
+  useEffect(() => {
+    if (!taskId || batchLoadedForTask.current === taskId) {
+      return;
+    }
+
+    debugLog('[Viewer] Starting batch spectrum simulation for task:', taskId);
+    batchLoadedForTask.current = taskId;
+    setPreloadingSpectrum(true);
+
+    // Vider le cache pour une nouvelle tâche
+    simulatedSpectrumCache.current = {};
+
+    simulateSpectrumBatch({
+      task_id: taskId,
+      freq_mhz: 700,
+      line_shape: 'lorentzian',
+      line_width_hz: 1.5,
+      enable_dynamics: true,
+      solvent: 'CDCl3',
+      temperature_k: 298,
+      ph: 7.4,
+    })
+      .then(batchResult => {
+        debugLog('[Viewer] Batch simulation complete:', batchResult.total_molecules, 'ok:', batchResult.successful);
+
+        // Stocker tous les spectres dans le cache
+        if (batchResult.spectra) {
+          for (const spec of batchResult.spectra) {
+            if (spec.mol_id && spec.status === 'ok') {
+              simulatedSpectrumCache.current[spec.mol_id] = spec;
+            }
+          }
+        }
+
+        // Si une molécule est déjà sélectionnée, charger son spectre
+        if (selectedSource && simulatedSpectrumCache.current[selectedSource]) {
+          setPreloadedSpectrumData(simulatedSpectrumCache.current[selectedSource]);
+        }
+      })
+      .catch(err => {
+        console.warn('[Viewer] Batch simulation failed:', err);
+        // En cas d'échec du batch, on fallback sur le mode individuel
+        batchLoadedForTask.current = null;
+      })
+      .finally(() => {
+        setPreloadingSpectrum(false);
+      });
+  }, [taskId, selectedSource]);
+
+  // Quand la molécule sélectionnée change, utiliser le cache ou fallback sur appel individuel
+  useEffect(() => {
+    if (!taskId || !selectedSource) {
+      setPreloadedMultiplicityData(null);
+      setPreloadedSpectrumData(null);
+      return;
+    }
+
+    const molId = selectedSource;
     
+    // Variantes de nom pour chercher dans le cache
+    const molIdVariants = [
+      molId,
+      molId.replace(/_predicted$/i, ''),
+      molId.replace(/_annotated$/i, ''),
+    ];
+
+    // Chercher dans le cache avec toutes les variantes
+    let cachedSpectrum = null;
+    for (const variant of molIdVariants) {
+      if (simulatedSpectrumCache.current[variant]) {
+        cachedSpectrum = simulatedSpectrumCache.current[variant];
+        debugLog('[Viewer] Using cached spectrum for:', variant);
+        break;
+      }
+    }
+
+    if (cachedSpectrum) {
+      setPreloadedSpectrumData(cachedSpectrum);
+      setPreloadedMultiplicityData(null); // Pas besoin des données de multiplicité si on a le spectre
+      return;
+    }
+
+    // Si pas en cache, charger individuellement
+    debugLog('[Viewer] Spectrum not in cache, loading individually:', molId);
+    setPreloadingMultiplicity(true);
+    setPreloadedSpectrumData(null);
+    setPreloadedMultiplicityData(null);
+
+    getMultiplicityData(taskId, molId)
+      .then(data => {
+        const multData = data.multiplicity_data;
+        // Seulement mettre à jour si c'est toujours la molécule sélectionnée
+        if (selectedSource === molId) {
+          setPreloadedMultiplicityData(multData);
+        }
+
+        return simulateSpectrum({
+          multiplicity_json: multData,
+          mol_id: molId,
+          freq_mhz: 700,
+          line_shape: 'lorentzian',
+          line_width_hz: 1.5,
+          enable_dynamics: true,
+          solvent: 'CDCl3',
+          temperature_k: 298,
+          ph: 7.4,
+        });
+      })
+      .then(specData => {
+        debugLog('[Viewer] Loaded spectrum for:', molId);
+        simulatedSpectrumCache.current[molId] = specData;
+        // Seulement mettre à jour si c'est toujours la molécule sélectionnée
+        if (selectedSource === molId) {
+          setPreloadedSpectrumData(specData);
+        }
+      })
+      .catch(err => {
+        console.warn('[Viewer] Failed to load spectrum:', err);
+      })
+      .finally(() => {
+        setPreloadingMultiplicity(false);
+      });
+  }, [taskId, selectedSource]);
+
+  // Handler pour changer l'intensité avec la molette
+  // Facteur 1.1 pour un scroll plus progressif (besoin de ~100 scrolls pour aller de 1 à 10000)
+  const handleIntensityWheel = useCallback((type, delta) => {
+    setIntensityScaleByType(prev => {
+      const current = prev[type] || 1.0;
+      // delta > 0 = scroll down = decrease (fewer signals), delta < 0 = scroll up = increase (more signals)
+      // Factor 1.1 for smoother control (~100 scrolls for full range)
+      const factor = delta > 0 ? (1 / 1.1) : 1.1;  // ~0.909 or 1.1
+      // No practical limits: 0.0001 to 10000 allows full range from no signals to all noise
+      const newScale = Math.max(0.0001, Math.min(10000, current * factor));
+      return { ...prev, [type]: newScale };
+    });
+  }, []);
+
+  /* Panneaux de contrôle simplifiés - juste scale + reset */
+  const renderControls1D = (type) => {
+    const scale = intensityScaleByType[type] || 1.0;
     return (
       <div style={{
-        display: "flex", gap: 6, alignItems: "center",
-        flexWrap: "wrap", marginBottom: 6, fontSize: 11,
+        display: "flex", gap: 8, alignItems: "center",
+        marginBottom: 6, fontSize: 10, color: "#64748b",
       }}>
-        <label style={{ fontSize: 10 }}>
-          W:
-          <input
-            type="number" min={400}
-            value={resByType[type].width_px}
-            onChange={(e) =>
-              setResByType(p => ({
-                ...p,
-                [type]: {
-                  ...p[type],
-                  width_px: Math.max(400, +e.target.value || 400),
-                },
-              }))
-            }
-            style={{ width: 70, fontSize: 10, padding: "1px 3px" }}
-          />
-        </label>
-        <label style={{ fontSize: 10 }}>
-          H:
-          <input
-            type="number" min={300}
-            value={resByType[type].height_px}
-            onChange={(e) =>
-              setResByType(p => ({
-                ...p,
-                [type]: {
-                  ...p[type],
-                  height_px: Math.max(300, +e.target.value || 300),
-                },
-              }))
-            }
-            style={{ width: 70, fontSize: 10, padding: "1px 3px" }}
-          />
-        </label>
-        <label style={{ fontSize: 10 }}>
-          DPI:
-          <input
-            type="number" min={72}
-            value={resByType[type].dpi}
-            onChange={(e) =>
-              setResByType(p => ({
-                ...p,
-                [type]: {
-                  ...p[type],
-                  dpi: Math.max(72, +e.target.value || 72),
-                },
-              }))
-            }
-            style={{ width: 60, fontSize: 10, padding: "1px 3px" }}
-          />
-        </label>
-        <label style={{ fontSize: 10 }}>
-          Lvl:
-          <input
-            type="number" step="0.001" min="0.000001"
-            value={currentLevel}
-            onChange={(e) => {
-              const newVal = Math.max(1e-6, +e.target.value || 0.005);
-              setLevelByType(p => ({ ...p, [type]: newVal }));
-              if (bgByType[type]?.meta) {
-                setBgByType(prev => ({
-                  ...prev,
-                  [type]: {
-                    ...prev[type],
-                    meta: {
-                      ...prev[type].meta,
-                      level_start: newVal,
-                      nonce: `${Date.now()}`
-                    },
-                  },
-                }));
-                bumpKey(type);
-              }
-            }}
-            style={{ width: 70, fontSize: 10, padding: "1px 3px" }}
-          />
-        </label>
+        <span>Scale: {scale.toFixed(2)}×</span>
         <button
-          onClick={() => applySettings(type)}
+          onClick={() => setIntensityScaleByType(prev => ({ ...prev, [type]: 1.0 }))}
           style={{
             padding: "2px 6px", borderRadius: 4,
             border: "1px solid #cbd5e1",
-            background: "#fff", cursor: "pointer", fontSize: 10,
+            background: "#fff", cursor: "pointer", fontSize: 9,
           }}
-          disabled={!pdataDirs?.[type] || !!busyByType?.[type]}
+        >
+          Reset Scale
+        </button>
+      </div>
+    );
+  };
+
+  // Force reload of 2D data with specific level
+  const forceReload2D = useCallback(async (type, lvlOverride = null) => {
+    const pd = pdataDirs?.[type];
+    if (!pd) return;
+    
+    // Use provided level or current levelByType
+    const lvl = lvlOverride ?? levelByType[type] ?? 0.005;
+    
+    // Clear cache for this type
+    loadedRawDataRef.current[type] = false;
+    
+    // Trigger reload with lvl as levelStart
+    setBusyByType(prev => ({ ...prev, [type]: true }));
+    try {
+      const data = await extractBruker2D(pd, {
+        levelStart: lvl,  // Use lvl directly as levelStart
+        nLevels: 60,
+        decimate: 2
+      });
+      if (data?.status === "ok") {
+        setRawDataByType(prev => ({
+          ...prev,
+          [type]: {
+            contours: data.contours,
+            f1_range: data.f1_range,
+            f2_range: data.f2_range
+          }
+        }));
+        loadedRawDataRef.current[type] = true;
+      }
+    } catch (err) {
+      console.error(`[forceReload2D] Error reloading ${type}:`, err);
+    } finally {
+      setBusyByType(prev => ({ ...prev, [type]: false }));
+    }
+  }, [pdataDirs, levelByType]);
+
+  const renderControls2D = (type) => {
+    const lvl = levelByType[type] ?? 0.005;
+    return (
+      <div style={{
+        display: "flex", gap: 8, alignItems: "center",
+        marginBottom: 6, fontSize: 10, color: "#64748b",
+      }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span>Lvl:</span>
+          <input
+            type="number"
+            value={lvl}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val) && val >= 0 && val <= 1) {
+                setLevelByType(prev => ({ ...prev, [type]: val }));
+              }
+            }}
+            step="0.001"
+            min="0"
+            max="1"
+            style={{
+              width: 60, padding: "2px 4px", fontSize: 10,
+              border: "1px solid #cbd5e1", borderRadius: 4,
+            }}
+            title="Seuil de contour: 0.001 = bruit visible, 0.1 = signaux forts seulement"
+          />
+        </label>
+        <button
+          onClick={() => forceReload2D(type, lvl)}
+          style={{
+            padding: "2px 6px", borderRadius: 4,
+            border: "1px solid #2563eb",
+            background: "#3b82f6", color: "#fff",
+            cursor: "pointer", fontSize: 9, fontWeight: 600,
+          }}
+          title="Appliquer le niveau et recharger les contours"
         >
           Appliquer
+        </button>
+        <button
+          onClick={() => {
+            setLevelByType(prev => ({ ...prev, [type]: 0.005 }));
+            forceReload2D(type, 0.005);
+          }}
+          style={{
+            padding: "2px 6px", borderRadius: 4,
+            border: "1px solid #cbd5e1",
+            background: "#fff", cursor: "pointer", fontSize: 9,
+          }}
+        >
+          Reset
         </button>
       </div>
     );
@@ -2361,10 +2586,7 @@ export default function Viewer({
      Rendu principal
      ======================= */
   return (
-    <div className="viewer" style={{ marginTop: 8 }}>
-      <h5 style={{ marginBottom: 8 }}>
-        Vue combinée : ¹H · ¹³C · COSY · HSQC
-      </h5>
+    <div className="viewer" style={{ marginTop: 0 }}>
 
       {loading && (
         <div className="status-item">Loading…</div>
@@ -2507,13 +2729,10 @@ export default function Viewer({
             <div style={{ marginBottom: 12 }}>
               <div
                 style={{
-                  display: "flex", justifyContent: "space-between",
-                  alignItems: "center", marginBottom: 6,
+                  display: "flex", justifyContent: "flex-end",
+                  alignItems: "center", marginBottom: 4,
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: 12 }}>
-                  Molécule — colorations combinées
-                </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button
                     onClick={() => setShowAllOpen(true)}
@@ -2577,7 +2796,7 @@ export default function Viewer({
                     color: "#64748b", fontSize: 12,
                   }}
                 >
-                  {hasAnyData ? "No source selected" : "No molecule — run a prediction then an annotation"}
+                  {hasAnyData ? "No source selected" : "No molecule. Run a prediction then an annotation"}
                 </div>
               )}
             </div>
@@ -2587,15 +2806,9 @@ export default function Viewer({
               const blocks = [];
 
               if (oneH) {
-                const bg1H  = bgByType?.["1H"];
-                const img   = bg1H?.pngUrl || null;
-                const meta  = getMeta(bg1H);
-
-                // Ajout : ppmPart pour refléter la fenêtre dans la key
-                const ppmPart1H = meta
-                  ? [meta.ppm_min, meta.ppm_max, meta.ppm_left, meta.ppm_right]
-                      .map(v => v ?? "").join(",")
-                  : "";
+                const raw1H = rawDataByType?.["1H"];
+                const zoom1H = zoomRangeByType?.["1H"];
+                const hasData1H = raw1H && raw1H.ppm?.length > 0;
 
                 blocks.push({
                   key: "b-1H",
@@ -2615,7 +2828,7 @@ export default function Viewer({
                         }}
                       >
                         <span>{TYPE_LABELS["1H"]}</span>
-                        {img && (
+                        {hasData1H && (
                           <span
                             style={{
                               fontSize: 9, color: "#16a34a",
@@ -2631,8 +2844,8 @@ export default function Viewer({
                       {oneH.metrics &&
                         Object.keys(oneH.metrics).length > 0 && (
                         <div style={{ marginBottom: 6, minHeight: 20 }}>
-                          {oneH.metrics.coverage_ransy && (
-                            <Pill label="RANSY" value={oneH.metrics.coverage_ransy}/>
+                          {oneH.metrics.ransy_score && (
+                            <Pill label="Score" value={oneH.metrics.ransy_score}/>
                           )}
                           {oneH.metrics.coverage_sub && (
                             <Pill label="Sub" value={oneH.metrics.coverage_sub}/>
@@ -2645,38 +2858,11 @@ export default function Viewer({
 
                       {renderControls1D("1H")}
 
-                      {/* Bouton View Detail pour le spectre 1H simulé */}
-                      <div style={{ marginBottom: 8, display: "flex", gap: 8 }}>
-                        <button
-                          onClick={() => setSpectrumDetailOpen(true)}
-                          disabled={!derivedTaskId}
-                          style={{
-                            padding: "4px 10px",
-                            fontSize: 11,
-                            fontWeight: 500,
-                            backgroundColor: derivedTaskId ? "#3b82f6" : "#e5e7eb",
-                            color: derivedTaskId ? "#fff" : "#9ca3af",
-                            border: "none",
-                            borderRadius: 4,
-                            cursor: derivedTaskId ? "pointer" : "not-allowed",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 4,
-                          }}
-                          title={derivedTaskId ? "View simulated spectrum with multiplicity data" : "No prediction task loaded"}
-                        >
-                          View Detail
-                        </button>
-                      </div>
-
                       <StickChart
                         key={[
                           refreshKeyByType["1H"] ?? 0,
-                          img || "",
-                          meta?.etag ?? meta?.version ?? meta?.last_modified ?? "",
-                          JSON.stringify(meta?.plot_bbox_px ?? null) || "",
-                          ppmPart1H,
-                          String(meta?.nonce ?? "")
+                          hasData1H ? "loaded" : "",
+                          JSON.stringify(zoom1H || null),
                         ].join("|")}
                         theory={showTheory ? oneH.theory : []}
                         expPpm={showExp ? oneH.expX : []}
@@ -2685,14 +2871,53 @@ export default function Viewer({
                         showTheory={showTheory}
                         showExp={showExp}
                         height={PLOT_HEIGHT}
-                        backgroundImage={img}
-                        backgroundMeta={meta}
+                        spectrumData={raw1H}
+                        ppmRange={zoom1H}
+                        spectrumColor="#000000"
                         canInteract={canInteract1H}
                         zoomEnabled={zoomRectEnabled}
-                        onZoom={(a, b) => doZoom1D("1H", a, b)}
-                        onZoomPx={(r, d) => doZoom1DPixels("1H", r, d)}
-                        onReset={() => doReset1D("1H")}
+                        intensityScale={intensityScaleByType["1H"] || 1.0}
+                        onIntensityChange={(delta) => handleIntensityWheel("1H", delta)}
+                        onZoom={(ppmMin, ppmMax) => {
+                          setZoomRangeByType(prev => ({
+                            ...prev,
+                            "1H": { min: Math.min(ppmMin, ppmMax), max: Math.max(ppmMin, ppmMax) }
+                          }));
+                        }}
+                        onReset={() => {
+                          if (raw1H?.ppm?.length) {
+                            // Use bgOptions bounds if defined, otherwise full range
+                            const opts = bgOptions?.["1H"] || {};
+                            const fullMin = raw1H.ppm.reduce((a, b) => a < b ? a : b, raw1H.ppm[0]);
+                            const fullMax = raw1H.ppm.reduce((a, b) => a > b ? a : b, raw1H.ppm[0]);
+                            const ppmMin = Number.isFinite(opts.ppm_min) ? opts.ppm_min : fullMin;
+                            const ppmMax = Number.isFinite(opts.ppm_max) ? opts.ppm_max : fullMax;
+                            setZoomRangeByType(prev => ({
+                              ...prev,
+                              "1H": { min: ppmMin, max: ppmMax }
+                            }));
+                          }
+                        }}
                         busy={!!busyByType?.["1H"]}
+                        extraButtons={
+                          <button
+                            onClick={() => setSpectrumDetailOpen(true)}
+                            disabled={!taskId}
+                            style={{
+                              padding: "2px 6px",
+                              fontSize: 11,
+                              fontWeight: 500,
+                              backgroundColor: taskId ? "#3b82f6" : "#e5e7eb",
+                              color: taskId ? "#fff" : "#9ca3af",
+                              border: "none",
+                              borderRadius: 6,
+                              cursor: taskId ? "pointer" : "not-allowed",
+                            }}
+                            title={taskId ? "View simulated spectrum with multiplicity data" : "No prediction task loaded"}
+                          >
+                            View Detail
+                          </button>
+                        }
                       />
                     </div>
                   ),
@@ -2700,14 +2925,9 @@ export default function Viewer({
               }
 
               if (c13) {
-                const bg13  = bgByType?.["13C"];
-                const img   = bg13?.pngUrl || null;
-                const meta  = getMeta(bg13);
-
-                const ppmPart13 = meta
-                  ? [meta.ppm_min, meta.ppm_max, meta.ppm_left, meta.ppm_right]
-                      .map(v => v ?? "").join(",")
-                  : "";
+                const raw13C = rawDataByType?.["13C"];
+                const zoom13C = zoomRangeByType?.["13C"];
+                const hasData13C = raw13C && raw13C.ppm?.length > 0;
 
                 blocks.push({
                   key: "b-13C",
@@ -2715,7 +2935,7 @@ export default function Viewer({
                     <div
                       style={{
                         border: "1px solid #e5e7eb",
-                        borderRadius: 8, padding: 8,
+                        borderRadius: 6, padding: 4,
                         overflow: "hidden"
                       }}
                     >
@@ -2727,7 +2947,7 @@ export default function Viewer({
                         }}
                       >
                         <span>{TYPE_LABELS["13C"]}</span>
-                        {img && (
+                        {hasData13C && (
                           <span
                             style={{
                               fontSize: 9, color: "#16a34a",
@@ -2743,8 +2963,8 @@ export default function Viewer({
                       {c13.metrics &&
                         Object.keys(c13.metrics).length > 0 && (
                         <div style={{ marginBottom: 6, minHeight: 20 }}>
-                          {c13.metrics.coverage_ransy && (
-                            <Pill label="RANSY" value={c13.metrics.coverage_ransy}/>
+                          {c13.metrics.ransy_score && (
+                            <Pill label="Score" value={c13.metrics.ransy_score}/>
                           )}
                           {c13.metrics.coverage_sub && (
                             <Pill label="Sub" value={c13.metrics.coverage_sub}/>
@@ -2760,11 +2980,8 @@ export default function Viewer({
                       <StickChart
                         key={[
                           refreshKeyByType["13C"] ?? 0,
-                          img || "",
-                          meta?.etag ?? meta?.version ?? meta?.last_modified ?? "",
-                          JSON.stringify(meta?.plot_bbox_px ?? null) || "",
-                          ppmPart13,
-                          String(meta?.nonce ?? "")
+                          hasData13C ? "loaded" : "",
+                          JSON.stringify(zoom13C || null),
                         ].join("|")}
                         theory={showTheory ? c13.theory : []}
                         expPpm={showExp ? c13.expX : []}
@@ -2773,13 +2990,33 @@ export default function Viewer({
                         showTheory={showTheory}
                         showExp={showExp}
                         height={PLOT_HEIGHT}
-                        backgroundImage={img}
-                        backgroundMeta={meta}
+                        spectrumData={raw13C}
+                        ppmRange={zoom13C}
+                        spectrumColor="#000000"
                         canInteract={canInteract13C}
                         zoomEnabled={zoomRectEnabled}
-                        onZoom={(a, b) => doZoom1D("13C", a, b)}
-                        onZoomPx={(r, d) => doZoom1DPixels("13C", r, d)}
-                        onReset={() => doReset1D("13C")}
+                        intensityScale={intensityScaleByType["13C"] || 1.0}
+                        onIntensityChange={(delta) => handleIntensityWheel("13C", delta)}
+                        onZoom={(ppmMin, ppmMax) => {
+                          setZoomRangeByType(prev => ({
+                            ...prev,
+                            "13C": { min: Math.min(ppmMin, ppmMax), max: Math.max(ppmMin, ppmMax) }
+                          }));
+                        }}
+                        onReset={() => {
+                          if (raw13C?.ppm?.length) {
+                            // Use bgOptions bounds if defined, otherwise full range
+                            const opts = bgOptions?.["13C"] || {};
+                            const fullMin = raw13C.ppm.reduce((a, b) => a < b ? a : b, raw13C.ppm[0]);
+                            const fullMax = raw13C.ppm.reduce((a, b) => a > b ? a : b, raw13C.ppm[0]);
+                            const ppmMin = Number.isFinite(opts.ppm_min) ? opts.ppm_min : fullMin;
+                            const ppmMax = Number.isFinite(opts.ppm_max) ? opts.ppm_max : fullMax;
+                            setZoomRangeByType(prev => ({
+                              ...prev,
+                              "13C": { min: ppmMin, max: ppmMax }
+                            }));
+                          }
+                        }}
                         busy={!!busyByType?.["13C"]}
                       />
                     </div>
@@ -2788,9 +3025,9 @@ export default function Viewer({
               }
 
               if (cosy) {
-                const bgC  = bgByType?.["COSY"];
-                const img  = bgC?.pngUrl || null;
-                const meta = getMeta(bgC);
+                const rawCOSY = rawDataByType?.["COSY"];
+                const zoomCOSY = zoomRangeByType?.["COSY"];
+                const hasDataCOSY = rawCOSY && rawCOSY.contours?.length > 0;
 
                 blocks.push({
                   key: "b-COSY",
@@ -2798,7 +3035,7 @@ export default function Viewer({
                     <div
                       style={{
                         border: "1px solid #e5e7eb",
-                        borderRadius: 8, padding: 8,
+                        borderRadius: 6, padding: 4,
                         overflow: "hidden"
                       }}
                     >
@@ -2810,7 +3047,7 @@ export default function Viewer({
                         }}
                       >
                         <span>COSY</span>
-                        {img && (
+                        {hasDataCOSY && (
                           <span
                             style={{
                               fontSize: 9, color: "#16a34a",
@@ -2843,11 +3080,8 @@ export default function Viewer({
                       <Scatter2D
                         key={[
                           refreshKeyByType["COSY"] ?? 0,
-                          img || "",
-                          meta?.etag ?? meta?.version ?? meta?.last_modified ?? "",
-                          JSON.stringify(meta?.plot_bbox_px ?? null) || "",
-                          String(meta?.level_start ?? ""),
-                          String(meta?.nonce ?? "")
+                          hasDataCOSY ? "loaded" : "",
+                          JSON.stringify(zoomCOSY || null),
                         ].join("|")}
                         theoryPts={showTheory ? cosy.theory : []}
                         expPts={showExp ? cosy.expPts : []}
@@ -2855,13 +3089,37 @@ export default function Viewer({
                         showTheory={showTheory}
                         showExp={showExp}
                         height={PLOT_HEIGHT}
-                        backgroundImage={img}
-                        backgroundMeta={meta}
+                        contourData={rawCOSY}
+                        zoomRange={zoomCOSY}
+                        contourColor="#000000"
                         canInteract={canInteractCOSY}
                         zoomEnabled={zoomRectEnabled}
-                        onZoom2D={(w) => doZoom2D("COSY", w)}
-                        onWheelDelta={(dy) => doWheel2D("COSY", dy)}
-                        onReset={() => doReset2D("COSY")}
+                        onZoom2D={(zoomWindow) => {
+                          setZoomRangeByType(prev => ({
+                            ...prev,
+                            COSY: {
+                              f1: { min: zoomWindow.f1.min, max: zoomWindow.f1.max },
+                              f2: { min: zoomWindow.f2.min, max: zoomWindow.f2.max }
+                            }
+                          }));
+                        }}
+                        onReset={() => {
+                          if (rawCOSY) {
+                            // Use bgOptions bounds if defined, otherwise full range
+                            const opts = bgOptions?.["COSY"] || {};
+                            const f1Min = Number.isFinite(opts.f1_ppm_min) ? opts.f1_ppm_min : rawCOSY.f1_range?.[0];
+                            const f1Max = Number.isFinite(opts.f1_ppm_max) ? opts.f1_ppm_max : rawCOSY.f1_range?.[1];
+                            const f2Min = Number.isFinite(opts.f2_ppm_min) ? opts.f2_ppm_min : rawCOSY.f2_range?.[0];
+                            const f2Max = Number.isFinite(opts.f2_ppm_max) ? opts.f2_ppm_max : rawCOSY.f2_range?.[1];
+                            setZoomRangeByType(prev => ({
+                              ...prev,
+                              COSY: {
+                                f1: { min: f1Min, max: f1Max },
+                                f2: { min: f2Min, max: f2Max }
+                              }
+                            }));
+                          }
+                        }}
                         busy={!!busyByType?.["COSY"]}
                       />
                     </div>
@@ -2870,9 +3128,9 @@ export default function Viewer({
               }
 
               if (hsqc) {
-                const bgH  = bgByType?.["HSQC"];
-                const img  = bgH?.pngUrl || null;
-                const meta = getMeta(bgH);
+                const rawHSQC = rawDataByType?.["HSQC"];
+                const zoomHSQC = zoomRangeByType?.["HSQC"];
+                const hasDataHSQC = rawHSQC && rawHSQC.contours?.length > 0;
 
                 blocks.push({
                   key: "b-HSQC",
@@ -2880,7 +3138,7 @@ export default function Viewer({
                     <div
                       style={{
                         border: "1px solid #e5e7eb",
-                        borderRadius: 8, padding: 8,
+                        borderRadius: 6, padding: 4,
                         overflow: "hidden"
                       }}
                     >
@@ -2892,7 +3150,7 @@ export default function Viewer({
                         }}
                       >
                         <span>HSQC</span>
-                        {img && (
+                        {hasDataHSQC && (
                           <span
                             style={{
                               fontSize: 9, color: "#16a34a",
@@ -2925,11 +3183,8 @@ export default function Viewer({
                       <Scatter2D
                         key={[
                           refreshKeyByType["HSQC"] ?? 0,
-                          img || "",
-                          meta?.etag ?? meta?.version ?? meta?.last_modified ?? "",
-                          JSON.stringify(meta?.plot_bbox_px ?? null) || "",
-                          String(meta?.level_start ?? ""),
-                          String(meta?.nonce ?? "")
+                          hasDataHSQC ? "loaded" : "",
+                          JSON.stringify(zoomHSQC || null),
                         ].join("|")}
                         theoryPts={showTheory ? hsqc.theory : []}
                         expPts={showExp ? hsqc.expPts : []}
@@ -2937,13 +3192,37 @@ export default function Viewer({
                         showTheory={showTheory}
                         showExp={showExp}
                         height={PLOT_HEIGHT}
-                        backgroundImage={img}
-                        backgroundMeta={meta}
+                        contourData={rawHSQC}
+                        zoomRange={zoomHSQC}
+                        contourColor="#000000"
                         canInteract={canInteractHSQC}
                         zoomEnabled={zoomRectEnabled}
-                        onZoom2D={(w) => doZoom2D("HSQC", w)}
-                        onWheelDelta={(dy) => doWheel2D("HSQC", dy)}
-                        onReset={() => doReset2D("HSQC")}
+                        onZoom2D={(zoomWindow) => {
+                          setZoomRangeByType(prev => ({
+                            ...prev,
+                            HSQC: {
+                              f1: { min: zoomWindow.f1.min, max: zoomWindow.f1.max },
+                              f2: { min: zoomWindow.f2.min, max: zoomWindow.f2.max }
+                            }
+                          }));
+                        }}
+                        onReset={() => {
+                          if (rawHSQC) {
+                            // Use bgOptions bounds if defined, otherwise full range
+                            const opts = bgOptions?.["HSQC"] || {};
+                            const f1Min = Number.isFinite(opts.f1_ppm_min) ? opts.f1_ppm_min : rawHSQC.f1_range?.[0];
+                            const f1Max = Number.isFinite(opts.f1_ppm_max) ? opts.f1_ppm_max : rawHSQC.f1_range?.[1];
+                            const f2Min = Number.isFinite(opts.f2_ppm_min) ? opts.f2_ppm_min : rawHSQC.f2_range?.[0];
+                            const f2Max = Number.isFinite(opts.f2_ppm_max) ? opts.f2_ppm_max : rawHSQC.f2_range?.[1];
+                            setZoomRangeByType(prev => ({
+                              ...prev,
+                              HSQC: {
+                                f1: { min: f1Min, max: f1Max },
+                                f2: { min: f2Min, max: f2Max }
+                              }
+                            }));
+                          }
+                        }}
                         busy={!!busyByType?.["HSQC"]}
                       />
                     </div>
@@ -2989,7 +3268,7 @@ export default function Viewer({
                           background: "#fff",
                         }}
                       >
-                        No spectrum — run the annotation
+                        No spectrum. Run the annotation
                       </div>
                     </div>
                   );
@@ -3078,11 +3357,12 @@ export default function Viewer({
         onColorChange={setCustomColor}
       />
 
-      {/* Modale — toutes les molécules */}
+      {/* Modale - toutes les molécules */}
       <ShowAllMoleculesModal
         isOpen={showAllOpen}
         onClose={() => setShowAllOpen(false)}
         sources={sortedSourcesAll}
+        sourcesWithScore={sortedSourcesWithScore}
         page={allPage}
         setPage={setAllPage}
         pageSize={allPageSize}
@@ -3093,14 +3373,20 @@ export default function Viewer({
         customColors={customColors}
       />
 
-      {/* Modale — spectre 1H simulé détaillé */}
+      {/* Modale - spectre 1H simulé détaillé */}
       <SpectrumDetailModal
         isOpen={spectrumDetailOpen}
         onClose={() => setSpectrumDetailOpen(false)}
-        molId={oneH?.source || selectedSource || "mol"}
-        taskId={derivedTaskId}
+        molId={selectedSource || oneH?.source || "mol"}
+        taskId={taskId}
         theoryShifts={oneH?.theory || []}
         expShifts={oneH?.expX || []}
+        pdataDir1H={pdataDirs?.["1H"] || null}
+        matchTolerancePpm={0.05}
+        // Données pré-chargées (évite de refaire les appels API à l'ouverture)
+        multiplicityJson={preloadedMultiplicityData}
+        preloadedSpectrumData={preloadedSpectrumData}
+        isPreloading={preloadingMultiplicity || preloadingSpectrum}
       />
     </div>
   );

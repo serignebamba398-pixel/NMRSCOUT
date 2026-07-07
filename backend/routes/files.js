@@ -6,6 +6,7 @@ const { uploadsDir, outputsDir } = require('../config/paths');
 const { safeResolve } = require('../utils/filesystem');
 const { logWithMemory } = require('../utils/logger');
 const upload = require('../middleware/upload');
+const projectService = require('../services/projectService');
 
 router.get('/api/files', (req, res) => {
   try {
@@ -71,29 +72,62 @@ router.delete('/api/files/:filename', (req, res) => {
  * @returns JSON object with multiplicity data for the molecule
  */
 router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
+  console.log('========================================');
+  console.log('[MULTIPLICITY] NEW VERSION v2.0 - ENDPOINT HIT!');
+  console.log('[MULTIPLICITY] Params:', req.params);
+  console.log('========================================');
+
   try {
     const { taskId, molId } = req.params;
-    const taskDir = path.join(outputsDir, taskId);
+
+    // Get the current project's outputs directory
+    const currentProject = projectService.getCurrent();
+    console.log('[MULTIPLICITY] Current project:', currentProject?.name || 'none');
+    const baseDir = currentProject?.workDir
+      ? path.join(currentProject.workDir, 'outputs')
+      : outputsDir;
+
+    console.log('[MULTIPLICITY] baseDir:', baseDir);
+
+    const taskDir = path.join(baseDir, taskId);
+    console.log('[MULTIPLICITY] taskDir:', taskDir);
+    console.log('[MULTIPLICITY] taskDir exists?', fs.existsSync(taskDir));
 
     if (!fs.existsSync(taskDir)) {
+      console.log('[MULTIPLICITY] ERROR: Task directory not found!');
       return res.status(404).json({
         error: 'Task directory not found',
-        path: taskDir
+        path: taskDir,
+        baseDir,
+        currentProject: currentProject?.name || 'none'
       });
     }
 
     // Try 1: Look for specific molecule file {molId}_multiplicity.json
-    const specificPath = path.join(taskDir, `${molId}_multiplicity.json`);
-    if (fs.existsSync(specificPath)) {
-      const jsonContent = fs.readFileSync(specificPath, 'utf-8');
-      const moleculeData = JSON.parse(jsonContent);
+    // Try multiple name variations (with/without _predicted suffix)
+    const molIdVariants = [
+      molId,
+      molId.replace(/_predicted$/i, ''),  // Remove _predicted suffix if present
+      molId.replace(/_annotated$/i, ''),  // Remove _annotated suffix if present
+    ];
 
-      return res.json({
-        status: 'ok',
-        mol_id: moleculeData.mol_id || molId,
-        smiles: moleculeData.smiles || '',
-        multiplicity_data: moleculeData
-      });
+    console.log('[MULTIPLICITY] Trying variants:', molIdVariants);
+
+    for (const variant of molIdVariants) {
+      const specificPath = path.join(taskDir, `${variant}_multiplicity.json`);
+      console.log('[MULTIPLICITY] Trying file:', specificPath, '- exists?', fs.existsSync(specificPath));
+      if (fs.existsSync(specificPath)) {
+        console.log('[MULTIPLICITY] SUCCESS! Found file:', specificPath);
+        const jsonContent = fs.readFileSync(specificPath, 'utf-8');
+        const moleculeData = JSON.parse(jsonContent);
+
+        return res.json({
+          status: 'ok',
+          mol_id: moleculeData.mol_id || molId,
+          smiles: moleculeData.smiles || '',
+          multiplicity_data: moleculeData
+        });
+      }
     }
 
     // Try 2: Look for all_multiplicities.json (batch predictions)
@@ -102,8 +136,11 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
       const jsonContent = fs.readFileSync(allPath, 'utf-8');
       const allMultiplicities = JSON.parse(jsonContent);
 
-      // Find the molecule by ID
-      const molecule = allMultiplicities.molecules?.find(m => m.mol_id === molId);
+      // Find the molecule by ID (also try without _predicted suffix)
+      const molIdClean = molId.replace(/_predicted$/i, '');
+      const molecule = allMultiplicities.molecules?.find(m => 
+        m.mol_id === molId || m.mol_id === molIdClean
+      );
 
       if (!molecule) {
         return res.status(404).json({

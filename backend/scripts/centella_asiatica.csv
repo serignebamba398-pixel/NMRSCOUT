@@ -1,0 +1,164 @@
+﻿qid,nom,SMILES,InChIKey,formule,PubChemCID,espece,genre,famille
+Q27089406,(+)-δ-cadinene,CC1=CC2C(CCC(=C2CC1)C)C(C)C,FUCYIEXQVQJBKY-ZFWWWQNUSA-N,C₁₅H₂₄,441005,Centella asiatica,Centella,Apiaceae
+Q27108622,(-)-beta-chamigrene,CC1=CCC2(CC1)C(=C)CCCC2(C)C,WLNGPDPILFYWKF-OAHLLOKOSA-N,C₁₅H₂₄,442353,Centella asiatica,Centella,Apiaceae
+Q27103655,(-)-beta-pinene,CC1(C2CCC(=C)C1C2)C,WTARULDDTDQWMU-IUCAKERBSA-N,C₁₀H₁₆,440967,Centella asiatica,Centella,Apiaceae
+Q104375352,(-)-bornyl acetate,O=C(OC1CC2CCC1(C)C2(C)C)C,KGEKLUUHTZCSIP-HOSYDEDBSA-N,C₁₂H₂₀O₂,93009,Centella asiatica,Centella,Apiaceae
+Q27121450,(-)-germacrene D,CC1=CCCC(=C)C=CC(CC1)C(C)C,GAIBLDCXCZKKJE-RXJOXMPGSA-N,C₁₅H₂₄,5317570,Centella asiatica,Centella,Apiaceae
+Q105111466,"(18R)-2alpha,3beta,6beta,23-Tetrahydroxyoleana-12-ene-28-oic acid",O=C(O)C12CCC(C)(C)CC2C3=CCC4C5(C)CC(O)C(O)C(C)(CO)C5C(O)CC4(C)C3(C)CC1,IDQVFXZQPGAVAM-BCQLDAOOSA-N,C₃₀H₄₈O₆,101773371,Centella asiatica,Centella,Apiaceae
+Q105134963,"(1R,2S,4aR,6aR,6aR,6bR,8aR,9R,10R,11R,12aR,14aR,14bR)-2,10,11-trihydroxy-9-(hydroxymethyl)-1,2,6a,6b,9,12a-hexamethyl-1,3,4,5,6,6a,7,8,8a,10,11,12,13,14,14a,14b-hexadecahydropicene-4a-carboxylic acid",O=C(O)C12CCC(O)(C)C(C)C2C3CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC4(C)C3(C)CC1,JTSCNAYUGSSUET-AWRULKIUSA-N,C₃₀H₅₀O₆,162960064,Centella asiatica,Centella,Apiaceae
+Q82498851,"(1R,4S,5R)-1,8-Dimethyl-4-(prop-1-en-2-yl)spiro[4.5]dec-7-ene",C=C(C)C1CCC(C)C21CC=C(C)CC2,DVBSKQAFCDJNSL-ILXRZTDVSA-N,C₁₅H₂₄,20055537,Centella asiatica,Centella,Apiaceae
+Q105213586,"(1S,2R,4aS,6aR,6aS,6bR,8R,8aR,9R,10R,11R,12aR,14bR)-8,10,11-trihydroxy-9-(hydroxymethyl)-1,2,6a,6b,9,12a-hexamethyl-2,3,4,5,6,6a,7,8,8a,10,11,12,13,14b-tetradecahydro-1H-picene-4a-carboxylic acid",O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(O)C(C)(CO)C5C(O)CC4(C)C3(C)CC1,PRAUVHZJPXOEIF-ZRMSNXOCSA-N,C₃₀H₄₈O₆,98047108,Centella asiatica,Centella,Apiaceae
+Q105117463,"(1S,2R,4aS,6aR,6aS,6bR,8R,8aR,9R,10S,12aR,14bS)-8,10-dihydroxy-9-(hydroxymethyl)-1,2,6a,6b,9,12a-hexamethyl-2,3,4,5,6,6a,7,8,8a,10,11,12,13,14b-tetradecahydro-1H-picene-4a-carboxylic acid",O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CCC(O)C(C)(CO)C5C(O)CC4(C)C3(C)CC1,IPSHXWWPUPDYTO-YXMKZSFGSA-N,C₃₀H₄₈O₅,162848294,Centella asiatica,Centella,Apiaceae
+Q105136769,"(1S,2R,4aS,6aR,6aS,6bR,8aS,9R,10R,11R,12aR,14bS)-10,11-dihydroxy-9-(hydroxymethyl)-1,2,6a,6b,9,12a-hexamethyl-2,3,4,5,6,6a,7,8,8a,10,11,12,13,14b-tetradecahydro-1H-picene-4a-carboxylic acid",O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC4(C)C3(C)CC1,JXSVIVRDWWRQRT-LBWJMHIJSA-N,C₃₀H₄₈O₅,51531959,Centella asiatica,Centella,Apiaceae
+Q104990348,"(1S,3R,4S,5R)-4-[(2-carboxyacetyl)oxy]-3,5-bis({[(2E)-3-(3,4-dihydroxyphenyl)prop-2-enoyl]oxy})-1-hydroxycyclohexane-1-carboxylic acid",O=C(OC1CC(O)(C(=O)O)CC(OC(=O)C=CC2=CC=C(O)C(O)=C2)C1OC(=O)CC(=O)O)C=CC3=CC=C(O)C(O)=C3,DVTWOUGPAWPIGB-BJSQEOLHSA-N,C₂₈H₂₆O₁₅,,Centella asiatica,Centella,Apiaceae
+Q105279730,"(1S,4S,5R,8R,10S,13S,14R,17S,18R,19S,20R)-10-hydroxy-4,5,9,9,13,19,20-heptamethyl-24-oxahexacyclo[15.5.2.0¹,¹⁸.0⁴,¹⁷.0⁵,¹⁴.0⁸,¹³]tetracos-15-en-23-one",O=C1OC23C=CC4C5(C)CCC(O)C(C)(C)C5CCC4(C)C3(C)CCC16CCC(C)C(C)C26,UVBLDLGZDSGCSN-RUOWOPRNSA-N,C₃₀H₄₆O₃,21606663,Centella asiatica,Centella,Apiaceae
+Q27136474,(20R)-ginsenoside Rg3,CC(=CCCC(C)(C1CCC2(C1C(CC3C2(CCC4C3(CCC(C4(C)C)OC5C(C(C(C(O5)CO)O)O)OC6C(C(C(C(O6)CO)O)O)O)C)C)O)C)O)C,RWXIFXNRCLMQCD-CZIWJLDFSA-N,C₄₂H₇₂O₁₃,46887680,Centella asiatica,Centella,Apiaceae
+Q27116653,"(2E,6Z)-farnesol",CC(=CCCC(=CCCC(=CCO)C)C)C,CRDAMVZIKSXKFV-GNESMGCMSA-N,C₁₅H₂₆O,1549109,Centella asiatica,Centella,Apiaceae
+Q105112725,"(2E,9E)-pentadeca-2,9-dien-4,6-diyn-1-yl acetate",O=C(OCC=CC#CC#CCC=CCCCCC)C,IGNIYJTXYTUVGD-BTOGOYLPSA-N,C₁₇H₂₂O₂,14841159,Centella asiatica,Centella,Apiaceae
+Q60194891,"(2E/Z,6E/Z)-farnésol",OCC=C(C)CCC=C(C)CCC=C(C)C,CRDAMVZIKSXKFV-UHFFFAOYSA-N,C₁₅H₂₆O,3327,Centella asiatica,Centella,Apiaceae
+Q105303063,"(2R,3R,4S,5S,6R)-2-[(2E,6S)-6-hydroxy-2,6-dimethylocta-2,7-dienoxy]-6-(hydroxymethyl)oxane-3,4,5-triol",OCC1OC(OCC(=CCCC(O)(C=C)C)C)C(O)C(O)C1O,WEHZDNHJZBEGME-ZEXAURIBSA-N,C₁₆H₂₈O₇,11461715,Centella asiatica,Centella,Apiaceae
+Q105246204,"(2R,3S,4S,5R,6R)-2-[[(2R,3R,4R)-3,4-dihydroxy-4-(hydroxymethyl)oxolan-2-yl]oxymethyl]-6-[[(1R,2S,4R)-1,7,7-trimethyl-2-bicyclo[2.2.1]heptanyl]oxy]oxane-3,4,5-triol",OCC1(O)COC(OCC2OC(OC3CC4CCC3(C)C4(C)C)C(O)C(O)C2O)C1O,RVQFSOHDFFWTLD-GNMWDIMASA-N,C₂₁H₃₆O₁₀,14526909,Centella asiatica,Centella,Apiaceae
+Q104991249,"(3S,8E,10R)-pentadeca-1,8-dien-4,6-diyne-3,10-diol",OC(C#CC#CC=CC(O)CCCCC)C=C,DXXGLHOAKNZRRB-XEZFYOOLSA-N,C₁₅H₂₀O₂,162945435,Centella asiatica,Centella,Apiaceae
+Q105149692,"(4aS,6aR,6aS,6bR,8aR,9R,10R,11R,12aR)-10,11-dihydroxy-9-(hydroxymethyl)-2,2,6a,6b,9,12a-hexamethyl-1,3,4,5,6,6a,7,8,8a,10,11,12,13,14-tetradecahydropicene-4a-carboxylic acid",O=C(O)C12C(=C3CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC4(C)C3(C)CC1)CC(C)(C)CC2,LBYASJQBHLSHBP-DCAIOKEXSA-N,C₃₀H₄₈O₅,15508087,Centella asiatica,Centella,Apiaceae
+Q105246616,"(4aS,6aR,6aS,6bR,8aS,9R,10R,11R,12aR,14bS)-10,11-dihydroxy-9-(hydroxymethyl)-2,2,6a,6b,9,12a-hexamethyl-1,3,4,5,6,6a,7,8,8a,10,11,12,13,14b-tetradecahydropicene-4a-carboxylic acid",O=C(O)C12CCC(C)(C)CC2C3=CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC4(C)C3(C)CC1,RWNHLTKFBKYDOJ-KHQNHBDZSA-N,C₃₀H₄₈O₅,38349948,Centella asiatica,Centella,Apiaceae
+Q27126989,(6E)-(-)-nerolidol,CC(=CCCC(=CCCC(C)(C=C)O)C)C,FQTLCLSUCSAZDY-GOFCXVBSSA-N,C₁₅H₂₆O,11241545,Centella asiatica,Centella,Apiaceae
+Q27108631,(6E)-β-farnesene,CC(=CCCC(=CCCC(=C)C=C)C)C,JSNRRGGBADWTMC-NTCAYCPXSA-N,C₁₅H₂₄,5281517,Centella asiatica,Centella,Apiaceae
+Q105262983,"(6R,9R)-Roseoside",O=C1C=C(C)C(O)(C=CC(OC2OC(CO)C(O)C(O)C2O)C)C(C)(C)C1,SWYRVCGNMNAFEK-QVRJGIIPSA-N,C₁₉H₃₀O₈,44570408,Centella asiatica,Centella,Apiaceae
+Q105280603,(E)-3-[4-[[(Z)-1-Carboxy-2-[4-[[(Z)-1-carboxy-2-(3-methoxy-4-hydroxyphenyl)ethenyl]oxy]-3-methoxyphenyl]ethenyl]oxy]-3-methoxyphenyl]propenoic acid,O=C(O)C=CC1=CC=C(OC(=CC2=CC=C(OC(=CC3=CC=C(O)C(OC)=C3)C(=O)O)C(OC)=C2)C(=O)O)C(OC)=C1,UWXGIJKBCAIMFK-XVAVVJJYSA-N,C₃₀H₂₆O₁₂,21580474,Centella asiatica,Centella,Apiaceae
+Q76305433,(E)-hex-3-en-2-one,O=C(C=CCC)C,LPCWMYHBLXLJJQ-SNAWJCMRSA-N,C₆H₁₀O,5367744,Centella asiatica,Centella,Apiaceae
+Q27121577,(R)-beta-bisabolene,CC1=CCC(CC1)C(=C)CCC=C(C)C,XZRVRYFILCSYSP-HNNXBMFYSA-N,C₁₅H₂₄,68128,Centella asiatica,Centella,Apiaceae
+Q27122042,(S)-rosmarinic acid,C1=CC(=C(C=C1CC(C(=O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)O)O,DOUMFZQKYFQNTF-GIZXNFQBSA-N,C₁₈H₁₆O₈,639655,Centella asiatica,Centella,Apiaceae
+Q105346692,"1,3-Bis[3-(3,4-dihydroxyphenyl)prop-2-enoyloxy]-4,5-dihydroxycyclohexane-1-carboxylic acid",O=C(OC1CC(OC(=O)C=CC2=CC=C(O)C(O)=C2)(C(=O)O)CC(O)C1O)C=CC3=CC=C(O)C(O)=C3,YDDUMTOHNYZQPO-UHFFFAOYSA-N,C₂₅H₂₄O₁₂,205954,Centella asiatica,Centella,Apiaceae
+Q27158339,2'-O-methylphaseollinisoflavan,CC1(C=CC2=C(O1)C=CC(=C2OC)C3CC4=C(C=C(C=C4)O)OC3)C,CSEWDTXNCZLZIW-AWEZNQCLSA-N,C₂₁H₂₂O₄,15391342,Centella asiatica,Centella,Apiaceae
+Q104195273,"2,3,6,23-Tetrahydroxyurs-12-en-28-oic acid",O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(O)C(C)(CO)C5C(O)CC4(C)C3(C)CC1,PRAUVHZJPXOEIF-UHFFFAOYSA-N,C₃₀H₄₈O₆,258809,Centella asiatica,Centella,Apiaceae
+Q104400403,"2-(6-Hydroxy-2,6-dimethylocta-2,7-dienoxy)-6-(hydroxymethyl)oxane-3,4,5-triol",OCC1OC(OCC(=CCCC(O)(C=C)C)C)C(O)C(O)C1O,WEHZDNHJZBEGME-UHFFFAOYSA-N,C₁₆H₂₈O₇,72970728,Centella asiatica,Centella,Apiaceae
+Q82212502,"2-(hydroxymethyl)-6-phenylmethoxyoxane-3,4,5-triol",OCC1OC(OCC=2C=CC=CC2)C(O)C(O)C1O,GKHCBYYBLTXYEV-UHFFFAOYSA-N,C₁₃H₁₈O₆,4984739,Centella asiatica,Centella,Apiaceae
+Q209428,2-Méthylbutan-2-ol,CCC(C)(C)O,MSXVEPNJUHWQHW-UHFFFAOYSA-N,C₅H₁₂O,6405,Centella asiatica,Centella,Apiaceae
+Q105280602,2-[4-[2-Carboxy-2-[4-(2-carboxyethenyl)-2-methoxyphenoxy]ethenyl]-2-methoxyphenoxy]-3-(4-hydroxy-3-methoxyphenyl)prop-2-enoic acid,O=C(O)C=CC1=CC=C(OC(=CC2=CC=C(OC(=CC3=CC=C(O)C(OC)=C3)C(=O)O)C(OC)=C2)C(=O)O)C(OC)=C1,UWXGIJKBCAIMFK-UHFFFAOYSA-N,C₃₀H₂₆O₁₂,73804523,Centella asiatica,Centella,Apiaceae
+Q105246205,"2-[[3,4-Dihydroxy-4-(hydroxymethyl)oxolan-2-yl]oxymethyl]-6-[(1,7,7-trimethyl-2-bicyclo[2.2.1]heptanyl)oxy]oxane-3,4,5-triol",OCC1(O)COC(OCC2OC(OC3CC4CCC3(C)C4(C)C)C(O)C(O)C2O)C1O,RVQFSOHDFFWTLD-UHFFFAOYSA-N,C₂₁H₃₆O₁₀,14526908,Centella asiatica,Centella,Apiaceae
+Q4596898,2-methoxy-4-vinylphenol,COC1=C(C=CC(=C1)C=C)O,YOMSJEATGXXYPX-UHFFFAOYSA-N,C₉H₁₀O₂,332,Centella asiatica,Centella,Apiaceae
+Q105158956,"2alpha,3beta,6beta-Trihydroxyoleana-12-ene-28-oic acid 6-O-(4-O-alpha-L-rhamnopyranosyl-beta-D-glucopyranosyl)-beta-D-glucopyranosyl ester",O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)(C)CC5C6=CCC7C8(C)CC(O)C(O)C(C)(C)C8C(O)CC7(C)C6(C)CC4,LXNMBPCTGSWVDT-RAFDPGAQSA-N,C₄₈H₇₈O₁₉,101103170,Centella asiatica,Centella,Apiaceae
+Q27276885,"3,4-dicaffeoylquinic acid",C1C(C(C(CC1(C(=O)O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)OC(=O)C=CC3=CC(=C(C=C3)O)O)O,UFCLZKMFXSILNL-RVXRWRFUSA-N,C₂₅H₂₄O₁₂,6474309,Centella asiatica,Centella,Apiaceae
+Q105264303,"3,5,5-Trimethyl-4-[3-[3,4,5-trihydroxy-6-(hydroxymethyl)oxan-2-yl]oxybut-1-enyl]cyclohex-2-en-1-one",O=C1C=C(C)C(C=CC(OC2OC(CO)C(O)C(O)C2O)C)C(C)(C)C1,SZOPSAFLRCYJCX-UHFFFAOYSA-N,C₁₉H₃₀O₇,73815024,Centella asiatica,Centella,Apiaceae
+Q27134233,"3,5-dicaffeoylquinic acid",C1=C(C=C(C(=C1)O)O)C=CC(=O)OC2C(C(CC(C2)(O)C(=O)O)OC(=O)C=CC3=CC(=C(C=C3)O)O)O,KRZBCHWVBQOTNZ-PSEXTPKNSA-N,C₂₅H₂₄O₁₂,,Centella asiatica,Centella,Apiaceae
+Q63408642,3-Epicorosolic acid,O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(O)C(C)(C)C5CCC4(C)C3(C)CC1,HFGSQOYIOKBQOW-RFMFWNHYSA-N,C₃₀H₄₈O₄,15917998,Centella asiatica,Centella,Apiaceae
+Q72496630,3-Nonen-2-one,O=C(C=CCCCCC)C,HDKLIZDXVUCLHQ-UHFFFAOYSA-N,C₉H₁₆O,26630,Centella asiatica,Centella,Apiaceae
+Q6086296,3-O-glucopyranoside de quercétine,C1=CC(=C(C=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)OC4C(C(C(C(O4)CO)O)O)O)O)O,OVSQVDMCBVZWGM-QSOFNFLRSA-N,C₂₁H₂₀O₁₂,5280804,Centella asiatica,Centella,Apiaceae
+Q105155062,3-hexen-2-one,O=C(C=CCC)C,LPCWMYHBLXLJJQ-UHFFFAOYSA-N,C₆H₁₀O,12990,Centella asiatica,Centella,Apiaceae
+Q104989366,"3beta,6beta,23-Trihydroxyoleana-12-ene-28-oic acid 6-O-(4-O-alpha-L-rhamnopyranosyl-beta-D-glucopyranosyl)-beta-D-glucopyranosyl ester",O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)(C)CC5C6=CCC7C8(C)CCC(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,DUQMBNHUHLOXBM-VKJCULEXSA-N,C₄₈H₇₈O₁₉,101103171,Centella asiatica,Centella,Apiaceae
+Q27137708,"3beta,6beta,23-trihydroxyolean-12-en-28-oic acid",CC1(CCC2(CCC3(C(=CCC4C3(CC(C5C4(CCC(C5(C)CO)O)C)O)C)C2C1)C)C(=O)O)C,XRRLUGUSXUFEDF-NJMQRACMSA-N,C₃₀H₄₈O₅,57397367,Centella asiatica,Centella,Apiaceae
+Q27106970,"4,5-dicaffeoylquinic acid",C1C(C(C(CC1(C(=O)O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)OC(=O)C=CC3=CC(=C(C=C3)O)O)O,UFCLZKMFXSILNL-PSEXTPKNSA-N,C₂₅H₂₄O₁₂,5281780,Centella asiatica,Centella,Apiaceae
+Q104197738,"4-Hydroxy-3,5,5-trimethyl-4-[3-[3,4,5-trihydroxy-6-(hydroxymethyl)oxan-2-yl]oxybut-1-enyl]cyclohex-2-en-1-one",O=C1C=C(C)C(O)(C=CC(OC2OC(CO)C(O)C(O)C2O)C)C(C)(C)C1,SWYRVCGNMNAFEK-UHFFFAOYSA-N,C₁₉H₃₀O₈,73815023,Centella asiatica,Centella,Apiaceae
+Q105003850,5-ethenyl-2-methoxyphenol,OC1=CC(C=C)=CC=C1OC,FXEIWOUGVRUQNK-UHFFFAOYSA-N,C₉H₁₀O₂,10441857,Centella asiatica,Centella,Apiaceae
+Q105134527,"6-O-beta-D-Glucopyranosyl-beta-D-glucopyranosyl (2alpha,3beta,4alpha,6beta)-2,3,6,23-tetrahydroxyurs-12-en-28-oate",O=C(OC1OC(COC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O)C34CCC(C)C(C)C4C5=CCC6C7(C)CC(O)C(O)C(C)(CO)C7C(O)CC6(C)C5(C)CC3,JSQCMNXZFPMWES-WRBXKWMASA-N,C₄₂H₆₈O₁₆,101140416,Centella asiatica,Centella,Apiaceae
+Q105033785,Asiaticoside C,O=C(OCC1(C)C(O)C(O)CC2(C)C3CC=C4C5C(C)C(C)CCC5(C(=O)OC6OC(COC7OC(CO)C(OC8OC(C)C(O)C(O)C8O)C(O)C7O)C(O)C(O)C6O)CCC4(C)C3(C)CCC12)C,HUHPZZGDDVIBQX-QLRYCWKXSA-N,C₅₀H₈₀O₂₀,101103169,Centella asiatica,Centella,Apiaceae
+Q105250783,Asiaticoside D,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(C)C8CCC7(C)C6(C)CC4,SDRICUDLBWDVDW-QUVRKVDJSA-N,C₄₈H₇₈O₁₈,102212084,Centella asiatica,Centella,Apiaceae
+Q105226238,Asiaticoside E,O=C(OC1OC(COC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O)C34CCC(C)C(C)C4C5=CCC6C7(C)CC(O)C(O)C(C)(CO)C7CCC6(C)C5(C)CC3,QRECZCMVJKJLJW-JNGPRRAUSA-N,C₄₂H₆₈O₁₅,102212085,Centella asiatica,Centella,Apiaceae
+Q105141895,Asiaticoside F,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CCC(O)C(C)(CO)C8CCC7(C)C6(C)CC4,KJNOFQIXRNJCSC-MYKCRJTGSA-N,C₄₈H₇₈O₁₈,53317001,Centella asiatica,Centella,Apiaceae
+Q4811191,Astragaline,O=C1C(OC2OC(CO)C(O)C(O)C2O)=C(OC=3C=C(O)C=C(O)C13)C=4C=CC(O)=CC4,JPUKWEQWGBDDQB-QSOFNFLRSA-N,C₂₁H₂₀O₁₁,5282102,Centella asiatica,Centella,Apiaceae
+Q11595687,B-bisabolene,CC1=CCC(CC1)C(=C)CCC=C(C)C,XZRVRYFILCSYSP-OAHLLOKOSA-N,C₁₅H₂₄,10104370,Centella asiatica,Centella,Apiaceae
+Q2756479,Campestérol,CC(C)C(C)CCC(C)C1CCC2C1(CCC3C2CC=C4C3(CCC(C4)O)C)C,SGNBVLSWZMBQTH-PODYLUTMSA-N,C₂₈H₄₈O,173183,Centella asiatica,Centella,Apiaceae
+Q105015361,Castillicetin,O=C(OC=1C(=O)C=2C(O)=CC(O)=CC2OC1C=3C=CC(O)=C(O)C3)C=CC4=CC=C(O)C(O)=C4,GQGMJHMGQNIKKD-QHHAFSJGSA-N,C₂₄H₁₆O₁₀,102394640,Centella asiatica,Centella,Apiaceae
+Q105386330,Centellasaponin D,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CCC(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,ZYPUEOGJHLWGGM-AIZHKWPGSA-N,C₄₈H₇₈O₁₉,101103168,Centella asiatica,Centella,Apiaceae
+Q15410900,Daucostérol,CCC(CCC(C)C1CCC2C1(CCC3C2CC=C4C3(CCC(C4)OC5C(C(C(C(O5)CO)O)O)O)C)C)C(C)C,NPJICTMALKLTFW-OFUAXYCQSA-N,C₃₅H₆₀O₆,5742590,Centella asiatica,Centella,Apiaceae
+Q105264304,Dearabinosyl pneumonanthoside,O=C1C=C(C)C(C=CC(OC2OC(CO)C(O)C(O)C2O)C)C(C)(C)C1,SZOPSAFLRCYJCX-UZOVYFIJSA-N,C₁₉H₃₀O₇,38346679,Centella asiatica,Centella,Apiaceae
+Q105150322,Dgdg,O=C(OCC(OC(=O)CCCCCCCCCCCCCCCCC)COC1OC(COC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O)CCCCCCCCCCCCCCCCC,LDQFLSUQYHBXSX-UHFFFAOYSA-N,C₅₁H₉₆O₁₅,4629344,Centella asiatica,Centella,Apiaceae
+Q105150321,Digalactosyl diacyl glycerol (dgdg),O=C(OCC(OC(=O)CCCCCCCCCCCCCCCCC)COC1OC(COC2OC(CO)C(O)C(O)C2O)C(O)C(O)C1O)CCCCCCCCCCCCCCCCC,LDQFLSUQYHBXSX-HXXRYREZSA-N,C₅₁H₉₆O₁₅,15991538,Centella asiatica,Centella,Apiaceae
+Q36502089,Germacrène D,C=C1C=CC(CCC(=CCC1)C)C(C)C,GAIBLDCXCZKKJE-ACWLMNNXSA-N,C₁₅H₂₄,91723653,Centella asiatica,Centella,Apiaceae
+Q105383101,Ginsenoside Rd2,OCC1OC(OC2CCC3(C)C(CCC4(C)C3CC(O)C5C(CCC54C)C(OC6OC(COC7OCC(O)C(O)C7O)C(O)C(O)C6O)(C)CCC=C(C)C)C2(C)C)C(O)C(O)C1O,ZTQSADJAYQOCDD-FDDSVCGKSA-N,C₄₇H₈₀O₁₇,21672569,Centella asiatica,Centella,Apiaceae
+Q27136475,Ginsenoside Rg5,CC(=CCC=C(C)C1CCC2(C1C(CC3C2(CCC4C3(CCC(C4(C)C)OC5C(C(C(C(O5)CO)O)O)OC6C(C(C(C(O6)CO)O)O)O)C)C)O)C)C,NJUXRKMKOFXMRX-RNCAKNGISA-N,C₄₂H₇₀O₁₂,11550001,Centella asiatica,Centella,Apiaceae
+Q105383102,Gynostemma Extract,OCC1OC(OC2CCC3(C)C(CCC4(C)C3CC(O)C5C(CCC54C)C(OC6OC(COC7OCC(O)C(O)C7O)C(O)C(O)C6O)(C)CCC=C(C)C)C2(C)C)C(O)C(O)C1O,ZTQSADJAYQOCDD-HUGMCNGHSA-N,C₄₇H₈₀O₁₇,46887681,Centella asiatica,Centella,Apiaceae
+Q410836,Géraniol,CC(=CCCC(=CCO)C)C,GLZPCOQZEFWAFX-JXMROGBWSA-N,C₁₀H₁₈O,637566,Centella asiatica,Centella,Apiaceae
+Q425827,Heptanal,CCCCCCC=O,FXHGMKSSBGDXIY-UHFFFAOYSA-N,C₇H₁₄O,8130,Centella asiatica,Centella,Apiaceae
+Q76415778,Kaempferol 3-p-coumarate,O=C(OC=1C(=O)C=2C(O)=CC(O)=CC2OC1C=3C=CC(O)=CC3)C=CC4=CC=C(O)C=C4,OBSPVONVWCVMCK-XCVCLJGOSA-N,C₂₄H₁₆O₈,10526707,Centella asiatica,Centella,Apiaceae
+Q104998505,Kaempferol-3-O-glucuronoside,O=C(O)C1OC(OC=2C(=O)C=3C(O)=CC(O)=CC3OC2C=4C=CC(O)=CC4)C(O)C(O)C1O,FNTJVYCFNVUBOL-UHFFFAOYSA-N,C₂₁H₁₈O₁₂,14185731,Centella asiatica,Centella,Apiaceae
+Q393336,Kaempférol,C1=CC(=CC=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)O)O,IYRMWMYZSQPJKC-UHFFFAOYSA-N,C₁₅H₁₀O₆,5280863,Centella asiatica,Centella,Apiaceae
+Q105213583,Madecassic-acid,O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(O)C(C)(CO)C5C(O)CC4(C)C3(C)CC1,PRAUVHZJPXOEIF-AGDHMSGPSA-N,C₃₀H₄₈O₆,51531966,Centella asiatica,Centella,Apiaceae
+Q105149768,"Methyl 5-(6,15-dihydroxy-8-methoxyheptadeca-9,16-dien-11,13-diyn-7-yl)oxypentanoate",O=C(OC)CCCCOC(C(O)CCCCC)C(OC)C=CC#CC#CC(O)C=C,LCCGCXCFZHBCJT-UHFFFAOYSA-N,C₂₄H₃₆O₆,73409839,Centella asiatica,Centella,Apiaceae
+Q6871627,Miquélianine,C1=CC(=C(C=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)OC4C(C(C(C(O4)C(=O)O)O)O)O)O)O,DUBCCGAQYVUYEU-ZUGPOPFOSA-N,C₂₁H₁₈O₁₃,5274585,Centella asiatica,Centella,Apiaceae
+Q424577,Myrcène,CC(=CCCC(=C)C=C)C,UAHWPYUMFXYFJY-UHFFFAOYSA-N,C₁₀H₁₆,31253,Centella asiatica,Centella,Apiaceae
+Q105153782,Notoginsenoside Ft1,OCC1OC(OC2CCC3(C)C(CCC4(C)C3CC(O)C5C(CCC54C)C(O)(C)CCC=C(C)C)C2(C)C)C(OC6OC(CO)C(O)C(O)C6OC7OCC(O)C(O)C7O)C(O)C1O,LLXVPTXOKTYXHU-UGGLCNOCSA-N,C₄₇H₈₀O₁₇,91973814,Centella asiatica,Centella,Apiaceae
+Q415359,Nérol,CC(=CCCC(=CCO)C)C,GLZPCOQZEFWAFX-YFHOEESVSA-N,C₁₀H₁₈O,643820,Centella asiatica,Centella,Apiaceae
+Q105257076,"O-6-Deoxy-α-L-mannopyranosyl-(1→4)-O-β-D-glucopyranosyl-(1→6)-β-D-glucopyranosyl (2α,3β,6β)-2,3,6-trihydroxyurs-12-en-28-oate",O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(C)C8C(O)CC7(C)C6(C)CC4,SOOVZDUBVGGAAJ-MIZJYBFXSA-N,C₄₈H₇₈O₁₉,101103167,Centella asiatica,Centella,Apiaceae
+Q6626552,Patulétine,COC1=C(C=C2C(=C1O)C(=O)C(=C(O2)C3=CC(=C(C=C3)O)O)O)O,JMIFIYIEXODVTO-UHFFFAOYSA-N,C₁₆H₁₂O₈,5281678,Centella asiatica,Centella,Apiaceae
+Q2095629,Pinène,CC1=CCC2CC1C2(C)C,GRWFGVWFFZKLTI-RKDXNWHRSA-N,C₁₀H₁₆,82227,Centella asiatica,Centella,Apiaceae
+Q104667282,Q104667282,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C4CC(C)C(C)C5C6=CCC7(C)C(CCC8C(C)(CO)C(O)C(O)CC87C)C6(C)CCC45,HNOOIFXGTSPBIW-UHFFFAOYSA-N,C₄₈H₇₈O₁₉,411808,Centella asiatica,Centella,Apiaceae
+Q104938888,Q104938888,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,BNMGUJRJUUDLHW-BOCZEOJVSA-N,C₄₈H₇₈O₂₀,162914017,Centella asiatica,Centella,Apiaceae
+Q104938892,Q104938892,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,BNMGUJRJUUDLHW-VHJZLFQBSA-N,C₄₈H₇₈O₂₀,162914022,Centella asiatica,Centella,Apiaceae
+Q104938893,Q104938893,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,BNMGUJRJUUDLHW-XTRQGBNZSA-N,C₄₈H₇₈O₂₀,145875206,Centella asiatica,Centella,Apiaceae
+Q104940854,Q104940854,O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(OC6OC(CO)C(O)C(O)C6O)C(OC7OC(CO)C(O)C(O)C7O)C(C)(COC8OC(CO)C(O)C(O)C8O)C5C(O)CC4(C)C3(C)CC1,BOVSXLSGCVAGCZ-VAAAJQFKSA-N,C₄₈H₇₈O₂₁,162866809,Centella asiatica,Centella,Apiaceae
+Q105151493,Q105151493,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)(C)CC5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8CCC7(C)C6(C)CC4,LGOPJRNHNGETGG-VLBKTVRDSA-N,C₄₈H₇₈O₁₉,163192087,Centella asiatica,Centella,Apiaceae
+Q105174374,Q105174374,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(COS(=O)(=O)O)C8CCC7(C)C6(C)CC4,MXNLHOVBTWQKPO-FGWHUCSPSA-N,C₄₈H₇₈O₂₂S,162891125,Centella asiatica,Centella,Apiaceae
+Q105174375,Q105174375,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(COS(=O)(=O)O)C8CCC7(C)C6(C)CC4,MXNLHOVBTWQKPO-UHFFFAOYSA-N,C₄₈H₇₈O₂₂S,162891124,Centella asiatica,Centella,Apiaceae
+Q105182350,Q105182350,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)(C)CC5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,NNWMHSNRRWMMBI-PPBUBZDHSA-N,C₄₈H₇₈O₂₀,163194135,Centella asiatica,Centella,Apiaceae
+Q105268138,Q105268138,O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(OC6OC(CO)C(O)C(O)C6O)C(OC7OC(CO)C(O)C(O)C7O)C(C)(COC8OC(CO)C(O)C(O)C8O)C5C(OC9OC(CO)C(O)C(O)C9O)CC4(C)C3(C)CC1,TZGVFIUHMSTOAN-YDHSONRDSA-N,C₅₄H₈₈O₂₆,162958696,Centella asiatica,Centella,Apiaceae
+Q105274985,Q105274985,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45C(=C6CCC7C8(C)CC(O)C(O)C(C)(CO)C8CCC7(C)C6(C)CC4)CC(C)(C)CC5,UKZNRIQOGQPWHP-GQHFFMBASA-N,C₄₈H₇₈O₁₉,21633803,Centella asiatica,Centella,Apiaceae
+Q105322488,Q105322488,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8CCC7(C)C6(C)CC4,WYQVAPGDARQUBT-XBCCZEPJSA-N,C₄₈H₇₈O₁₉,162907989,Centella asiatica,Centella,Apiaceae
+Q110184382,Q110184382,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,BNMGUJRJUUDLHW-CIZDPPTDSA-N,C₄₈H₇₈O₂₀,45356919,Centella asiatica,Centella,Apiaceae
+Q115951020,Q115951020,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8CCC7(C)C6(C)CC4,WYQVAPGDARQUBT-XCWYDTOWSA-N,C₄₈H₇₈O₁₉,154496201,Centella asiatica,Centella,Apiaceae
+Q115951027,Q115951027,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(C)C8C(O)CC7(C)C6(C)CC4,SOOVZDUBVGGAAJ-VDLCRLCESA-N,C₄₈H₇₈O₁₉,154496329,Centella asiatica,Centella,Apiaceae
+Q115951028,Q115951028,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CCC(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,ZYPUEOGJHLWGGM-PKORCZQXSA-N,C₄₈H₇₈O₁₉,154496330,Centella asiatica,Centella,Apiaceae
+Q105151490,Scheffoleoside A,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)(C)CC5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8CCC7(C)C6(C)CC4,LGOPJRNHNGETGG-FTOKAHLBSA-N,C₄₈H₇₈O₁₉,101675595,Centella asiatica,Centella,Apiaceae
+Q105189220,Scheffuroside B,O=CCC1(C)C(O)C(O)CC2(C)C3CC=C4C5C(C)C(C)CCC5(C(=O)OC6OC(COC7OC(CO)C(OC8OC(C)C(O)C(O)C8O)C(O)C7O)C(O)C(O)C6O)CCC4(C)C3(C)CCC12,OBYIGFCOMHGJTB-VIBPWZAGSA-N,C₄₉H₇₈O₁₉,102212086,Centella asiatica,Centella,Apiaceae
+Q105322486,Scheffursoside F,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8CCC7(C)C6(C)CC4,WYQVAPGDARQUBT-VELJHDPYSA-N,C₄₈H₇₈O₁₉,101675278,Centella asiatica,Centella,Apiaceae
+Q15269711,Thujopsène,CC1=CCC2(CCCC(C23C1C3)(C)C)C,WXQGPFZDVCRBME-QEJZJMRPSA-N,C₁₅H₂₄,442402,Centella asiatica,Centella,Apiaceae
+Q104945181,"[(3S,8S)-3-hydroxypentadeca-1,9-dien-4,6-diyn-8-yl] acetate",O=C(OC(C#CC#CC(O)C=C)C=CCCCCC)C,BSDJVZWJXREWPD-IRXDYDNUSA-N,C₁₇H₂₂O₃,162898798,Centella asiatica,Centella,Apiaceae
+Q105020596,"[(3S,8S)-8-acetyloxypentadeca-1,9-dien-4,6-diyn-3-yl] acetate",O=C(OC(C#CC#CC(OC(=O)C)C=CCCCCC)C=C)C,GUUWFDGOIFMLPQ-OALUTQOASA-N,C₁₉H₂₄O₄,162916026,Centella asiatica,Centella,Apiaceae
+Q104945182,"[(3S,8S,9E)-3-hydroxypentadeca-1,9-dien-4,6-diyn-8-yl] acetate",O=C(OC(C#CC#CC(O)C=C)C=CCCCCC)C,BSDJVZWJXREWPD-MQZKNQHPSA-N,C₁₇H₂₂O₃,86337907,Centella asiatica,Centella,Apiaceae
+Q105020593,"[(3S,8S,9E)-8-acetyloxypentadeca-1,9-dien-4,6-diyn-3-yl] acetate",O=C(OC(C#CC#CC(OC(=O)C)C=CCCCCC)C=C)C,GUUWFDGOIFMLPQ-DTVHYBFXSA-N,C₁₉H₂₄O₄,163185137,Centella asiatica,Centella,Apiaceae
+Q104945183,"[(3S,8S,9Z)-3-hydroxypentadeca-1,9-dien-4,6-diyn-8-yl] acetate",O=C(OC(C#CC#CC(O)C=C)C=CCCCCC)C,BSDJVZWJXREWPD-QQGHQYIOSA-N,C₁₇H₂₂O₃,92468365,Centella asiatica,Centella,Apiaceae
+Q104980787,"[(6R,7E,13S)-13-hydroxypentadeca-7,14-dien-9,11-diyn-6-yl] acetate",O=C(OC(C=CC#CC#CC(O)C=C)CCCCC)C,DHRILYPSUUVCTB-RRWNYDGOSA-N,C₁₇H₂₂O₃,162845169,Centella asiatica,Centella,Apiaceae
+Q105158957,"[6-[[3,4-dihydroxy-6-(hydroxymethyl)-5-(3,4,5-trihydroxy-6-methyloxan-2-yl)oxyoxan-2-yl]oxymethyl]-3,4,5-trihydroxyoxan-2-yl] 8,10,11-trihydroxy-2,2,6a,6b,9,9,12a-heptamethyl-1,3,4,5,6,6a,7,8,8a,10,11,12,13,14b-tetradecahydropicene-4a-carboxylate",O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)(C)CC5C6=CCC7C8(C)CC(O)C(O)C(C)(C)C8C(O)CC7(C)C6(C)CC4,LXNMBPCTGSWVDT-UHFFFAOYSA-N,C₄₈H₇₈O₁₉,76009437,Centella asiatica,Centella,Apiaceae
+Q15478109,acide asiatique,CC1CCC2(CCC3(C(=CCC4C3(CCC5C4(CC(C(C5(C)CO)O)O)C)C)C2C1C)C)C(=O)O,JXSVIVRDWWRQRT-UYDOISQJSA-N,C₃₀H₄₈O₅,119034,Centella asiatica,Centella,Apiaceae
+Q421964,acide chlorogénique,C1C(C(C(CC1(C(=O)O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)O)O,CWVRJTMFETXNAD-JUHZACGLSA-N,C₁₆H₁₈O₉,1794427,Centella asiatica,Centella,Apiaceae
+Q1763092,acide dicaféylquinique,C1C(C(C(CC1(C(=O)O)OC(=O)C=CC2=CC(=C(C=C2)O)O)OC(=O)C=CC3=CC(=C(C=C3)O)O)O)O,YDDUMTOHNYZQPO-RVXRWRFUSA-N,C₂₅H₂₄O₁₂,5281769,Centella asiatica,Centella,Apiaceae
+Q417831,acide gentisique,C1=CC(=C(C=C1O)C(=O)O)O,WXTMDXOMEHJXQO-UHFFFAOYSA-N,C₇H₆O₄,3469,Centella asiatica,Centella,Apiaceae
+Q416260,acide ursolique,CC1CCC2(CCC3(C(=CCC4C3(CCC5C4(CCC(C5(C)C)O)C)C)C2C1C)C)C(=O)O,WCGUUGGRBIKTOS-GPOJBZKASA-N,C₃₀H₄₈O₃,64945,Centella asiatica,Centella,Apiaceae
+Q27108602,alpha-chamigrene,CC1=CCC2(CC1)C(=CCCC2(C)C)C,SIBCECUUMHIAAM-OAHLLOKOSA-N,C₁₅H₂₄,442351,Centella asiatica,Centella,Apiaceae
+Q27104380,alpha-pinène,CC1=CCC2CC1C2(C)C,GRWFGVWFFZKLTI-UHFFFAOYSA-N,C₁₀H₁₆,6654,Centella asiatica,Centella,Apiaceae
+Q27109437,alpha-terpinéol,CC1=CCC(CC1)C(C)(C)O,WUOACPNHFRMFPN-UHFFFAOYSA-N,C₁₀H₁₈O,17100,Centella asiatica,Centella,Apiaceae
+Q104169976,asiatic acid,O=C(O)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(O)C(C)(CO)C5CCC4(C)C3(C)CC1,JXSVIVRDWWRQRT-UHFFFAOYSA-N,C₃₀H₄₈O₅,296191,Centella asiatica,Centella,Apiaceae
+Q27149094,asiaticoside,CC1CCC2(CCC3(C(=CCC4C3(CCC5C4(CC(C(C5(C)CO)O)O)C)C)C2C1C)C)C(=O)OC6C(C(C(C(O6)COC7C(C(C(C(O7)CO)OC8C(C(C(C(O8)C)O)O)O)O)O)O)O)O,WYQVAPGDARQUBT-FGWHUCSPSA-N,C₄₈H₇₈O₁₉,11954171,Centella asiatica,Centella,Apiaceae
+Q27122087,bayogenin,CC1(CCC2(CCC3(C(=CCC4C3(CCC5C4(CC(C(C5(C)CO)O)O)C)C)C2C1)C)C(=O)O)C,RWNHLTKFBKYDOJ-JEERONPWSA-N,C₃₀H₄₈O₅,12305221,Centella asiatica,Centella,Apiaceae
+Q27268359,benzyl β-D-glucoside,C1=CC=C(C=C1)COC2C(C(C(C(O2)CO)O)O)O,GKHCBYYBLTXYEV-UJPOAAIJSA-N,C₁₃H₁₈O₆,188977,Centella asiatica,Centella,Apiaceae
+Q27119784,beta-farnesene,CC(=CCCC(=CCCC(=C)C=C)C)C,JSNRRGGBADWTMC-UHFFFAOYSA-N,C₁₅H₂₄,10407,Centella asiatica,Centella,Apiaceae
+Q27133237,beta-sesquiphellandrene,CC(CCC=C(C)C)C1CCC(=C)C=C1,PHWISBHSBNDZDX-LSDHHAIUSA-N,C₁₅H₂₄,12315492,Centella asiatica,Centella,Apiaceae
+Q416775,camphène,CC1(C2CCC(C2)C1=C)C,CRPUJAZIXJMDBK-UHFFFAOYSA-N,C₁₀H₁₆,6616,Centella asiatica,Centella,Apiaceae
+Q421614,caryophyllene,CC1=CCCC(=C)C2CC(C2CC1)(C)C,NPNUFJAVOOONJE-GFUGXAQUSA-N,C₁₅H₂₄,5281515,Centella asiatica,Centella,Apiaceae
+Q5172335,corosolic acid,CC1CCC2(CCC3(C(=CCC4C3(CCC5C4(CC(C(C5(C)C)O)O)C)C)C2C1C)C)C(=O)O,HFGSQOYIOKBQOW-ZSDYHTTISA-N,C₃₀H₄₈O₄,6918774,Centella asiatica,Centella,Apiaceae
+Q67879986,epi-globulol,OC1(C)CCC2C(C3C(C)CCC31)C2(C)C,AYXPYQRXGNDJFU-IROTVPAZSA-N,C₁₅H₂₆O,7308311,Centella asiatica,Centella,Apiaceae
+Q27135304,epi-maslinic acid,CC1(CCC2(CCC3(C(=CCC4C3(CCC5C4(CC(C(C5(C)C)O)O)C)C)C2C1)C)C(=O)O)C,MDZKJHQSJHYOHJ-HFYZCPLSSA-N,C₃₀H₄₈O₄,25564831,Centella asiatica,Centella,Apiaceae
+Q104250803,erroneous version of madecassoside,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,BNMGUJRJUUDLHW-VSVAVZEUSA-N,C₄₈H₇₈O₂₀,131801373,Centella asiatica,Centella,Apiaceae
+Q27136388,euscaphic acid,CC1CCC2(CCC3(C(=CCC4C3(CCC5C4(CC(C(C5(C)C)O)O)C)C)C2C1(C)O)C)C(=O)O,OXVUXGFZHDKYLS-QUFHAEKXSA-N,C₃₀H₄₈O₅,471426,Centella asiatica,Centella,Apiaceae
+Q412429,furfural,C1=COC(=C1)C=O,HYBBIBNJHNGZAN-UHFFFAOYSA-N,C₅H₄O₂,7362,Centella asiatica,Centella,Apiaceae
+Q27147042,ginsenoside Mc,CC(=CCCC(C)(C1CCC2(C1C(CC3C2(CCC4C3(CCC(C4(C)C)O)C)C)O)C)OC5C(C(C(C(O5)COC6C(C(C(O6)CO)O)O)O)O)O)C,CJFGBCWGOQRURQ-JFJIKBJRSA-N,C₄₁H₇₀O₁₂,9896928,Centella asiatica,Centella,Apiaceae
+Q27147037,ginsenoside Mx,CC(=CCCC(C)(C1CCC2(C1C(CC3C2(CCC4C3(CCC(C4(C)C)O)C)C)O)C)OC5C(C(C(C(O5)COC6C(C(C(CO6)O)O)O)O)O)O)C,YNBYFOIDLBTOMW-IPTBNLQOSA-N,C₄₁H₇₀O₁₂,11331683,Centella asiatica,Centella,Apiaceae
+Q27077807,ginsenoside Rg3,CC(=CCCC(C)(C1CCC2(C1C(CC3C2(CCC4C3(CCC(C4(C)C)OC5C(C(C(C(O5)CO)O)O)OC6C(C(C(C(O6)CO)O)O)O)C)C)O)C)O)C,RWXIFXNRCLMQCD-JBVRGBGGSA-N,C₄₂H₇₂O₁₃,9918693,Centella asiatica,Centella,Apiaceae
+Q105146880,ginsenoside Rk1,OCC1OC(OC2C(O)C(O)C(OC2OC3CCC4(C)C(CCC5(C)C4CC(O)C6C(C(=C)CCC=C(C)C)CCC65C)C3(C)C)CO)C(O)C(O)C1O,KWDWBAISZWOAHD-MHOSXIPRSA-N,C₄₂H₇₀O₁₂,11499198,Centella asiatica,Centella,Apiaceae
+Q420698,hexanal,CCCCCC=O,JARKCYVAAOWBJS-UHFFFAOYSA-N,C₆H₁₂O,6184,Centella asiatica,Centella,Apiaceae
+Q1995108,humulène,CC1=CCC(C=CCC(=CCC1)C)(C)C,FAMPSKZZVDUYOS-HRGUGZIWSA-N,C₁₅H₂₄,5281520,Centella asiatica,Centella,Apiaceae
+Q407997,inositol,C1(C(C(C(C(C1O)O)O)O)O)O,CDAISMWEOUEBRE-UHFFFAOYSA-N,C₆H₁₂O₆,892,Centella asiatica,Centella,Apiaceae
+Q27145528,isorhamnetin 3-O-glucoside,COC1=C(C=CC(=C1)C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)OC4C(C(C(C(O4)CO)O)O)O)O,CQLRUIIRRZYHHS-LFXZADKFSA-N,C₂₂H₂₂O₁₂,5318645,Centella asiatica,Centella,Apiaceae
+Q104968109,isorhamnetin 3-galactoside,O=C1C(OC2OC(CO)C(O)C(O)C2O)=C(OC=3C=C(O)C=C(O)C13)C=4C=CC(O)=C(OC)C4,CQLRUIIRRZYHHS-UHFFFAOYSA-N,C₂₂H₂₂O₁₂,13245586,Centella asiatica,Centella,Apiaceae
+Q27145499,kaempferol 3-O-glucuronide,C1=CC(=CC=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)OC4C(C(C(C(O4)C(=O)O)O)O)O)O,FNTJVYCFNVUBOL-ZUGPOPFOSA-N,C₂₁H₁₈O₁₂,5318759,Centella asiatica,Centella,Apiaceae
+Q278809,limonène,CC1=CCC(CC1)C(=C)C,XMGQYMWWDOXHJM-UHFFFAOYSA-N,C₁₀H₁₆,22311,Centella asiatica,Centella,Apiaceae
+Q410932,linalol,CC(=CCCC(C)(C=C)O)C,CDOSHBSSFJOMGT-UHFFFAOYSA-N,C₁₀H₁₈O,6549,Centella asiatica,Centella,Apiaceae
+Q3234708,m-xylene,CC1=CC(=CC=C1)C,IVSZLXZYQVIEFR-UHFFFAOYSA-N,C₈H₁₀,7929,Centella asiatica,Centella,Apiaceae
+Q27140267,madecassic acid,CC1CCC2(CCC3(C(=CCC4C3(CC(C5C4(CC(C(C5(C)CO)O)O)C)O)C)C2C1C)C)C(=O)O,PRAUVHZJPXOEIF-AOLYGAPISA-N,C₃₀H₄₈O₆,73412,Centella asiatica,Centella,Apiaceae
+Q104938891,madecassoside,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,BNMGUJRJUUDLHW-UHFFFAOYSA-N,C₄₈H₇₈O₂₀,161823,Centella asiatica,Centella,Apiaceae
+Q104938890,madecassoside,O=C(OC1OC(COC2OC(CO)C(OC3OC(C)C(O)C(O)C3O)C(O)C2O)C(O)C(O)C1O)C45CCC(C)C(C)C5C6=CCC7C8(C)CC(O)C(O)C(C)(CO)C8C(O)CC7(C)C6(C)CC4,BNMGUJRJUUDLHW-HCZMHFOYSA-N,C₄₈H₇₈O₂₀,24825675,Centella asiatica,Centella,Apiaceae
+Q105140873,"methyl (1S,2R,4aS,6aR,6aS,6bR,8R,8aR,9R,10R,11R,12aR,14bS)-8,11-dihydroxy-9-(hydroxymethyl)-10-methoxy-1,2,6a,6b,9,12a-hexamethyl-2,3,4,5,6,6a,7,8,8a,10,11,12,13,14b-tetradecahydro-1H-picene-4a-carboxylate",O=C(OC)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(OC)C(C)(CO)C5C(O)CC4(C)C3(C)CC1,KGOFXTUWAUPMBJ-HKYQCHJOSA-N,C₃₂H₅₂O₆,163017356,Centella asiatica,Centella,Apiaceae
+Q104939140,"methyl (1S,2R,4aS,6aR,6aS,6bR,8aR,9R,10R,11R,12aR,14bS)-11-hydroxy-9-(hydroxymethyl)-10-methoxy-1,2,6a,6b,9,12a-hexamethyl-2,3,4,5,6,6a,7,8,8a,10,11,12,13,14b-tetradecahydro-1H-picene-4a-carboxylate",O=C(OC)C12CCC(C)C(C)C2C3=CCC4C5(C)CC(O)C(OC)C(C)(CO)C5CCC4(C)C3(C)CC1,BOBKMOVMARCKQK-OHRISXMOSA-N,C₃₂H₅₂O₅,163006994,Centella asiatica,Centella,Apiaceae
+Q105149767,"methyl 5-[(6S,7S,8S,9E,15S)-6,15-dihydroxy-8-methoxyheptadeca-9,16-dien-11,13-diyn-7-yl]oxypentanoate",O=C(OC)CCCCOC(C(O)CCCCC)C(OC)C=CC#CC#CC(O)C=C,LCCGCXCFZHBCJT-TUAHSIHMSA-N,C₂₄H₃₆O₆,163077828,Centella asiatica,Centella,Apiaceae
+Q104252968,miquelianin,O=C(O)C1OC(OC=2C(=O)C=3C(O)=CC(O)=CC3OC2C=4C=CC(O)=C(O)C4)C(O)C(O)C1O,DUBCCGAQYVUYEU-UHFFFAOYSA-N,C₂₁H₁₈O₁₃,12004528,Centella asiatica,Centella,Apiaceae
+Q3331426,myo-inositol,C1(C(C(C(C(C1(O)[H])(O)[H])(O)[H])(O)[H])(O)[H])(O)[H],CDAISMWEOUEBRE-GPIVLXJGSA-N,C₆H₁₂O₆,,Centella asiatica,Centella,Apiaceae
+Q105112726,"pentadeca-2,9-dien-4,6-diyn-1-yl acetate",O=C(OCC=CC#CC#CCC=CCCCCC)C,IGNIYJTXYTUVGD-UHFFFAOYSA-N,C₁₇H₂₂O₂,162923605,Centella asiatica,Centella,Apiaceae
+Q27135401,pomolic acid,CC1CCC2(CCC3(C(=CCC4C3(CCC5C4(CCC(C5(C)C)O)C)C)C2C1(C)O)C)C(=O)O,ZZTYPLSBNNGEIS-OPAXANQDSA-N,C₃₀H₄₈O₄,382831,Centella asiatica,Centella,Apiaceae
+Q210385,pyridine,C1=CC=NC=C1,JUJWROOIHBZHMG-UHFFFAOYSA-N,C₅H₅N,1049,Centella asiatica,Centella,Apiaceae
+Q27136430,quadranoside IV,CC1CCC2(CCC3(C(=CCC4C3(CCC5C4(CC(C(C5(C)CO)O)O)C)C)C2C1C)C)C(=O)OC6C(C(C(C(O6)CO)O)O)O,OEGYWKLSOORPGU-SXLQXSQGSA-N,C₃₆H₅₈O₁₀,10372074,Centella asiatica,Centella,Apiaceae
+Q409478,quercétine,C1=CC(=C(C=C1C2=C(C(=O)C3=C(C=C(C=C3O2)O)O)O)O)O,REFJWTPEDVJJIY-UHFFFAOYSA-N,C₁₅H₁₀O₇,5280343,Centella asiatica,Centella,Apiaceae
+Q27273401,terminolic acid,CC1(CCC2(CCC3(C(=CCC4C3(CC(C5C4(CC(C(C5(C)CO)O)O)C)O)C)C2C1)C)C(=O)O)C,IDQVFXZQPGAVAM-GGVBUJAJSA-N,C₃₀H₄₈O₆,12314613,Centella asiatica,Centella,Apiaceae
+Q27251906,terminoloside,CC1C(C(C(C(O1)OC2C(OC(C(C2O)O)OCC3C(C(C(C(O3)OC(=O)C45CCC(CC4C6=CCC7C8(CC(C(C(C8C(CC7(C6(CC5)C)C)O)(C)CO)O)O)C)(C)C)O)O)O)CO)O)O)O,NNWMHSNRRWMMBI-PJISEHJASA-N,C₄₈H₇₈O₂₀,91618002,Centella asiatica,Centella,Apiaceae
+Q15779,toluène,CC1=CC=CC=C1,YXFVVABEGXRONW-UHFFFAOYSA-N,C₇H₈,1140,Centella asiatica,Centella,Apiaceae
+Q27136294,β-caryophyllene oxide,CC1(CC2C1CCC3(C(O3)CCC2=C)C)C,NVEQFIOZRFFVFW-RGCMKSIDSA-N,C₁₅H₂₄O,1742210,Centella asiatica,Centella,Apiaceae
+Q423975,γ‑terpinène,CC1=CCC(=CC1)C(C)C,YKFLAYDHMOASIY-UHFFFAOYSA-N,C₁₀H₁₆,7461,Centella asiatica,Centella,Apiaceae

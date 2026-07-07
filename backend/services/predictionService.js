@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
-const { PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE } = require('../config');
+const { PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE, ENABLE_TASK_PERSISTENCE } = require('../config');
 const { PRED_SCRIPT, MULT_SIMULATOR_SCRIPT, outputsDir, uploadsDir } = require('../config/paths');
 const { ensureDir } = require('../utils/filesystem');
 const { getPythonExe, buildPythonEnv, detectDatasetDir } = require('../utils/spawn');
@@ -12,6 +12,8 @@ const { sseInit, sseSend } = require('../middleware/sse');
 const { addTask, deleteTask, getTask, killProcessGracefully } = require('./processManager');
 const { runExtractorsOnSDF } = require('./extractorService');
 const projectService = require('./projectService');
+const { saveCheckpoint, markTaskCompleted, markTaskFailed, markTaskInterrupted, TaskStatus } = require('./taskPersistence');
+const { startPreventSleep, stopPreventSleep } = require('../utils/sleepPrevention');
 
 function normalizePredictOptions(raw = {}) {
   const o = { ...(raw || {}) };
@@ -110,12 +112,29 @@ function handlePrediction(req, res) {
   const startTime = Date.now();
   try {
     const hb = sseInit(res, req.headers.origin);
-    const taskId = uuidv4();
-    const workDir = path.join(outputsDir, taskId);
-    ensureDir(workDir);
 
-    const SDF_WEIGHT = 95; // 0-95% for SDF, 95-100% for CSV extractors
-    const EXTRACTOR_WEIGHT = 5; // 5% distributed across extractors
+    // Check if resuming from existing folder - extract early to reuse taskId
+    const resumeFromDir = req.body?.resumeFromDir || null;
+    let taskId;
+    let workDir;
+    let isResuming = false;
+
+    if (resumeFromDir && fs.existsSync(resumeFromDir)) {
+      // Réutiliser le même dossier et taskId existants
+      workDir = resumeFromDir;
+      // Extraire le taskId du chemin (dernier composant du dossier)
+      taskId = path.basename(resumeFromDir);
+      isResuming = true;
+      console.log(`[Prediction] RESUME mode: reusing taskId=${taskId}, workDir=${workDir}`);
+    } else {
+      // Nouveau taskId et dossier
+      taskId = uuidv4();
+      workDir = path.join(outputsDir, taskId);
+      ensureDir(workDir);
+    }
+
+    const SDF_WEIGHT = 98; // 0-98% for SDF, 98-100% for CSV extractors
+    const EXTRACTOR_WEIGHT = 2; // 2% distributed across extractors
     let totalMolecules = 1;
     let doneMolecules = 0;
     let lastPercent = 0;
@@ -149,9 +168,12 @@ function handlePrediction(req, res) {
     const propertyKey = options.property_key || process.env.PROPERTY_KEY || '(1)';
 
     sseSend(res, { type: 'taskId', taskId });
-  sseSend(res, { type: 'log', message: `Prediction started: ${mode}` });
+    sseSend(res, { type: 'log', message: `Prediction started: ${mode}` });
     sseSend(res, { type: 'log', message: `WorkDir: ${workDir}` });
-  sseSend(res, { type: 'log', message: `Methods: ${selectedMethods.join(', ')}` });
+    if (isResuming) {
+      sseSend(res, { type: 'log', message: `[RESUME] Mode incrémental - réutilisation du dossier existant` });
+    }
+    sseSend(res, { type: 'log', message: `Methods: ${selectedMethods.join(', ')}` });
 
     if (projectId) {
       projectService.addTask(projectId, {
@@ -507,6 +529,36 @@ function handlePrediction(req, res) {
       if (options.batch_size) args.push('--batch_size', String(options.batch_size));
       if (options.mol_id) args.push('--mol_id', String(options.mol_id));
 
+      // Experimental parameters for multiplicity JSON generation
+      const freqMhz = Number(options.freq_mhz) || 700;
+      const solvent = options.solvent || 'CDCl3';
+      const temperatureK = Number(options.temperature_k) || 298;
+      
+      // Validation basique du pH (plage chimique valide)
+      let pH = Number(options.ph) || 7.4;
+      if (isNaN(pH) || pH < 0.0 || pH > 14.0) {
+        sseSend(res, { type: 'log', message: `[WARNING] pH ${pH} invalide, fallback vers 7.4` });
+        pH = 7.4;
+      }
+
+      args.push('--sim_freq_mhz', String(freqMhz));
+      args.push('--sim_solvent', String(solvent));
+      args.push('--sim_temperature_k', String(temperatureK));
+      args.push('--sim_ph', String(pH));
+
+      // Enable dynamics processor for protic solvents (D2O, CD3OD, CD3COCD3)
+      // This handles rapid proton exchange (OH, NH, SH become invisible)
+      const proticSolvents = ['D2O', 'd2o', 'CD3OD', 'cd3od', 'MeOD', 'meod', 'CD3COCD3', 'cd3cocd3'];
+      if (proticSolvents.includes(solvent)) {
+        args.push('--sim_enable_dynamics');
+      }
+
+      // Reprise incrémentale: réutiliser les molécules déjà prédites avec les mêmes paramètres
+      if (isResuming) {
+        // Passer le même dossier comme source pour charger les prédictions existantes
+        args.push('--resume-from-dir', workDir);
+      }
+
       sseSend(res, { type: 'log', message: `Python: ${PYTHON}` });
       sseSend(res, { type: 'log', message: `Script: ${PRED_SCRIPT}` });
       sseSend(res, {
@@ -563,6 +615,33 @@ function handlePrediction(req, res) {
         heartbeat: hb,
       };
       addTask(taskId, taskInfo);
+
+      // ✅ SLEEP PREVENTION: Empêcher la mise en veille pendant la prédiction
+      startPreventSleep(taskId);
+
+      // ✅ PERSISTENCE: Sauvegarder checkpoint initial
+      if (ENABLE_TASK_PERSISTENCE) {
+        saveCheckpoint(taskId, {
+          type: 'prediction',
+          status: TaskStatus.RUNNING,
+          mode,
+          progress: {
+            current: 0,
+            total: totalMolecules,
+            percent: 0,
+          },
+          options,
+          workDir,
+          selectedMethods,
+          projectId,
+          resumeData: {
+            csvFile,
+            sdfFile,
+            smiles,
+            startFromMolecule: 0,
+          },
+        });
+      }
 
       child.stdout.on('data', buf => {
         buffer += buf.toString();
@@ -633,6 +712,30 @@ function handlePrediction(req, res) {
               `[BACKEND-AFTER] doneMolecules=${doneMolecules}/${totalMolecules}, percent=${percent.toFixed(2)}%, frac=${frac.toFixed(4)}`
             );
 
+            // ✅ PERSISTENCE: Sauvegarder checkpoint après chaque molécule
+            if (ENABLE_TASK_PERSISTENCE) {
+              saveCheckpoint(taskId, {
+                type: 'prediction',
+                status: TaskStatus.RUNNING,
+                mode,
+                progress: {
+                  current: doneMolecules,
+                  total: totalMolecules,
+                  percent: percent,
+                },
+                options,
+                workDir,
+                selectedMethods,
+                projectId,
+                resumeData: {
+                  csvFile,
+                  sdfFile,
+                  smiles,
+                  startFromMolecule: doneMolecules,
+                },
+              });
+            }
+
             sseSend(res, {
               type: 'progress',
               phase: 'prediction',
@@ -661,6 +764,10 @@ function handlePrediction(req, res) {
         deleteTask(taskId);
         if (task?.safetyTimeout) clearTimeout(task.safetyTimeout);
         clearInterval(hb);
+        
+        // ✅ SLEEP PREVENTION: Réactiver la veille
+        stopPreventSleep(taskId);
+        
         const durationMin = Math.round((Date.now() - startTime) / 60000 * 10) / 10;
 
         console.log(
@@ -668,6 +775,10 @@ function handlePrediction(req, res) {
         );
 
         if (task?.canceled) {
+          // ✅ PERSISTENCE: Marquer comme annulée
+          if (ENABLE_TASK_PERSISTENCE) {
+            markTaskFailed(taskId, 'Cancelled by user');
+          }
           sseSend(res, {
             type: 'completed',
             success: false,
@@ -680,11 +791,19 @@ function handlePrediction(req, res) {
         }
 
         if (signal) {
+          // ✅ PERSISTENCE: Marquer comme échouée (signal)
+          if (ENABLE_TASK_PERSISTENCE) {
+            markTaskFailed(taskId, `Signal ${signal}`);
+          }
           sseSend(res, { type: 'completed', success: false, error: `Signal ${signal}`, duration: durationMin });
           res.end();
           return;
         }
         if (code !== 0) {
+          // ✅ PERSISTENCE: Marquer comme échouée (exit code)
+          if (ENABLE_TASK_PERSISTENCE) {
+            markTaskFailed(taskId, `Python exited with code ${code}`);
+          }
           sseSend(res, {
             type: 'completed',
             success: false,
@@ -699,6 +818,11 @@ function handlePrediction(req, res) {
         const allSdfs = files.filter(
           f => f.toLowerCase().endsWith('.sdf') && f.toLowerCase() !== 'input.sdf'
         );
+        
+        // DEBUG: Log files in workDir
+        sseSend(res, { type: 'log', message: `[DEBUG] WorkDir files: ${files.join(', ')}` });
+        sseSend(res, { type: 'log', message: `[DEBUG] SDF files found: ${allSdfs.join(', ') || '(none)'}` });
+        
         const sdfOut = allSdfs[0] || null;
         const csvOut = files.find(f => f.toLowerCase().endsWith('.csv'));
         const jsonOut = files.find(f => f.toLowerCase().endsWith('.json'));
@@ -718,7 +842,11 @@ function handlePrediction(req, res) {
           if (fs.existsSync(candidate)) sdfForExtractors = candidate;
         }
 
+        // DEBUG: Log extractor conditions
         const wantExtract = options.run_extractors === true;
+        sseSend(res, { type: 'log', message: `[DEBUG] wantExtract=${wantExtract}, sdfForExtractors=${sdfForExtractors || '(null)'}, mode=${mode}` });
+        sseSend(res, { type: 'log', message: `[DEBUG] Will run extractors: ${wantExtract && (sdfForExtractors || mode === 'CSV')}` });
+        
         if (wantExtract && (sdfForExtractors || mode === 'CSV')) {
           sseSend(res, { type: 'log', message: 'Post-processing: generating CSV 1H/13C/COSY/HSQC...' });
 
@@ -794,11 +922,20 @@ function handlePrediction(req, res) {
           console.log('[BACKEND-FINAL] Forced 100%');
         }
 
+        // ✅ PERSISTENCE: Marquer comme complétée
+        if (ENABLE_TASK_PERSISTENCE) {
+          markTaskCompleted(taskId, payload.outputs);
+        }
+
         sseSend(res, payload);
         res.end();
       });
 
       child.on('error', err => {
+        // ✅ PERSISTENCE: Marquer comme échouée (spawn error)
+        if (ENABLE_TASK_PERSISTENCE) {
+          markTaskFailed(taskId, `Python spawn error: ${err.message}`);
+        }
         deleteTask(taskId);
         if (taskInfo.safetyTimeout) clearTimeout(taskInfo.safetyTimeout);
         clearInterval(hb);
@@ -815,8 +952,13 @@ function handlePrediction(req, res) {
       req.on('close', () => {
         clearInterval(hb);
         if (KILL_ON_CLIENT_CLOSE) {
+          // Comportement ancien: tuer le processus quand la connexion se ferme
           killProcessGracefully(child, taskId);
           deleteTask(taskId);
+        } else if (ENABLE_TASK_PERSISTENCE) {
+          // ✅ PERSISTENCE: La tâche continue en arrière-plan
+          // Le checkpoint est déjà sauvegardé, la tâche continue jusqu'à la fin
+          logWithMemory(`[${taskId}] Client disconnected - task continues in background`, 'INFO');
         }
       });
     })();

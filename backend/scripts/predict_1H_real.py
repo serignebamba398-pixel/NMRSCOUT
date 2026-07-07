@@ -3,18 +3,24 @@
 
 """predict_1H_real.py (integrated utils version)
 ------------------------------------------------
-Extract 1H signals from SDF files containing an atom-level shift vector stored
-in any SDF property (arbitrary name). The vector is retrieved robustly via
+Extract individual 1H shifts from SDF files containing an atom-level shift vector
+stored in any SDF property (arbitrary name). The vector is retrieved robustly via
 ml_sdf_utils.get_atom_shift_vector().
 
+The SDF is expected to be already corrected:
+- Equivalent H have identical shifts
+- Diastereotopic H have different shifts (corrected upstream)
+
+Features:
 - Preserves RDKit indexing (0-based) and explicit Hs (important).
-- Groups protons into CH3/CH2/CH, with optional splitting of diastereotopic CH2.
+- Lists all protons individually with their direct shifts (no grouping, no averaging).
+- GroupType (CH3/CH2/CH) indicates how many H are on the parent carbon.
 - Computes an ECFP4 (bitstring) for each molecule.
-- Exports a CSV: Filename | Assignment | H_indices | Parent_C_index | GroupType | Delta_ppm | Nb_H | ECFP4
+- Exports a CSV: Filename | Assignment | H_index | Parent_C_index | GroupType | Delta_ppm | Nb_H | ECFP4
 
 Usage (batch):
     python predict_1H_real.py --input_folder /path/to/sdfs --output_csv /path/out/all_signals_1H.csv
-    # + --recursive for subfolders, --split_diastereotopic_ch2 to split CH2
+    # + --recursive for subfolders
 
 Usage (single):
     python predict_1H_real.py --sdf_path /path/to/file.sdf --output_csv /path/out/signals_1H.csv
@@ -113,64 +119,45 @@ def build_parent_to_hydrogens(mol: Chem.Mol, keep_exchangeable: bool = False) ->
     return parent2Hs
 
 
-def is_diastereotopic_pair(mol: Chem.Mol, h1: int, h2: int) -> bool:
-    """
-    Heuristic: isotope tagging + chirality detection.
-    True => diastereotopic protons (should be treated separately).
-    """
-    try:
-        base = Chem.Mol(mol)
-        for a in base.GetAtoms():
-            a.SetIsotope(0)
-        for heavy, light in ((h1, h2), (h2, h1)):
-            m = Chem.Mol(base)
-            m.GetAtomWithIdx(heavy).SetIsotope(2)
-            m.GetAtomWithIdx(light).SetIsotope(1)
-            Chem.AssignStereochemistry(m, force=True, cleanIt=True, flagPossibleStereoCenters=True)
-            if Chem.FindMolChiralCenters(m, includeUnassigned=False):
-                return True
-        return False
-    except Exception:
-        return False
-
-
-def group_protons_with_parent(
+def get_all_protons_with_shifts(
     mol: Chem.Mol,
-    split_diastereotopic_ch2: bool = False,
+    shifts: List[float],
     keep_exchangeable: bool = False
-) -> List[Tuple[int, List[int], str]]:
+) -> List[Tuple[int, int, str, float]]:
     """
-    Return a list of tuples (parent_idx, [H_idx,...], group_type)
-    group_type ∈ {"CH3","CH2","CH","XH"} — H on O/N/S are excluded unless keep_exchangeable=True.
-    XH = exchangeable proton (OH, NH, SH)
+    Return all protons individually with their shifts (no grouping, no averaging).
+
+    Returns list of tuples: (parent_idx, H_idx, group_type, shift_ppm)
+    group_type ∈ {"CH3","CH2","CH"} based on how many H are on the parent carbon.
+
+    Args:
+        mol: RDKit molecule with explicit H
+        shifts: Atom shift vector from SDF
+        keep_exchangeable: Include OH, NH, SH protons (default False)
     """
     parent2Hs = build_parent_to_hydrogens(mol, keep_exchangeable=keep_exchangeable)
-    groups: List[Tuple[int, List[int], str]] = []
-    used = set()
+    protons: List[Tuple[int, int, str, float]] = []
 
-    # CH3
     for c_idx, hs in parent2Hs.items():
+        # Determine group type based on number of H on this carbon
         if len(hs) == 3:
-            groups.append((c_idx, list(hs), 'CH3'))
-            used.update(hs)
+            gtype = 'CH3'
+        elif len(hs) == 2:
+            gtype = 'CH2'
+        else:
+            gtype = 'CH'
 
-    # CH2
-    for c_idx, hs in parent2Hs.items():
-        if len(hs) == 2 and not any(h in used for h in hs):
-            if split_diastereotopic_ch2 and is_diastereotopic_pair(mol, hs[0], hs[1]):
-                groups.append((c_idx, [hs[0]], 'CH2'))
-                groups.append((c_idx, [hs[1]], 'CH2'))
-            else:
-                groups.append((c_idx, list(hs), 'CH2'))
-            used.update(hs)
+        # Add each proton individually with its own shift
+        for h_idx in hs:
+            shift = None
+            if shifts is not None and 0 <= h_idx < len(shifts):
+                try:
+                    shift = round(float(shifts[h_idx]), 3)
+                except (ValueError, TypeError):
+                    pass
+            protons.append((c_idx, h_idx, gtype, shift))
 
-    # CH
-    for c_idx, hs in parent2Hs.items():
-        if len(hs) == 1 and hs[0] not in used:
-            groups.append((c_idx, [hs[0]], 'CH'))
-            used.add(hs[0])
-
-    return groups
+    return protons
 
 
 # -------------------------------------------------------------------------
@@ -178,57 +165,52 @@ def group_protons_with_parent(
 # -------------------------------------------------------------------------
 def build_1h_table_for_sdf(
     sdf_path: str,
-    split_diastereotopic_ch2: bool = False,
     keep_exchangeable: bool = False
 ) -> pd.DataFrame:
     """
-    Build a DataFrame with the following columns:
-      Filename | Assignment | H_indices | Parent_C_index | GroupType | Delta_ppm | Nb_H | ECFP4
-    - Assignment == H_indices (format "h1,h2,...", for backward compatibility)
-    - Delta_ppm = average of the group's H shifts if values exist in the shift vector
+    Build a DataFrame with individual proton shifts (no grouping, no averaging).
+    The SDF is already corrected: equivalent H have identical shifts, diastereotopic H have different shifts.
+
+    Columns:
+      Filename | Assignment | H_index | Parent_C_index | GroupType | Delta_ppm | Nb_H | ECFP4
+    - Assignment == H_index (single proton index, for backward compatibility)
+    - Delta_ppm = direct shift from the SDF (no averaging)
+    - GroupType = CH3/CH2/CH based on how many H are on the parent carbon
+    - Nb_H = always 1 (individual proton)
     - keep_exchangeable: if True, include exchangeable protons (OH, NH, SH)
     """
     try:
-        send_progress(10, f"Reading {os.path.basename(sdf_path)}...")  # [NEW]
+        send_progress(10, f"Reading {os.path.basename(sdf_path)}...")
         mol = read_molecule_keepH(sdf_path)
         if mol is None:
             print(f"[ERROR] Unreadable SDF: {sdf_path}")
             return pd.DataFrame()
 
         # Atom-level shift vector (robust to the property name)
-        shifts = get_atom_shift_vector(sdf_path)  # 0-based, may be > or < num atoms
-        send_progress(30, "Extracting 1H groups...")  # [NEW]
-        # 1H groups per parent atom
-        groups = group_protons_with_parent(mol, split_diastereotopic_ch2=split_diastereotopic_ch2, keep_exchangeable=keep_exchangeable)
+        shifts = get_atom_shift_vector(sdf_path)  # 0-based
+        send_progress(30, "Extracting individual 1H shifts...")
+
+        # Get all protons individually with their shifts
+        protons = get_all_protons_with_shifts(mol, shifts, keep_exchangeable=keep_exchangeable)
+
         # ECFP4 (bitstring)
-        send_progress(50, "Computing molecular fingerprints...")  # [NEW]
+        send_progress(50, "Computing molecular fingerprints...")
         fp_bitstr = ecfp4_bitstring(mol)
 
         rows = []
-        for parent_c_idx, h_list, gtype in groups:
-            # Average shifts for the Hs in the group, if available
-            vals = []
-            for h_idx in h_list:
-                if 0 <= h_idx < len(shifts):
-                    try:
-                        vals.append(float(shifts[h_idx]))
-                    except Exception:
-                        pass
-            delta = round(sum(vals) / len(vals), 3) if vals else None
-
-            h_str = ','.join(map(str, sorted(h_list)))
+        for parent_c_idx, h_idx, gtype, shift in protons:
             rows.append({
                 'Filename':        os.path.basename(sdf_path),
-                'Assignment':      h_str,           # compat
-                'H_indices':       h_str,           # explicit
+                'Assignment':      str(h_idx),      # single proton index
+                'H_index':         h_idx,           # explicit
                 'Parent_C_index':  int(parent_c_idx),
                 'GroupType':       gtype,           # CH3 / CH2 / CH
-                'Delta_ppm':       delta,
-                'Nb_H':            len(h_list),
+                'Delta_ppm':       shift,           # direct shift, no averaging
+                'Nb_H':            1,               # always 1 (individual proton)
                 'ECFP4':           fp_bitstr
             })
 
-        send_progress(80, "Building DataFrame...")  # [NEW]
+        send_progress(80, "Building DataFrame...")
         return pd.DataFrame(rows)
 
     except Exception as e:
@@ -244,7 +226,6 @@ def process_folder_to_csv(
     input_folder: str,
     output_csv: str,
     recursive: bool = False,
-    split_diastereotopic_ch2: bool = False,
     keep_exchangeable: bool = False
 ) -> int:
     """
@@ -257,10 +238,10 @@ def process_folder_to_csv(
         return 1
 
     all_dfs: List[pd.DataFrame] = []
-    for i, sdf in enumerate(sdf_files, 1):  # [NEW] enumerate added
-        pct = int(10 + (i / len(sdf_files)) * 80)  # [NEW] 10% -> 90%
-        send_progress(pct, f"Processing {i}/{len(sdf_files)}: {os.path.basename(sdf)}")  # [NEW]
-        df = build_1h_table_for_sdf(sdf, split_diastereotopic_ch2=split_diastereotopic_ch2, keep_exchangeable=keep_exchangeable)
+    for i, sdf in enumerate(sdf_files, 1):
+        pct = int(10 + (i / len(sdf_files)) * 80)
+        send_progress(pct, f"Processing {i}/{len(sdf_files)}: {os.path.basename(sdf)}")
+        df = build_1h_table_for_sdf(sdf, keep_exchangeable=keep_exchangeable)
         if not df.empty:
             all_dfs.append(df)
 
@@ -283,10 +264,9 @@ def process_folder_to_csv(
 def process_single_sdf_to_csv(
     sdf_path: str,
     output_csv: str,
-    split_diastereotopic_ch2: bool = False,
     keep_exchangeable: bool = False
 ) -> int:
-    df = build_1h_table_for_sdf(sdf_path, split_diastereotopic_ch2=split_diastereotopic_ch2, keep_exchangeable=keep_exchangeable)
+    df = build_1h_table_for_sdf(sdf_path, keep_exchangeable=keep_exchangeable)
     if df.empty:
         print("[ERROR] No 1H data extracted (missing shift vector?).")
         return 1
@@ -311,8 +291,6 @@ def build_argparser() -> argparse.ArgumentParser:
 
     p.add_argument('--output_csv', type=str, required=True, help='Output CSV path')
     p.add_argument('--recursive', action='store_true', help='Recursively traverse subfolders')
-    p.add_argument('--split_diastereotopic_ch2', action='store_true',
-                   help='Split a CH2 into two protons if diastereotopic')
     p.add_argument('--keep_exchangeable', action='store_true',
                    help='Include exchangeable protons (OH, NH, SH). Excluded by default.')
     return p
@@ -327,14 +305,12 @@ def main():
                 input_folder=args.input_folder,
                 output_csv=args.output_csv,
                 recursive=args.recursive,
-                split_diastereotopic_ch2=args.split_diastereotopic_ch2,
                 keep_exchangeable=args.keep_exchangeable
             )
         else:
             code = process_single_sdf_to_csv(
                 sdf_path=args.sdf_path,
                 output_csv=args.output_csv,
-                split_diastereotopic_ch2=args.split_diastereotopic_ch2,
                 keep_exchangeable=args.keep_exchangeable
             )
         sys.exit(code)

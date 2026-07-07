@@ -126,49 +126,46 @@ def build_parent_to_hydrogens(mol: Chem.Mol) -> Dict[int, List[int]]:
                 break
     return parent2Hs
 
-def is_diastereotopic_pair(mol: Chem.Mol, h1: int, h2: int) -> bool:
+def get_h_groups(mol: Chem.Mol,
+                 shifts: List[float] = None) -> Tuple[Dict[int, int], Dict[int, List[int]]]:
     """
-    Heuristic: isotope tagging + stereochemistry; True if diastereotopic.
-    """
-    try:
-        base = Chem.Mol(mol)
-        for a in base.GetAtoms(): a.SetIsotope(0)
-        for heavy, light in ((h1, h2), (h2, h1)):
-            m = Chem.Mol(base)
-            m.GetAtomWithIdx(heavy).SetIsotope(2)
-            m.GetAtomWithIdx(light).SetIsotope(1)
-            try:
-                Chem.AssignStereochemistry(m, force=True, cleanIt=True, flagPossibleStereoCenters=True)
-            except Exception:
-                pass
-            if Chem.FindMolChiralCenters(m, includeUnassigned=False):
-                return True
-        return False
-    except Exception:
-        return False
-
-def get_h_groups(mol: Chem.Mol) -> Tuple[Dict[int, int], Dict[int, List[int]]]:
-    """
-        Returns:
+    Returns:
       - h2group : dict {H_idx -> group_id}
       - group2Hs : dict {group_id -> [H_idx,...]}
-        Groups CH3 / CH2 (split if diastereotopic) / CH.
+    Groups CH3 / CH2 / CH.
+
+    The SDF is already corrected:
+    - Equivalent H have identical shifts → grouped together
+    - Diastereotopic H have different shifts → separate groups
     """
     parent2Hs = build_parent_to_hydrogens(mol)
     groups: List[List[int]] = []
     used = set()
 
-    # CH3
+    # CH3 - always grouped (equivalent by symmetry)
     for hs in parent2Hs.values():
         if len(hs) == 3:
             groups.append(list(hs))
             used.update(hs)
 
-    # CH2
+    # CH2 - split if shifts are different (diastereotopic, already corrected in SDF)
     for hs in parent2Hs.values():
         if len(hs) == 2 and not any(h in used for h in hs):
             h1, h2 = hs
-            if is_diastereotopic_pair(mol, h1, h2):
+            should_split = False
+
+            if shifts is not None:
+                if 0 <= h1 < len(shifts) and 0 <= h2 < len(shifts):
+                    try:
+                        shift1 = float(shifts[h1])
+                        shift2 = float(shifts[h2])
+                        # If shifts are different, they are diastereotopic
+                        if shift1 != shift2:
+                            should_split = True
+                    except (ValueError, TypeError):
+                        pass
+
+            if should_split:
                 groups.append([h1])
                 groups.append([h2])
             else:
@@ -263,9 +260,9 @@ def dataframe_for_sdf(sdf_path: str,
         if not shifts:
             log(f"[WARN] Shift vector not found: {os.path.basename(sdf_path)}")
 
-        # H groups
+        # H groups - passer les shifts pour auto-split des CH2 diastéréotopiques
         progress(30, "Grouping protons...")  # [NEW]
-        h2group, group2Hs = get_h_groups(mol)
+        h2group, group2Hs = get_h_groups(mol, shifts=shifts)
         if not h2group:
             log(f"[WARN] No eligible protons (excluding OH/NH/SH): {os.path.basename(sdf_path)}")
             return pd.DataFrame()

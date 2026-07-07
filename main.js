@@ -147,8 +147,8 @@ function createWindow() {
     // (backend sends an IPC "ready" message; see startBackend())
     hasLoadedProdUI = false;
     mainWindow.loadURL('about:blank');
-    // Ne pas ouvrir DevTools en production
-    // mainWindow.webContents.openDevTools();
+    // DevTools activé temporairement pour debug
+    mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on('closed', () => {
@@ -189,6 +189,9 @@ function startBackend(projectPath = null) {
           : ['nmr_engine_production', 'nmr_engine'];
 
       const pythonCandidates = [
+        // New structure: python/nmr_engine_production/nmr_engine_production.exe
+        ...exeCandidates.map((name) => path.join(process.resourcesPath, 'python', 'nmr_engine_production', name)),
+        // Old structure fallback: python/nmr_engine_production.exe
         ...exeCandidates.map((name) => path.join(process.resourcesPath, 'python', name)),
         ...exeCandidates.map((name) => path.join(__dirname, 'resources', 'python', name)),
       ];
@@ -584,19 +587,26 @@ ipcMain.handle('close-project', async () => {
 
 // Sauvegarder sous (Save As) - copier vers un nouveau dossier
 ipcMain.handle('save-project-as', async (event, state) => {
+  console.log('[Main] Save As: starting...');
+
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
     title: 'Sauvegarder le projet sous - Sélectionner un dossier',
     buttonLabel: 'Sauvegarder ici',
   });
-  
-  if (result.canceled || !result.filePaths[0]) return null;
-  
+
+  if (result.canceled || !result.filePaths[0]) {
+    console.log('[Main] Save As: cancelled by user');
+    return { success: false, cancelled: true };
+  }
+
   const newProjectDir = result.filePaths[0];
-  
+  console.log('[Main] Save As: target directory:', newProjectDir);
+
   try {
     // Copier les fichiers du projet actuel si existant
     if (currentProjectPath && fs.existsSync(currentProjectPath)) {
+      console.log('[Main] Save As: copying from', currentProjectPath);
       const copyRecursive = (src, dest) => {
         if (!fs.existsSync(src)) return;
         const stat = fs.statSync(src);
@@ -609,11 +619,12 @@ ipcMain.handle('save-project-as', async (event, state) => {
           fs.copyFileSync(src, dest);
         }
       };
-      
+
       // Copier uploads, outputs, data
       ['uploads', 'outputs', 'data'].forEach(dir => {
         const srcDir = path.join(currentProjectPath, dir);
         const destDir = path.join(newProjectDir, dir);
+        console.log('[Main] Save As: copying', dir, 'from', srcDir, 'to', destDir);
         if (fs.existsSync(srcDir)) {
           copyRecursive(srcDir, destDir);
         } else {
@@ -621,12 +632,13 @@ ipcMain.handle('save-project-as', async (event, state) => {
         }
       });
     } else {
+      console.log('[Main] Save As: no current project, creating empty folders');
       // Créer les dossiers vides
       fs.mkdirSync(path.join(newProjectDir, 'uploads'), { recursive: true });
       fs.mkdirSync(path.join(newProjectDir, 'outputs'), { recursive: true });
       fs.mkdirSync(path.join(newProjectDir, 'data'), { recursive: true });
     }
-    
+
     // Créer le fichier projet
     const projectFile = path.join(newProjectDir, 'project.nmrproj');
     const projectData = {
@@ -636,22 +648,33 @@ ipcMain.handle('save-project-as', async (event, state) => {
       version: '1.0.0',
       state: state || {}
     };
-    
+
+    console.log('[Main] Save As: writing project file:', projectFile);
     fs.writeFileSync(projectFile, JSON.stringify(projectData, null, 2));
-    
+
     // Sauvegarder comme dernier projet
     saveConfig({ lastProject: newProjectDir });
-    
+
     // Redémarrer le backend avec le nouveau projet et attendre qu'il soit prêt
+    console.log('[Main] Save As: restarting backend...');
     const r = await startBackend(newProjectDir);
     if (!r?.ready) {
-      throw new Error(r?.error || 'Backend failed to start after Save As');
+      const errorMsg = r?.error || 'Backend failed to start after Save As';
+      console.error('[Main] Save As: backend failed:', errorMsg);
+      // Return project anyway but with warning - files are saved
+      return {
+        success: true,
+        warning: errorMsg,
+        path: newProjectDir,
+        ...projectData
+      };
     }
-    
-    return { path: newProjectDir, ...projectData };
+
+    console.log('[Main] Save As: success!');
+    return { success: true, path: newProjectDir, ...projectData };
   } catch (e) {
-    console.error('Erreur Save As:', e);
-    return null;
+    console.error('[Main] Save As error:', e);
+    return { success: false, error: e.message };
   }
 });
 

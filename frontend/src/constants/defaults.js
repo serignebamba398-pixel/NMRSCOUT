@@ -67,6 +67,11 @@ export const DEFAULT_PREDICTION_OPTIONS = {
   cosy: { min_bonds: 2, max_bonds: 3 },
   idColumn: "id",
   smilesColumn: "smiles",
+  // Experimental parameters for NMR prediction
+  freq_mhz: 700,
+  solvent: "CDCl3",
+  temperature_k: 298,
+  ph: 7.4,
 };
 
 /**
@@ -80,12 +85,12 @@ export const DEFAULT_TOLERANCE_RANGES = {
     tol_correspondence: { min: 0.5, max: 5, step: 0.5 },
   },
   COSY: {
-    tol_correspondence_f1: { min: 0.05, max: 0.5, step: 0.05 },
-    tol_correspondence_f2: { min: 0.05, max: 0.5, step: 0.05 },
+    tol_correspondence_f1: { min: 0.05, max: 0.5, step: 0.1 },
+    tol_correspondence_f2: { min: 0.05, max: 0.5, step: 0.1 },
   },
   HSQC: {
-    tol_correspondence_f1: { min: 0.5, max: 5, step: 0.5 },
-    tol_correspondence_f2: { min: 0.05, max: 0.5, step: 0.05 },
+    tol_correspondence_f1: { min: 0.5, max: 5, step: 1 },
+    tol_correspondence_f2: { min: 0.05, max: 0.5, step: 0.1 },
   },
 };
 

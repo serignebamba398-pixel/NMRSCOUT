@@ -74,6 +74,65 @@ function parseShiftBlock(block) {
 /**
  * Parse les symboles atomiques depuis un bloc MOL
  */
+/**
+ * Supprime les H explicites d'un molblock V2000 pour un rendu 2D propre.
+ * Retourne aussi le mapping oldIndex → newIndex pour remapper les highlights.
+ */
+export function stripExplicitHFromMolblock(molblock) {
+  if (!molblock) return { molblock, indexMap: {} };
+  const lines = molblock.split(/\r?\n/);
+  if (lines.length < 4) return { molblock, indexMap: {} };
+
+  const countsLine = lines[3];
+  const nAtoms = parseInt(countsLine.slice(0, 3).trim(), 10);
+  const nBonds = parseInt(countsLine.slice(3, 6).trim(), 10);
+  if (isNaN(nAtoms) || isNaN(nBonds)) return { molblock, indexMap: {} };
+
+  const hIndices = new Set();
+  for (let i = 0; i < nAtoms; i++) {
+    const sym = (lines[4 + i] || '').slice(31, 34).trim();
+    if (sym === 'H') hIndices.add(i);
+  }
+  if (hIndices.size === 0) {
+    const indexMap = {};
+    for (let i = 0; i < nAtoms; i++) indexMap[i] = i;
+    return { molblock, indexMap };
+  }
+
+  const indexMap = {};
+  let newIdx = 0;
+  for (let i = 0; i < nAtoms; i++) {
+    if (!hIndices.has(i)) indexMap[i] = newIdx++;
+  }
+
+  const newAtomLines = [];
+  for (let i = 0; i < nAtoms; i++) {
+    if (!hIndices.has(i)) newAtomLines.push(lines[4 + i]);
+  }
+
+  const newBondLines = [];
+  const bondIndexMap = {}; // oldBondIdx → newBondIdx
+  let newBondIdx = 0;
+  for (let i = 0; i < nBonds; i++) {
+    const line = lines[4 + nAtoms + i] || '';
+    const a1 = parseInt(line.slice(0, 3).trim(), 10) - 1;
+    const a2 = parseInt(line.slice(3, 6).trim(), 10) - 1;
+    if (hIndices.has(a1) || hIndices.has(a2)) continue;
+    bondIndexMap[i] = newBondIdx++;
+    const na1 = String(indexMap[a1] + 1).padStart(3);
+    const na2 = String(indexMap[a2] + 1).padStart(3);
+    newBondLines.push(na1 + na2 + line.slice(6));
+  }
+
+  const newCounts = String(newAtomLines.length).padStart(3) +
+    String(newBondLines.length).padStart(3) +
+    countsLine.slice(6);
+
+  const footer = lines.slice(4 + nAtoms + nBonds);
+  const newMolblock = [...lines.slice(0, 3), newCounts, ...newAtomLines, ...newBondLines, ...footer].join('\n');
+  return { molblock: newMolblock, indexMap, bondIndexMap };
+}
+
 export function parseAtomSymbolsFromMolblock(molblock) {
   if (!molblock) return [];
   const lines = molblock.split(/\r?\n/);
@@ -112,7 +171,11 @@ export function findBondsInPath(molblock, atomPairs) {
   }
 
   const findShortestPath = (start, end) => {
-    if (start === end) return [];
+    // Pour les diagonaux COSY (même proton) : retourner les bonds connectés (liaison C-H)
+    if (start === end) {
+      const bonds = adjacency.get(start) || [];
+      return bonds.map(b => b.bondIndex);
+    }
     const q = [{ atom: start, path: [] }];
     const seen = new Set([start]);
     while (q.length > 0) {

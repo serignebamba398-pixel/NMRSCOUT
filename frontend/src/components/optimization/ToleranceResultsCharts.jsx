@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 
 /**
  * Display of tolerance optimization result charts
@@ -16,28 +16,57 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     height: 500,
   });
 
-  // Responsive canvas sizing
+  // Responsive canvas sizing avec ResizeObserver
   useEffect(() => {
     const updateSize = () => {
       if (!wrapperRef.current) return;
       const rect = wrapperRef.current.getBoundingClientRect();
 
-      const isSingleColumn = window.innerWidth < 900;
+      // Utiliser la largeur du conteneur, pas la fenêtre
+      const containerWidth = rect.width;
+      const isSingleColumn = containerWidth < 700;
       const columns = isSingleColumn ? 1 : 2;
 
-      const columnWidth = rect.width / columns;
+      const columnWidth = containerWidth / columns;
       const innerWidth = Math.max(320, columnWidth - 32);
-      const innerHeight = Math.max(260, innerWidth * 0.7);
+      const innerHeight = Math.max(260, innerWidth * 0.65);
 
-      setCanvasSize({
-        width: Math.round(innerWidth),
-        height: Math.round(innerHeight),
+      setCanvasSize(prev => {
+        // Éviter les mises à jour inutiles
+        if (prev.width === Math.round(innerWidth) && prev.height === Math.round(innerHeight)) {
+          return prev;
+        }
+        return {
+          width: Math.round(innerWidth),
+          height: Math.round(innerHeight),
+        };
       });
     };
 
     updateSize();
+    
+    // Utiliser ResizeObserver pour détecter les changements de taille du conteneur
+    let resizeObserver;
+    if (wrapperRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        updateSize();
+      });
+      resizeObserver.observe(wrapperRef.current);
+      
+      // Observer aussi le parent modal s'il existe
+      const modalContainer = wrapperRef.current.closest('.modal-container');
+      if (modalContainer) {
+        resizeObserver.observe(modalContainer);
+      }
+    }
+
     window.addEventListener("resize", updateSize);
-    return () => window.removeEventListener("resize", updateSize);
+    return () => {
+      window.removeEventListener("resize", updateSize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
   }, []);
 
   // Chart 1: Coverage distribution (stacked area)
@@ -46,10 +75,10 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const PAD = 80;
-    const legendWidth = 120;
-    const graphW = width - 2 * PAD - legendWidth;
-    const graphH = height - 2 * PAD;
+    const is2D = data.type === "COSY" || data.type === "HSQC";
+    const PAD = { top: 35, bottom: is2D ? 120 : 95, left: 45, right: 85 }; // Légende à droite
+    const graphW = width - PAD.left - PAD.right;
+    const graphH = height - PAD.top - PAD.bottom;
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#ffffff";
@@ -57,20 +86,20 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
 
     // Title
     ctx.fillStyle = "#000000";
-    ctx.font = "bold 14px sans-serif";
+    ctx.font = "bold 12px sans-serif";
     ctx.fillText(
-      "Molecules by coverage class (% of molecules) vs Tolerance",
-      PAD,
-      26
+      "Molecules by coverage class (% of mol.)",
+      PAD.left,
+      16
     );
 
     // Axes
     ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(PAD, PAD);
-    ctx.lineTo(PAD, PAD + graphH);
-    ctx.lineTo(PAD + graphW, PAD + graphH);
+    ctx.moveTo(PAD.left, PAD.top);
+    ctx.lineTo(PAD.left, PAD.top + graphH);
+    ctx.lineTo(PAD.left + graphW, PAD.top + graphH);
     ctx.stroke();
 
     const resultsFiltered = data.results.filter((r) => !r.error);
@@ -118,9 +147,9 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
 
       for (let i = 0; i < nbPoints; i++) {
         const x =
-          nbPoints === 1 ? PAD + graphW / 2 : PAD + (i / (nbPoints - 1)) * graphW;
+          nbPoints === 1 ? PAD.left + graphW / 2 : PAD.left + (i / (nbPoints - 1)) * graphW;
         const topVal = stacked[i].cumTop[bin];
-        const yTop = PAD + graphH - (topVal / maxY) * graphH;
+        const yTop = PAD.top + graphH - (topVal / maxY) * graphH;
 
         if (i === 0) ctx.moveTo(x, yTop);
         else ctx.lineTo(x, yTop);
@@ -128,9 +157,9 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
 
       for (let i = nbPoints - 1; i >= 0; i--) {
         const x =
-          nbPoints === 1 ? PAD + graphW / 2 : PAD + (i / (nbPoints - 1)) * graphW;
+          nbPoints === 1 ? PAD.left + graphW / 2 : PAD.left + (i / (nbPoints - 1)) * graphW;
         const baseVal = stacked[i].cumBase[bin];
-        const yBase = PAD + graphH - (baseVal / maxY) * graphH;
+        const yBase = PAD.top + graphH - (baseVal / maxY) * graphH;
         ctx.lineTo(x, yBase);
       }
 
@@ -141,52 +170,69 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       ctx.stroke();
     }
 
-    // Légende
+    // Légende (compacte)
     binLabels.forEach((label, bin) => {
-      const legendX = PAD + graphW + 20;
-      const legendY = PAD + bin * 25;
+      const legendX = PAD.left + graphW + 8;
+      const legendY = PAD.top + bin * 18;
       ctx.fillStyle = colors[bin];
-      ctx.fillRect(legendX, legendY, 15, 10);
+      ctx.fillRect(legendX, legendY, 12, 10);
       ctx.fillStyle = "#000000";
-      ctx.font = "11px sans-serif";
-      ctx.fillText(label, legendX + 20, legendY + 9);
+      ctx.font = "9px sans-serif";
+      ctx.fillText(label, legendX + 15, legendY + 9);
     });
 
     // Axis labels
     ctx.fillStyle = "#000000";
-    ctx.font = "12px sans-serif";
-    ctx.fillText("Tolerance (ppm)", PAD + graphW / 2 - 50, height - 10);
+    ctx.font = "10px sans-serif";
+    ctx.fillText("Tolerance (ppm)", PAD.left + graphW / 2 - 30, height - 5);
 
     ctx.save();
-    ctx.translate(15, PAD + graphH / 2);
+    ctx.translate(10, PAD.top + graphH / 2);
     ctx.rotate(-Math.PI / 2);
+    ctx.font = "10px sans-serif";
     ctx.fillText("% of molecules", 0, 0);
     ctx.restore();
 
-    // Ticks
-    ctx.font = "10px sans-serif";
+    // Ticks X
+    ctx.fillStyle = "#000000";
+    ctx.font = "bold 10px sans-serif";
     resultsFiltered.forEach((r, i) => {
-      const x = nbPoints === 1 ? PAD + graphW / 2 : PAD + (i / (nbPoints - 1)) * graphW;
+      const x = nbPoints === 1 ? PAD.left + graphW / 2 : PAD.left + (i / (nbPoints - 1)) * graphW;
+
+      // Tick mark
+      ctx.strokeStyle = "#333333";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, PAD.top + graphH);
+      ctx.lineTo(x, PAD.top + graphH + 4);
+      ctx.stroke();
 
       let label;
       if (r.toleranceParams.tol_correspondence !== undefined) {
         label = r.toleranceParams.tol_correspondence.toFixed(2);
       } else {
-        label = `${r.toleranceParams.tol_correspondence_f1.toFixed(
-          2
-        )},${r.toleranceParams.tol_correspondence_f2.toFixed(2)}`;
+        label = `${r.toleranceParams.tol_correspondence_f1.toFixed(1)}/${r.toleranceParams.tol_correspondence_f2.toFixed(1)}`;
       }
       ctx.save();
-      ctx.translate(x, PAD + graphH + 15);
-      ctx.rotate(-Math.PI / 4);
+      ctx.translate(x, PAD.top + graphH + (is2D ? 32 : 25));
+      ctx.rotate(-Math.PI / 3);
       ctx.fillText(label, 0, 0);
       ctx.restore();
     });
 
+    // Ticks Y
+    ctx.font = "bold 10px sans-serif";
     const ySteps = [0, 20, 40, 60, 80, 100];
     ySteps.forEach((val) => {
-      const y = PAD + graphH - (val / maxY) * graphH;
-      ctx.fillText(val.toString(), PAD - 28, y + 5);
+      const y = PAD.top + graphH - (val / maxY) * graphH;
+      ctx.strokeStyle = "#cccccc";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, y);
+      ctx.lineTo(PAD.left + graphW, y);
+      ctx.stroke();
+      ctx.fillStyle = "#000000";
+      ctx.fillText(val.toString(), PAD.left - 28, y + 4);
     });
   };
 
@@ -196,9 +242,10 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const PAD = 80;
-    const graphW = width - 2 * PAD;
-    const graphH = height - 2 * PAD;
+    const is2D = data.type === "COSY" || data.type === "HSQC";
+    const PAD = { top: 35, bottom: is2D ? 120 : 95, left: 45, right: 20 };
+    const graphW = width - PAD.left - PAD.right;
+    const graphH = height - PAD.top - PAD.bottom;
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#ffffff";
@@ -218,36 +265,36 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       : Math.max(...resultsFiltered.map((r) => r.totalSignalsMatched || 0)) || 1;
 
     ctx.fillStyle = "#000000";
-    ctx.font = "bold 14px sans-serif";
+    ctx.font = "bold 12px sans-serif";
     ctx.fillText(
       usePct
-        ? "Experimental signals matched (% of total signals) vs Tolerance"
-        : "Number of experimental signals matched vs Tolerance",
-      PAD,
-      26
+        ? "Experimental signals matched (% of total)"
+        : "Experimental signals matched",
+      PAD.left,
+      16
     );
 
     ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(PAD, PAD);
-    ctx.lineTo(PAD, PAD + graphH);
-    ctx.lineTo(PAD + graphW, PAD + graphH);
+    ctx.moveTo(PAD.left, PAD.top);
+    ctx.lineTo(PAD.left, PAD.top + graphH);
+    ctx.lineTo(PAD.left + graphW, PAD.top + graphH);
     ctx.stroke();
 
     ctx.strokeStyle = "#2ca02c";
     ctx.fillStyle = "#2ca02c";
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 2;
     ctx.beginPath();
 
     resultsFiltered.forEach((r, i) => {
       const x =
         resultsFiltered.length === 1
-          ? PAD + graphW / 2
-          : PAD + (i / (resultsFiltered.length - 1)) * graphW;
+          ? PAD.left + graphW / 2
+          : PAD.left + (i / (resultsFiltered.length - 1)) * graphW;
 
       const value = usePct ? r.signalsMatchedPct || 0 : r.totalSignalsMatched || 0;
-      const y = PAD + graphH - (value / maxSignals) * graphH;
+      const y = PAD.top + graphH - (value / maxSignals) * graphH;
 
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
@@ -262,54 +309,76 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     ctx.stroke();
 
     ctx.fillStyle = "#000000";
-    ctx.font = "12px sans-serif";
-    ctx.fillText("Tolerance (ppm)", PAD + graphW / 2 - 50, height - 10);
+    ctx.font = "10px sans-serif";
+    ctx.fillText("Tolerance (ppm)", PAD.left + graphW / 2 - 30, height - 5);
 
     ctx.save();
-    ctx.translate(15, PAD + graphH / 2);
+    ctx.translate(10, PAD.top + graphH / 2);
     ctx.rotate(-Math.PI / 2);
+    ctx.font = "10px sans-serif";
     ctx.fillText(
-      usePct ? "Signals matched (% of exp. signals)" : "Signals matched",
+      usePct ? "Signals matched (%)" : "Signals matched",
       0,
       0
     );
     ctx.restore();
 
-    ctx.font = "10px sans-serif";
+    ctx.fillStyle = "#000000";
+    ctx.font = "bold 10px sans-serif";
     resultsFiltered.forEach((r, i) => {
       const x =
         resultsFiltered.length === 1
-          ? PAD + graphW / 2
-          : PAD + (i / (resultsFiltered.length - 1)) * graphW;
+          ? PAD.left + graphW / 2
+          : PAD.left + (i / (resultsFiltered.length - 1)) * graphW;
+
+      // Tick mark
+      ctx.strokeStyle = "#333333";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, PAD.top + graphH);
+      ctx.lineTo(x, PAD.top + graphH + 4);
+      ctx.stroke();
 
       let label;
       if (r.toleranceParams.tol_correspondence !== undefined) {
         label = r.toleranceParams.tol_correspondence.toFixed(2);
       } else {
-        label = `${r.toleranceParams.tol_correspondence_f1.toFixed(
-          2
-        )},${r.toleranceParams.tol_correspondence_f2.toFixed(2)}`;
+        label = `${r.toleranceParams.tol_correspondence_f1.toFixed(1)}/${r.toleranceParams.tol_correspondence_f2.toFixed(1)}`;
       }
       ctx.save();
-      ctx.translate(x, PAD + graphH + 15);
-      ctx.rotate(-Math.PI / 4);
+      ctx.translate(x, PAD.top + graphH + (is2D ? 32 : 25));
+      ctx.rotate(-Math.PI / 3);
       ctx.fillText(label, 0, 0);
       ctx.restore();
     });
 
-    ctx.font = "10px sans-serif";
+    ctx.font = "bold 10px sans-serif";
     if (usePct) {
       const steps = [0, 20, 40, 60, 80, 100];
       steps.forEach((val) => {
-        const y = PAD + graphH - (val / 100) * graphH;
-        ctx.fillText(`${val}`, PAD - 35, y + 5);
+        const y = PAD.top + graphH - (val / 100) * graphH;
+        ctx.strokeStyle = "#cccccc";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(PAD.left, y);
+        ctx.lineTo(PAD.left + graphW, y);
+        ctx.stroke();
+        ctx.fillStyle = "#000000";
+        ctx.fillText(`${val}`, PAD.left - 28, y + 4);
       });
     } else {
       const ySteps = 5;
       for (let i = 0; i <= ySteps; i++) {
-        const y = PAD + graphH - (i / ySteps) * graphH;
+        const y = PAD.top + graphH - (i / ySteps) * graphH;
         const val = Math.round((i / ySteps) * maxSignals);
-        ctx.fillText(val, PAD - 40, y + 5);
+        ctx.strokeStyle = "#cccccc";
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        ctx.moveTo(PAD.left, y);
+        ctx.lineTo(PAD.left + graphW, y);
+        ctx.stroke();
+        ctx.fillStyle = "#000000";
+        ctx.fillText(val, PAD.left - 28, y + 4);
       }
     }
   };
@@ -320,20 +389,21 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const PAD = 80;
-    const graphW = width - 2 * PAD;
-    const graphH = height - 2 * PAD;
+    const is2D = data.type === "COSY" || data.type === "HSQC";
+    const PAD = { top: 30, bottom: is2D ? 125 : 100, left: 40, right: 15 };
+    const graphW = width - PAD.left - PAD.right;
+    const graphH = height - PAD.top - PAD.bottom;
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, width, height);
 
     ctx.fillStyle = "#000000";
-    ctx.font = "bold 16px sans-serif";
+    ctx.font = "bold 11px sans-serif";
     ctx.fillText(
       "Experimental signals matched by tolerance",
-      PAD,
-      30
+      PAD.left,
+      14
     );
 
     const resultsFiltered = data.results.filter((r) => !r.error);
@@ -363,44 +433,46 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const maxPPM = Math.max(...allSignals, 10);
 
     ctx.strokeStyle = "#333333";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(PAD, PAD);
-    ctx.lineTo(PAD, PAD + graphH);
-    ctx.lineTo(PAD + graphW, PAD + graphH);
+    ctx.moveTo(PAD.left, PAD.top);
+    ctx.lineTo(PAD.left, PAD.top + graphH);
+    ctx.lineTo(PAD.left + graphW, PAD.top + graphH);
     ctx.stroke();
 
     const colSpacing = graphW / Math.max(resultsFiltered.length, 1);
     const rangePPM = maxPPM - minPPM || 10;
 
     resultsFiltered.forEach((r, idx) => {
-      const x = PAD + idx * colSpacing + colSpacing / 2;
+      const x = PAD.left + idx * colSpacing + colSpacing / 2;
 
       ctx.strokeStyle = "#e5e7eb";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(x, PAD);
-      ctx.lineTo(x, PAD + graphH);
+      ctx.moveTo(x, PAD.top);
+      ctx.lineTo(x, PAD.top + graphH);
       ctx.stroke();
 
       let tolLabel = "";
       if (r.toleranceParams.tol_correspondence !== undefined) {
         tolLabel = r.toleranceParams.tol_correspondence.toFixed(2);
-      } else if (data.type === "COSY") {
-        tolLabel = `${r.toleranceParams.tol_correspondence_f1.toFixed(
-          1
-        )}/${r.toleranceParams.tol_correspondence_f2.toFixed(1)}`;
-      } else if (data.type === "HSQC") {
-        tolLabel = `${r.toleranceParams.tol_correspondence_f1.toFixed(
-          1
-        )}/${r.toleranceParams.tol_correspondence_f2.toFixed(1)}`;
+      } else if (data.type === "COSY" || data.type === "HSQC") {
+        tolLabel = `${r.toleranceParams.tol_correspondence_f1.toFixed(1)}/${r.toleranceParams.tol_correspondence_f2.toFixed(1)}`;
       }
 
+      // Tick mark
+      ctx.strokeStyle = "#333333";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, PAD.top + graphH);
+      ctx.lineTo(x, PAD.top + graphH + 4);
+      ctx.stroke();
+
       ctx.fillStyle = "#000000";
-      ctx.font = "12px sans-serif";
+      ctx.font = "bold 10px sans-serif";
       ctx.save();
-      ctx.translate(x - 5, PAD + graphH + 40);
-      ctx.rotate(-Math.PI / 4);
+      ctx.translate(x, PAD.top + graphH + (is2D ? 32 : 25));
+      ctx.rotate(-Math.PI / 3);
       ctx.fillText(tolLabel, 0, 0);
       ctx.restore();
 
@@ -408,7 +480,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       const commonWithOthers = overlapInfo[idx];
 
       signals.forEach((ppm) => {
-        const y = PAD + graphH - ((ppm - minPPM) / rangePPM) * graphH;
+        const y = PAD.top + graphH - ((ppm - minPPM) / rangePPM) * graphH;
         const isCommon = commonWithOthers.has(ppm);
 
         ctx.fillStyle = isCommon ? "#ef4444" : "#3b82f6";
@@ -418,45 +490,53 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       });
     });
 
-    // Ticks PPM
-    ctx.fillStyle = "#000000";
-    ctx.font = "12px sans-serif";
+    // Ticks PPM (Y axis)
+    ctx.font = "bold 10px sans-serif";
     const numTicks = 5;
     for (let i = 0; i <= numTicks; i++) {
       const ppm = minPPM + (i / numTicks) * rangePPM;
-      const y = PAD + graphH - (i / numTicks) * graphH;
+      const y = PAD.top + graphH - (i / numTicks) * graphH;
+
+      ctx.strokeStyle = "#cccccc";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(PAD.left, y);
+      ctx.lineTo(PAD.left + graphW, y);
+      ctx.stroke();
 
       ctx.strokeStyle = "#666";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(PAD - 5, y);
-      ctx.lineTo(PAD, y);
+      ctx.moveTo(PAD.left - 4, y);
+      ctx.lineTo(PAD.left, y);
       ctx.stroke();
 
-      ctx.fillText(ppm.toFixed(1), PAD - 40, y + 5);
+      ctx.fillStyle = "#000000";
+      ctx.fillText(ppm.toFixed(1), PAD.left - 32, y + 4);
     }
 
     ctx.fillStyle = "#000000";
-    ctx.font = "14px sans-serif";
-    ctx.fillText("Tolerances →", PAD + graphW / 2 - 50, height - 12);
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText("Tolerances →", PAD.left + graphW / 2 - 30, height - 3);
 
     ctx.save();
-    ctx.translate(15, PAD + graphH / 2);
+    ctx.translate(8, PAD.top + graphH / 2);
     ctx.rotate(-Math.PI / 2);
+    ctx.font = "bold 10px sans-serif";
     ctx.fillText("PPM (δ) →", 0, 0);
     ctx.restore();
 
-    // Legend
+    // Legend (compact)
     ctx.fillStyle = "#3b82f6";
-    ctx.fillRect(PAD, height - 40, 18, 4);
+    ctx.fillRect(PAD.left, height - 48, 10, 3);
     ctx.fillStyle = "#000";
-    ctx.font = "13px sans-serif";
-    ctx.fillText("Signal unique to this tolerance", PAD + 25, height - 34);
+    ctx.font = "8px sans-serif";
+    ctx.fillText("Unique to this tol.", PAD.left + 14, height - 44);
 
     ctx.fillStyle = "#ef4444";
-    ctx.fillRect(PAD + 230, height - 40, 18, 4);
+    ctx.fillRect(PAD.left + 100, height - 48, 10, 3);
     ctx.fillStyle = "#000";
-    ctx.fillText("Signal common with other tolerances", PAD + 255, height - 34);
+    ctx.fillText("Common with others", PAD.left + 114, height - 44);
   };
 
   // Calculate overlap matrix
@@ -533,7 +613,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
         ref={wrapperRef}
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr 1fr",
+          gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
           gap: 20,
           marginTop: 20,
         }}
@@ -570,15 +650,15 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "55% 45%",
+            gridTemplateColumns: "repeat(auto-fit, minmax(400px, 1fr))",
             gap: 20,
-            alignItems: "end",
+            alignItems: "start",
           }}
         >
           <div>
             <canvas
               ref={canvasRef3}
-              width={canvasSize.width * 2}
+              width={canvasSize.width}
               height={canvasSize.height}
               style={{
                 border: "1px solid #ddd",
@@ -610,7 +690,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
                   fontWeight: "bold",
                 }}
               >
-                Matrice de recouvrement (%)
+                Overlap Matrix (%)
               </h4>
               <div
                 style={{

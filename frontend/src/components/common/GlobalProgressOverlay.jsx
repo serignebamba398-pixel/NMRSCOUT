@@ -33,6 +33,7 @@ export const GlobalProgressOverlay = () => {
   // If the user cancels a prediction from the overlay, the operation stops immediately
   // and the overlay would disappear before the user sees the final status.
   // Keep the overlay visible briefly to show the cancellation message.
+  const [, forceUpdate] = useState(0);
   const predictionCancelledRecently = (() => {
     if (predictionRunning) return false;
     if (prediction?.error !== 'Cancelled by user') return false;
@@ -40,6 +41,14 @@ export const GlobalProgressOverlay = () => {
     if (!Number.isFinite(end)) return false;
     return Date.now() - end < 4000;
   })();
+
+  // Force re-render after 4 seconds to hide the "cancelled" message
+  useEffect(() => {
+    if (predictionCancelledRecently) {
+      const timer = setTimeout(() => forceUpdate(n => n + 1), 4100);
+      return () => clearTimeout(timer);
+    }
+  }, [predictionCancelledRecently, prediction?.endTime]);
 
   useEffect(() => {
     if (anyRunning) {

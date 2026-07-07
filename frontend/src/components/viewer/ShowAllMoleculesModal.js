@@ -1,9 +1,9 @@
 // src/components/viewer/ShowAllMoleculesModal.js
 // Modal to display all molecules of a project in a paginated grid
 
-import React, { useState, useEffect, useMemo, useCallback, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { loadRDKitFromCDN } from "../../utils/cdnLoaders";
-import { extractFirstMolBlockPreserving, tryFetchText } from "../../utils/molParser";
+import { extractFirstMolBlockPreserving, tryFetchText, stripExplicitHFromMolblock } from "../../utils/molParser";
 import { debugLog, debugError } from "../../utils/debug";
 import { API_BASE_URL } from "../../api";
 
@@ -104,16 +104,28 @@ function ShowAllMoleculesModal({
       if (!mol || svgCache[m.filename]) continue;
 
       try {
-        const rdkMol = rdkit.get_mol(mol);
+        const { molblock: cleanMol } = stripExplicitHFromMolblock(mol);
+        const tmpMol = rdkit.get_mol(cleanMol);
+        if (!tmpMol) continue;
+        // Convertir en SMILES puis recréer pour obtenir une 2D propre sans coordonnées 3D
+        const smiles = tmpMol.get_smiles();
+        tmpMol.delete();
+        if (!smiles) continue;
+        const rdkMol = rdkit.get_mol(smiles);
         if (!rdkMol) continue;
 
         const opts = {
-          width: 180,
-          height: 140,
+          width: 380,
+          height: 300,
           backgroundColour: [1, 1, 1, 1],
-          addStereoAnnotation: true,
+          addStereoAnnotation: false,
+          explicitMethyl: false,
+          bondLineWidth: 2.0,
+          atomLabelFontSize: 14,
+          useMolBlockCoords: false,
+          padding: 0.0,
         };
-        const svg = rdkMol.get_svg_with_highlights(JSON.stringify(opts));
+        const svg = rdkMol.get_svg(JSON.stringify(opts));
         rdkMol.delete();
 
         setSvgCache((prev) => ({ ...prev, [m.filename]: svg }));
@@ -229,7 +241,7 @@ function ShowAllMoleculesModal({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
               gap: 16,
             }}
           >
@@ -272,7 +284,7 @@ function ShowAllMoleculesModal({
                   <div
                     style={{
                       width: "100%",
-                      height: 140,
+                      height: 260,
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
