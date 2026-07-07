@@ -70,10 +70,38 @@ jobs:
             throw "Failed to download models.zip"
           }
 
-          Write-Host "Extracting models..."
-          Expand-Archive -Path $zip -DestinationPath $modelsDir -Force
+          Write-Host "Extracting models and data..."
+          $tempExtract = Join-Path $env:RUNNER_TEMP "models-extract"
+          Expand-Archive -Path $zip -DestinationPath $tempExtract -Force
 
-          # Verify
+          # Move .pt files to backend/models/
+          Get-ChildItem "$tempExtract/*.pt" | ForEach-Object {
+            Copy-Item $_.FullName -Destination $modelsDir -Force
+            Write-Host "Model: $($_.Name) -> $modelsDir"
+          }
+
+          # Move .npz files to backend/ml_dependencies/data/
+          $dataDir = "backend/ml_dependencies/data"
+          if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force }
+          Get-ChildItem "$tempExtract/*.npz" | Where-Object { $_.Name -like "*graph*" } | ForEach-Object {
+            Copy-Item $_.FullName -Destination $dataDir -Force
+            Write-Host "Data: $($_.Name) -> $dataDir"
+          }
+
+          # Move sample .npz files to backend/ml_dependencies/
+          $mlDir = "backend/ml_dependencies"
+          Get-ChildItem "$tempExtract/sample_*.npz" | ForEach-Object {
+            Copy-Item $_.FullName -Destination $mlDir -Force
+            Write-Host "Sample: $($_.Name) -> $mlDir"
+          }
+
+          # Move .jar files to backend/ml_dependencies/
+          Get-ChildItem "$tempExtract/*.jar" | ForEach-Object {
+            Copy-Item $_.FullName -Destination $mlDir -Force
+            Write-Host "JAR: $($_.Name) -> $mlDir"
+          }
+
+          # Verify models
           $models = Get-ChildItem "$modelsDir/*.pt"
           foreach ($m in $models) {
             $sizeMB = [math]::Round($m.Length/1MB, 2)
@@ -82,7 +110,7 @@ jobs:
               throw "Model $($m.Name) is too small ($($m.Length) bytes)"
             }
           }
-          Write-Host "Models downloaded successfully!"
+          Write-Host "Models and data downloaded successfully!"
 
       - name: Setup Node
         uses: actions/setup-node@v4
