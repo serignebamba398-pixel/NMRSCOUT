@@ -101,6 +101,18 @@ jobs:
             Write-Host "JAR: $($_.Name) -> $mlDir"
           }
 
+          # Move .pkl files to backend/ml_dependencies/data/
+          Get-ChildItem "$tempExtract/*.pkl" | ForEach-Object {
+            Copy-Item $_.FullName -Destination $dataDir -Force
+            Write-Host "PKL: $($_.Name) -> $dataDir"
+          }
+
+          # Move .sd files to backend/ml_dependencies/data/
+          Get-ChildItem "$tempExtract/*.sd" | ForEach-Object {
+            Copy-Item $_.FullName -Destination $dataDir -Force
+            Write-Host "SD: $($_.Name) -> $dataDir"
+          }
+
           # Verify models
           $models = Get-ChildItem "$modelsDir/*.pt"
           foreach ($m in $models) {
