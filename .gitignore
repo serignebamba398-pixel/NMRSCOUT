@@ -94,9 +94,18 @@ R-Portable.zip
 backend/temp_output/
 $null
 
-# ===== Large data files (in Docker image, not in repo) =====
+# ===== Large files (in Docker image + GitHub Release assets) =====
 *.pkl
 *.sdf
+*.sd
+*.pt
+*.npz
+*.jar
 backend/ml_dependencies/data/NPMRD/
 backend/ml_dependencies/data/sdf_bmrb_rdkit_v2/
 backend/ml_dependencies/data/with_experimental_data/
+backend/ml_dependencies/data/*.pdf
+backend/models/
+resources/python/nmr_engine.exe
+encrypt_secret.py
+models.zip
