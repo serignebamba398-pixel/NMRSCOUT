@@ -146,17 +146,30 @@
   background: #f0f7ff;
 }
 
+/* Nom molécule en haut */
+.mol-name {
+  font-size: 12px;
+  font-weight: 700;
+  font-style: italic;
+  color: #222;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+  padding: 0 4px;
+}
+
 /* SVG container */
 .mol-svg-container {
   width: 100%;
-  height: 120px;
+  height: 380px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: #fafafa;
+  background: #fff;
   border-radius: 4px;
-  margin-bottom: 8px;
 }
 
 .mol-svg {
@@ -181,41 +194,25 @@
 
 /* Infos molécule */
 .mol-info {
-  font-size: 11px;
-  color: #555;
-  line-height: 1.4;
+  margin-top: 6px;
 }
 
-.mol-info-row {
+.mol-rank-score {
   display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
 }
 
 .mol-rank {
-  font-weight: 600;
-  color: #333;
-}
-
-.mol-mw {
-  color: #666;
-}
-
-.mol-id {
-  color: #4a90d9;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin: 2px 0;
+  font-size: 11px;
+  color: #888;
 }
 
 .mol-score {
-  color: #28a745;
-}
-
-.mol-deviation {
-  color: #888;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a90d9;
 }
 
 /* Dialogue téléchargement */

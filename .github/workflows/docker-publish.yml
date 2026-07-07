@@ -1,0 +1,80 @@
+name: Docker Publish (Multi-Arch)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Image tag (e.g. v3, v4, latest)"
+        required: true
+        default: "v1"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Extract tag name from ref (refs/tags/v1.0.0 -> v1.0.0)
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Set up QEMU (for ARM64 emulation)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push backend (multi-arch)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            docker.io/serignebamba398/annotation-nmr-backend:${{ steps.version.outputs.tag }}
+            docker.io/serignebamba398/annotation-nmr-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend (multi-arch)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.frontend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            docker.io/serignebamba398/annotation-nmr-frontend:${{ steps.version.outputs.tag }}
+            docker.io/serignebamba398/annotation-nmr-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify multi-arch manifests
+        run: |
+          echo "=== Backend manifest ==="
+          docker buildx imagetools inspect serignebamba398/annotation-nmr-backend:${{ steps.version.outputs.tag }}
+          echo ""
+          echo "=== Frontend manifest ==="
+          docker buildx imagetools inspect serignebamba398/annotation-nmr-frontend:${{ steps.version.outputs.tag }}

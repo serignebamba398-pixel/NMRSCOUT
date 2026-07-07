@@ -18,7 +18,15 @@ else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
-sys.path.insert(0, os.path.join(BASE_DIR, 'scripts'))
+# OVERRIDE: Allow loading scripts from external path via NMR_SCRIPTS_OVERRIDE env var
+# This enables hot-patching fixes without recompiling the bundle
+scripts_override = os.environ.get('NMR_SCRIPTS_OVERRIDE', '')
+if scripts_override and os.path.isdir(scripts_override):
+    print(f"[nmr_engine] Using scripts override: {scripts_override}", file=sys.stderr)
+    sys.path.insert(0, scripts_override)
+else:
+    sys.path.insert(0, os.path.join(BASE_DIR, 'scripts'))
+
 sys.path.insert(0, os.path.join(BASE_DIR, 'ml_dependencies'))
 
 def inject_model_paths():
@@ -49,6 +57,8 @@ def main():
         print("  extract_smiles         - Extract SMILES from SDF")
         print("  predict_1H             - Predict 1H NMR")
         print("  predict_13C            - Predict 13C NMR")
+        print("  simulate_spectrum      - Simulate 1H NMR spectrum from multiplicity data")
+        print("  extract_bruker_spectrum - Extract Bruker spectrum from pdata folder")
         sys.exit(1)
     
     command = sys.argv[1]
@@ -187,6 +197,42 @@ def main():
             run_export_bg()
         except Exception as e:
             print(f"[ENTRY] nmr_export_bg ERROR: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+            sys.exit(1)
+    elif command == "simulate_spectrum":
+        # Simulate 1H NMR spectrum from multiplicity data
+        print("[ENTRY] simulate_spectrum command", file=sys.stderr)
+        sys.stderr.flush()
+        try:
+            from simulate_spectrum_api import main as run_simulate
+            run_simulate()
+        except Exception as e:
+            print(f"[ENTRY] simulate_spectrum ERROR: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+            sys.exit(1)
+    elif command == "extract_bruker_spectrum":
+        # Extract raw Bruker spectrum data from pdata folder
+        print("[ENTRY] extract_bruker_spectrum command", file=sys.stderr)
+        sys.stderr.flush()
+        try:
+            from extract_bruker_spectrum import main as run_extract_bruker
+            run_extract_bruker()
+        except Exception as e:
+            print(f"[ENTRY] extract_bruker_spectrum ERROR: {e}", file=sys.stderr)
+            traceback.print_exc(file=sys.stderr)
+            sys.stderr.flush()
+            sys.exit(1)
+    elif command == "extract_bruker_2d":
+        # Extract 2D Bruker spectrum contours from pdata folder
+        print("[ENTRY] extract_bruker_2d command", file=sys.stderr)
+        sys.stderr.flush()
+        try:
+            from extract_bruker_2d import main as run_extract_bruker_2d
+            run_extract_bruker_2d()
+        except Exception as e:
+            print(f"[ENTRY] extract_bruker_2d ERROR: {e}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             sys.stderr.flush()
             sys.exit(1)

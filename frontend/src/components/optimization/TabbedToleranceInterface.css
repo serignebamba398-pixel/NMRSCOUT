@@ -3,9 +3,8 @@
 .tabbed-tolerance-interface {
   display: flex;
   flex-direction: column;
-  height: 70vh;
-  min-height: 500px;
-  max-height: 70vh;
+  height: 100%;
+  min-height: 400px;
   background: #fff;
 }
 
@@ -305,6 +304,21 @@
 
 .tabbed-tolerance-interface .btn-secondary:hover:not(:disabled) {
   background: #f5f5f5;
+}
+
+.tabbed-tolerance-interface .btn-danger {
+  padding: 8px 20px;
+  background: #dc3545;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.tabbed-tolerance-interface .btn-danger:hover {
+  background: #c82333;
 }
 
 /* Résultats vides */

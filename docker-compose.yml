@@ -1,7 +1,8 @@
-# Genere pour Windows le 08/12/2025 16:14:33.87
+# NMRScout - Docker Compose (production)
+# Cross-platform: Windows, macOS, Linux
 services:
   backend:
-    image: docker.io/serignebamba398/annotation-nmr-backend:v3
+    image: docker.io/serignebamba398/annotation-nmr-backend:v1
     container_name: nmr-backend
     restart: unless-stopped
     env_file:
@@ -10,7 +11,6 @@ services:
       - backend_uploads:/app/backend/uploads
       - backend_outputs:/app/backend/outputs
       - backend_cache:/app/backend/cache
-      - c:/:/host/c:ro
     networks:
       - nmr-network
     ports:
@@ -23,7 +23,7 @@ services:
       start_period: 90s
 
   frontend:
-    image: docker.io/serignebamba398/annotation-nmr-frontend:v3
+    image: docker.io/serignebamba398/annotation-nmr-frontend:v1
     container_name: nmr-frontend
     restart: unless-stopped
     env_file:

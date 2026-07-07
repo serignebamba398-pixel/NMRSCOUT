@@ -63,6 +63,11 @@ const getInitialAnnotationState = () => ({
   bgStatus: {},
   toleranceRanges: DEFAULT_TOLERANCE_RANGES,
   toleranceResults: [],
+  // Tolerance optimization state (preserved when modal closes)
+  toleranceOptimProgress: 0,
+  toleranceOptimRunning: false,
+  toleranceOptimCurrentTest: "",
+  toleranceOptimSelectedType: "1H",
 });
 
 /**
@@ -156,6 +161,42 @@ export const AppStateProvider = ({ children }) => {
       setAnnotationState(() => {
         const base = getInitialAnnotationState();
         const saved = projectState.annotationState;
+
+        // Deep merge toleranceRanges to preserve structure
+        const mergedToleranceRanges = { ...base.toleranceRanges };
+        if (saved.toleranceRanges && typeof saved.toleranceRanges === 'object') {
+          for (const type of Object.keys(base.toleranceRanges)) {
+            if (saved.toleranceRanges[type] && typeof saved.toleranceRanges[type] === 'object') {
+              mergedToleranceRanges[type] = {
+                ...base.toleranceRanges[type],
+                ...saved.toleranceRanges[type],
+              };
+              // Deep merge each dimension (min/max/step)
+              for (const dim of Object.keys(base.toleranceRanges[type])) {
+                if (saved.toleranceRanges[type][dim] && typeof saved.toleranceRanges[type][dim] === 'object') {
+                  mergedToleranceRanges[type][dim] = {
+                    ...base.toleranceRanges[type][dim],
+                    ...saved.toleranceRanges[type][dim],
+                  };
+                }
+              }
+            }
+          }
+        }
+
+        // Deep merge parameters by type to preserve new default params
+        const mergedParameters = { ...base.parameters };
+        if (saved.parameters && typeof saved.parameters === 'object') {
+          for (const type of Object.keys(base.parameters)) {
+            if (saved.parameters[type] && typeof saved.parameters[type] === 'object') {
+              mergedParameters[type] = {
+                ...base.parameters[type],
+                ...saved.parameters[type],
+              };
+            }
+          }
+        }
+
         return {
           ...base,
           ...saved,
@@ -165,10 +206,7 @@ export const AppStateProvider = ({ children }) => {
           allRunning: false,
           globalProgress: 0,
           globalProgressMessage: "",
-          parameters: {
-            ...base.parameters,
-            ...(saved.parameters || {}),
-          },
+          parameters: mergedParameters,
           bgPdataDirs: {
             ...base.bgPdataDirs,
             ...(saved.bgPdataDirs || {}),
@@ -177,6 +215,7 @@ export const AppStateProvider = ({ children }) => {
             ...base.bgOptions,
             ...(saved.bgOptions || {}),
           },
+          toleranceRanges: mergedToleranceRanges,
         };
       });
     }
@@ -299,10 +338,12 @@ export const AppStateProvider = ({ children }) => {
     }
   }, []);
 
-  // Sauvegarder viewerData quand il change
+  // Sauvegarder viewerData quand il change (ou supprimer si null)
   useEffect(() => {
     if (viewerData) {
       ss.set("viewerData", viewerData);
+    } else {
+      ss.remove("viewerData");
     }
   }, [viewerData]);
 
@@ -360,6 +401,46 @@ export const AppStateProvider = ({ children }) => {
       };
     });
   }, []);
+
+  // ========== SYNC bgPdataDirs/bgOptions TO viewerData ==========
+  // When the user changes Bruker background paths in annotation settings,
+  // sync them to viewerData so the Viewer component sees the update.
+  // We use a ref to avoid infinite loops since we're updating viewerData.
+  const lastSyncedPdataDirsRef = useRef(null);
+
+  useEffect(() => {
+    const { bgPdataDirs, bgOptions } = annotationState;
+
+    // Create a key to compare - only sync when actual paths change
+    const pdataDirsKey = JSON.stringify(bgPdataDirs);
+    if (pdataDirsKey === lastSyncedPdataDirsRef.current) return;
+
+    // Only sync if viewerData exists (viewer is active)
+    setViewerData((prev) => {
+      if (!prev) return prev;
+
+      // Check if any path actually differs from current viewerData
+      const currentPdataDirs = prev.pdataDirs || {};
+      let needsUpdate = false;
+      for (const type of ["1H", "13C", "COSY", "HSQC"]) {
+        if (bgPdataDirs[type] && bgPdataDirs[type] !== currentPdataDirs[type]) {
+          needsUpdate = true;
+          break;
+        }
+      }
+
+      if (!needsUpdate) return prev;
+
+      // Mark as synced
+      lastSyncedPdataDirsRef.current = pdataDirsKey;
+
+      return {
+        ...prev,
+        pdataDirs: { ...prev.pdataDirs, ...bgPdataDirs },
+        bgOptions: { ...prev.bgOptions, ...bgOptions },
+      };
+    });
+  }, [annotationState.bgPdataDirs, annotationState.bgOptions]);
 
   // ========== CONTEXT VALUES ==========
   const value = useMemo(() => ({

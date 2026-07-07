@@ -302,11 +302,25 @@ export const useAnnotation = ({
 
     const promises = types.map((type) => {
       return new Promise((resolve) => {
+        const baseParams = annotationState.parameters[type] || {};
+
+        // Normalize tolerance parameter names (send both English and French spellings)
         const lightParams = {
-          ...annotationState.parameters[type],
+          ...baseParams,
           nb_cores: 2,
           // batch_size managed automatically on R side (adaptive based on nb molecules)
         };
+
+        // Add French spelling for R script compatibility
+        if (lightParams.tol_correspondence !== undefined) {
+          lightParams.tol_correspondance = lightParams.tol_correspondence;
+        }
+        if (lightParams.tol_correspondence_f1 !== undefined) {
+          lightParams.tol_correspondance_F1 = lightParams.tol_correspondence_f1;
+        }
+        if (lightParams.tol_correspondence_f2 !== undefined) {
+          lightParams.tol_correspondance_F2 = lightParams.tol_correspondence_f2;
+        }
 
         const sse = createReconnectingSSE({
           endpoint: "/run-annotation-from-prediction",

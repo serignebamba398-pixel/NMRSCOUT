@@ -1,14 +1,20 @@
 // src/components/viewer/Scatter2D.js
 // Composant de visualisation de spectre 2D (Canvas)
+// Tracé direct des contours - zoom instantané
 
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { useMeasureWidth } from "../../hooks/useMeasureWidth";
-import { buildImgSrc } from "../../utils/imageUtils";
-import { debugWarn, debugError } from "../../utils/debug";
 import { AXIS, PLOT_HEIGHT } from "../../constants/colors";
 
+const COLOR_THEORY = "#2563eb";
+const BG = "#f8fafc";
+
 /**
- * Composant Canvas pour afficher un spectre 2D (scatter plot)
+ * Composant Canvas pour afficher un spectre 2D (COSY, HSQC)
+ * Utilise les données de contours pour un zoom instantané
+ * 
+ * @param {Object} contourData - Données de contours {contours: [{level, paths}], f1_range, f2_range}
+ * @param {Object} zoomRange - Range optionnel {f1: {min, max}, f2: {min, max}}
  */
 function Scatter2D({
   theoryPts = [],
@@ -18,117 +24,73 @@ function Scatter2D({
   showExp = true,
   height = PLOT_HEIGHT,
   maxSize = 10,
-  backgroundImage = null,
-  backgroundMeta = null,
+  contourData = null,
+  zoomRange = null,
+  contourColor = "#1f2937",
   canInteract = false,
   zoomEnabled = true,
   onZoom2D,
-  onWheelDelta,
   onReset,
   busy = false,
 }) {
   const [wrapRef, width] = useMeasureWidth(720);
   const canvasRef = useRef(null);
-  const [bgLoaded, setBgLoaded] = useState(false);
-  const bgImageRef = useRef(null);
+  const overlayRef = useRef(null);  // Overlay canvas for zoom rectangle
   const [drag, setDrag] = useState(null);
 
   const ranges = useMemo(() => {
-    if (
-      backgroundMeta?.f1_top !== undefined &&
-      backgroundMeta?.f1_bottom !== undefined &&
-      backgroundMeta?.f2_left !== undefined &&
-      backgroundMeta?.f2_right !== undefined
-    ) {
+    // Helper to check if a value is a valid finite number
+    const isValid = (v) => Number.isFinite(v);
+    
+    // Try zoomRange first
+    if (zoomRange?.f1 && zoomRange?.f2 &&
+        isValid(zoomRange.f1.min) && isValid(zoomRange.f1.max) &&
+        isValid(zoomRange.f2.min) && isValid(zoomRange.f2.max)) {
       return {
-        f1: [
-          Math.min(backgroundMeta.f1_bottom, backgroundMeta.f1_top),
-          Math.max(backgroundMeta.f1_bottom, backgroundMeta.f1_top),
-        ],
-        f2: [
-          Math.min(backgroundMeta.f2_left, backgroundMeta.f2_right),
-          Math.max(backgroundMeta.f2_left, backgroundMeta.f2_right),
-        ],
+        f1: [Math.min(zoomRange.f1.min, zoomRange.f1.max), Math.max(zoomRange.f1.min, zoomRange.f1.max)],
+        f2: [Math.min(zoomRange.f2.min, zoomRange.f2.max), Math.max(zoomRange.f2.min, zoomRange.f2.max)],
       };
     }
-    if (
-      backgroundMeta &&
-      backgroundMeta.f1_ppm_min != null &&
-      backgroundMeta.f1_ppm_max != null &&
-      backgroundMeta.f2_ppm_min != null &&
-      backgroundMeta.f2_ppm_max != null
-    ) {
-      return {
-        f1: [
-          Math.min(backgroundMeta.f1_ppm_min, backgroundMeta.f1_ppm_max),
-          Math.max(backgroundMeta.f1_ppm_min, backgroundMeta.f1_ppm_max),
-        ],
-        f2: [
-          Math.min(backgroundMeta.f2_ppm_min, backgroundMeta.f2_ppm_max),
-          Math.max(backgroundMeta.f2_ppm_min, backgroundMeta.f2_ppm_max),
-        ],
-      };
+    
+    // Try contourData ranges
+    if (contourData?.f1_range?.length === 2 && contourData?.f2_range?.length === 2) {
+      const f1_0 = contourData.f1_range[0];
+      const f1_1 = contourData.f1_range[1];
+      const f2_0 = contourData.f2_range[0];
+      const f2_1 = contourData.f2_range[1];
+      if (isValid(f1_0) && isValid(f1_1) && isValid(f2_0) && isValid(f2_1)) {
+        return {
+          f1: [Math.min(f1_0, f1_1), Math.max(f1_0, f1_1)],
+          f2: [Math.min(f2_0, f2_1), Math.max(f2_0, f2_1)],
+        };
+      }
     }
+    
+    // Fallback to theory/exp points
     const pts = [];
     if (showTheory) pts.push(...theoryPts);
     if (showExp) pts.push(...expPts);
-    if (pts.length === 0) return { f1: [0, 1], f2: [0, 1] };
+    if (pts.length === 0) return { f1: [0, 10], f2: [0, 10] };
+    
     const f1s = pts.map((p) => p[0]).filter(Number.isFinite);
     const f2s = pts.map((p) => p[1]).filter(Number.isFinite);
-    let minF1 = Math.min(...f1s);
-    let maxF1 = Math.max(...f1s);
-    let minF2 = Math.min(...f2s);
-    let maxF2 = Math.max(...f2s);
-    if (minF1 === maxF1) {
-      minF1 -= 0.001;
-      maxF1 += 0.001;
-    }
-    if (minF2 === maxF2) {
-      minF2 -= 0.001;
-      maxF2 += 0.001;
-    }
+    if (f1s.length === 0 || f2s.length === 0) return { f1: [0, 10], f2: [0, 10] };
+    
+    let minF1 = f1s.reduce((a, b) => a < b ? a : b, f1s[0]);
+    let maxF1 = f1s.reduce((a, b) => a > b ? a : b, f1s[0]);
+    let minF2 = f2s.reduce((a, b) => a < b ? a : b, f2s[0]);
+    let maxF2 = f2s.reduce((a, b) => a > b ? a : b, f2s[0]);
+    if (minF1 === maxF1) { minF1 -= 0.5; maxF1 += 0.5; }
+    if (minF2 === maxF2) { minF2 -= 0.5; maxF2 += 0.5; }
     return { f1: [minF1, maxF1], f2: [minF2, maxF2] };
-  }, [theoryPts, expPts, showTheory, showExp, backgroundMeta]);
+  }, [theoryPts, expPts, showTheory, showExp, contourData, zoomRange]);
 
   const normInt = useMemo(() => {
     if (!showExp || !expInt?.length) return null;
-    const m = Math.max(
-      ...expInt.map((v) => (Number.isFinite(v) ? v : 0)),
-      1
-    );
+    const m = Math.max(...expInt.map((v) => (Number.isFinite(v) ? v : 0)), 1);
     return expInt.map((v) => (Number.isFinite(v) ? v / m : 0.4));
   }, [expInt, showExp]);
 
-  // Loading background image
-  useEffect(() => {
-    if (!backgroundImage) {
-      setBgLoaded(false);
-      bgImageRef.current = null;
-      return;
-    }
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-
-    const safeSrc = buildImgSrc(backgroundImage, backgroundMeta);
-
-    let retriedWithoutCb = false;
-    img.onload = () => {
-      bgImageRef.current = img;
-      setBgLoaded(true);
-    };
-    img.onerror = () => {
-      if (!retriedWithoutCb && safeSrc !== backgroundImage) {
-        retriedWithoutCb = true;
-        img.src = backgroundImage;
-        return;
-      }
-      bgImageRef.current = null;
-      setBgLoaded(false);
-    };
-    img.src = safeSrc;
-  }, [backgroundImage, backgroundMeta]);
-
-  // Rendu du canvas
   useEffect(() => {
     const cvs = canvasRef.current;
     if (!cvs) return;
@@ -136,400 +98,278 @@ function Scatter2D({
     const DPR = window.devicePixelRatio || 1;
     const W = width;
     const H = height;
-    const PAD = 36;
-    const gridW = W - 2 * PAD;
-    const gridH = H - 2 * PAD;
+    // Asymmetric padding: more space for spectrum on right and top
+    const PAD_LEFT = 35;   // Space for F1 labels
+    const PAD_RIGHT = 10;  // Minimal right padding
+    const PAD_TOP = 8;     // Minimal top padding
+    const PAD_BOTTOM = 28; // Space for F2 labels
+    const gridW = W - PAD_LEFT - PAD_RIGHT;
+    const gridH = H - PAD_TOP - PAD_BOTTOM;
 
     cvs.width = Math.round(W * DPR);
     cvs.height = Math.round(H * DPR);
     const ctx = cvs.getContext("2d");
     if (DPR !== 1) ctx.scale(DPR, DPR);
 
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = BG;
     ctx.fillRect(0, 0, W, H);
 
-    // Dessin de l'image de fond
-    if (bgLoaded && bgImageRef.current) {
-      const imgValid =
-        bgImageRef.current.complete &&
-        bgImageRef.current.naturalWidth > 0 &&
-        bgImageRef.current.naturalHeight > 0;
+    const f2Range = ranges.f2[1] - ranges.f2[0] || 1;
+    const f1Range = ranges.f1[1] - ranges.f1[0] || 1;
+    
+    const f2ToX = (f2) => PAD_LEFT + ((ranges.f2[1] - f2) / f2Range) * gridW;
+    const f1ToY = (f1) => PAD_TOP + ((f1 - ranges.f1[0]) / f1Range) * gridH;
 
-      if (!imgValid) {
-        debugWarn("[WARN] Image 2D not yet loaded, skip drawImage");
-      } else {
-        const bb =
-          backgroundMeta?.plot_bbox_px ||
-          backgroundMeta?.axis_bbox_px ||
-          backgroundMeta?.axisRect?.pixel ||
-          backgroundMeta?.axisRect?.px ||
-          (backgroundMeta?.axisRect &&
-          ["x", "y", "w", "h"].every((k) =>
-            Number.isFinite(backgroundMeta.axisRect[k])
-          )
-            ? backgroundMeta.axisRect
-            : null);
-
-        if (bb && [bb.x, bb.y, bb.w, bb.h].every(Number.isFinite)) {
-          try {
-            ctx.drawImage(
-              bgImageRef.current,
-              Math.max(0, bb.x),
-              Math.max(0, bb.y),
-              Math.max(1, bb.w),
-              Math.max(1, bb.h),
-              PAD,
-              PAD,
-              gridW,
-              gridH
-            );
-          } catch (e) {
-            debugError("[ERROR] drawImage 2D:", e.message);
+    if (contourData?.contours?.length > 0) {
+      // Use clipping to handle points outside the visible area
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(PAD_LEFT, PAD_TOP, gridW, gridH);
+      ctx.clip();
+      
+      ctx.strokeStyle = contourColor;
+      ctx.lineWidth = 0.8;
+      
+      // Show ALL contours - filtering is done by backend via levelStart parameter
+      const validContours = contourData.contours.filter(
+        c => c.paths?.length > 0
+      );
+      
+      // Draw all contours
+      for (const contour of validContours) {
+        for (const path of contour.paths || []) {
+          if (path.length < 2) continue;
+          ctx.beginPath();
+          const [firstF2, firstF1] = path[0];
+          ctx.moveTo(f2ToX(firstF2), f1ToY(firstF1));
+          for (let i = 1; i < path.length; i++) {
+            const [f2, f1] = path[i];
+            ctx.lineTo(f2ToX(f2), f1ToY(f1));
           }
-        } else {
-          try {
-            ctx.drawImage(bgImageRef.current, PAD, PAD, gridW, gridH);
-          } catch (e) {
-            debugError("[ERROR] drawImage 2D (full):", e.message);
-          }
+          ctx.stroke();
         }
-        ctx.globalAlpha = 0.18;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(PAD, PAD, gridW, gridH);
-        ctx.globalAlpha = 1.0;
       }
+      
+      ctx.restore();
     }
 
-    const [minF1, maxF1] = ranges.f1;
-    const [minF2, maxF2] = ranges.f2;
-
-    const { toX, toY } = (() => {
-      const clamp01 = (t) => Math.max(0, Math.min(1, t));
-      const canMap =
-        bgLoaded &&
-        bgImageRef.current &&
-        backgroundMeta &&
-        backgroundMeta.f1_top != null &&
-        backgroundMeta.f1_bottom != null &&
-        backgroundMeta.f2_left != null &&
-        backgroundMeta.f2_right != null;
-
-      if (canMap) {
-        const f2_left = Number(backgroundMeta.f2_left);
-        const f2_right = Number(backgroundMeta.f2_right);
-        const f1_top = Number(backgroundMeta.f1_top);
-        const f1_bottom = Number(backgroundMeta.f1_bottom);
-        const dx = f2_left - f2_right || 1e-9;
-        const dy = f1_top - f1_bottom || 1e-9;
-        return {
-          toX: (f2) => {
-            const t = (f2_left - Number(f2)) / dx;
-            return PAD + clamp01(t) * gridW;
-          },
-          toY: (f1) => {
-            const t = (Number(f1) - f1_bottom) / dy;
-            return PAD + clamp01(t) * gridH;
-          },
-        };
-      }
-
-      const dx = maxF2 - minF2 || 1e-9;
-      const dy = maxF1 - minF1 || 1e-9;
-      return {
-        toX: (f2) => {
-          const t = (f2 - minF2) / dx;
-          return PAD + (1 - t) * gridW;
-        },
-        toY: (f1) => {
-          const t = (f1 - minF1) / dy;
-          return PAD + t * gridH;
-        },
-      };
-    })();
-
-    // Grille
-    ctx.strokeStyle = "rgba(99,110,131,.20)";
+    // Axes uniquement (pas de grille de fond)
+    const nGridX = 5;
+    const nGridY = 5;
+    ctx.strokeStyle = AXIS;
     ctx.lineWidth = 1;
-    const steps = 10;
-    for (let i = 0; i <= steps; i++) {
-      const gx = PAD + (i / steps) * gridW;
-      const gy = PAD + (i / steps) * gridH;
-      ctx.beginPath();
-      ctx.moveTo(gx, PAD);
-      ctx.lineTo(gx, PAD + gridH);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(PAD, gy);
-      ctx.lineTo(PAD + gridW, gy);
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.moveTo(PAD_LEFT, PAD_TOP + gridH);
+    ctx.lineTo(PAD_LEFT + gridW, PAD_TOP + gridH);
+    ctx.lineTo(PAD_LEFT + gridW, PAD_TOP);
+    ctx.stroke();
 
-    // Points théorie
+    // Clipping pour les points théoriques et expérimentaux
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(PAD_LEFT, PAD_TOP, gridW, gridH);
+    ctx.clip();
+
     if (showTheory && theoryPts?.length) {
-      ctx.fillStyle = "#2563eb";
-      ctx.strokeStyle = "rgba(255,255,255,.85)";
-      ctx.lineWidth = 1.5;
+      ctx.fillStyle = COLOR_THEORY;
       for (const [f1, f2] of theoryPts) {
-        const x = toX(f2);
-        const y = toY(f1);
+        if (!Number.isFinite(f1) || !Number.isFinite(f2)) continue;
+        const x = f2ToX(f2);
+        const y = f1ToY(f1);
         ctx.beginPath();
-        ctx.arc(x, y, 4.5, 0, Math.PI * 2);
+        ctx.arc(x, y, 5, 0, 2 * Math.PI);  // Reduced from 8 to 5
         ctx.fill();
-        ctx.stroke();
       }
     }
 
-    // Points expé
     if (showExp && expPts?.length) {
-      ctx.strokeStyle = "rgba(255,255,255,.85)";
-      ctx.lineWidth = 1.5;
       for (let i = 0; i < expPts.length; i++) {
         const [f1, f2] = expPts[i];
-        const a = normInt ? normInt[i] : 0.8;
-        const r = Math.max(3, a * maxSize);
-        const x = toX(f2);
-        const y = toY(f1);
+        if (!Number.isFinite(f1) || !Number.isFinite(f2)) continue;
+        const x = f2ToX(f2);
+        const y = f1ToY(f1);
+        const alpha = Math.max(0.6, normInt?.[i] ?? 0.8);
+        const size = 3 + alpha * (maxSize - 3);  // Reduced base size from 5 to 3
+        ctx.fillStyle = `rgba(220, 38, 38, ${alpha})`;
         ctx.beginPath();
-        ctx.fillStyle = "rgba(239, 68, 68, 0.6)";
-        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.arc(x, y, size, 0, 2 * Math.PI);
         ctx.fill();
-        ctx.stroke();
       }
     }
 
-    // Ticks F1 (à gauche)
+    ctx.restore();  // Fin du clipping pour les points
+
     ctx.fillStyle = AXIS;
-    ctx.font = "12px ui-sans-serif, system-ui, -apple-system";
-    const ticks = 6;
-    for (let i = 0; i <= ticks; i++) {
-      const t = i / ticks;
-      const v1 = minF1 + t * (maxF1 - minF1);
-      const y1 = toY(v1);
-      ctx.fillText(v1.toFixed(2), 6, y1 + 4);
+    ctx.font = "10px ui-sans-serif, system-ui, -apple-system";
+    ctx.textAlign = "center";
+    for (let i = 0; i <= nGridX; i++) {
+      const t = i / nGridX;
+      const f2 = ranges.f2[1] - t * f2Range;
+      const x = PAD_LEFT + t * gridW;
+      ctx.fillText(f2.toFixed(1), x, H - 8);
     }
+    ctx.fillText("F2 (ppm)", PAD_LEFT + gridW / 2, H - 1);
 
-    // Ticks F2 (en bas)
-    for (let i = 0; i <= ticks; i++) {
-      const t = i / ticks;
-      const v2 = minF2 + t * (maxF2 - minF2);
-      const x2 = toX(v2);
-      ctx.fillText(v2.toFixed(2), x2 - 14, H - 8);
+    ctx.textAlign = "right";
+    for (let i = 0; i <= nGridY; i++) {
+      const t = i / nGridY;
+      const f1 = ranges.f1[0] + t * f1Range;
+      const y = PAD_TOP + t * gridH;
+      ctx.fillText(f1.toFixed(1), PAD_LEFT - 3, y + 3);
     }
-
-    // Labels
-    ctx.font = "bold 13px ui-sans-serif, system-ui, -apple-system";
-    ctx.fillText("F2 (ppm)", PAD + gridW - 55, H - 22);
     ctx.save();
-    ctx.translate(8, PAD + 50);
+    ctx.translate(8, PAD_TOP + gridH / 2);
     ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = "center";
     ctx.fillText("F1 (ppm)", 0, 0);
     ctx.restore();
 
-    // Rectangle de zoom
-    if (drag) {
-      const x = Math.min(drag.x0, drag.x1);
-      const y = Math.min(drag.y0, drag.y1);
-      const w = Math.abs(drag.x1 - drag.x0);
-      const h = Math.abs(drag.y1 - drag.y0);
-      ctx.fillStyle = "rgba(34,197,94,0.15)";
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = "rgba(34,197,94,0.65)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, w - 1), Math.max(0, h - 1));
-    }
+    // Don't draw drag rectangle here - it's handled by overlay canvas
 
-    // Overlay busy
     if (busy) {
       ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillRect(PAD, PAD, gridW, gridH);
+      ctx.fillRect(PAD_LEFT, PAD_TOP, gridW, gridH);
       ctx.fillStyle = "#64748b";
       ctx.font = "13px ui-sans-serif, system-ui, -apple-system";
-      ctx.fillText("Mise à jour du fond…", PAD + 10, PAD + 22);
+      ctx.textAlign = "left";
+      ctx.fillText("Loading...", PAD_LEFT + 10, PAD_TOP + 22);
     }
-  }, [
-    width,
-    height,
-    ranges,
-    theoryPts,
-    expPts,
-    normInt,
-    showTheory,
-    showExp,
-    maxSize,
-    bgLoaded,
-    backgroundMeta,
-    drag,
-    busy,
-  ]);
+  }, [width, height, theoryPts, expPts, normInt, ranges, showExp, showTheory, contourData, contourColor, maxSize, busy]);
 
-  const wheelTimeoutRef = useRef(null);
+  // Separate effect for drawing zoom rectangle on overlay (fast, doesn't redraw spectrum)
+  useEffect(() => {
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+
+    const DPR = window.devicePixelRatio || 1;
+    const W = width;
+    const H = height;
+
+    overlay.width = Math.round(W * DPR);
+    overlay.height = Math.round(H * DPR);
+    const ctx = overlay.getContext("2d");
+    if (DPR !== 1) ctx.scale(DPR, DPR);
+
+    // Clear overlay
+    ctx.clearRect(0, 0, W, H);
+
+    // Draw drag rectangle if active
+    if (drag && Number.isFinite(drag.x0) && Number.isFinite(drag.x1)) {
+      const x0 = Math.min(drag.x0, drag.x1);
+      const y0 = Math.min(drag.y0, drag.y1);
+      const w = Math.abs(drag.x1 - drag.x0);
+      const h = Math.abs(drag.y1 - drag.y0);
+      ctx.fillStyle = "rgba(37,99,235,0.15)";
+      ctx.fillRect(x0, y0, w, h);
+      ctx.strokeStyle = "rgba(37,99,235,0.65)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
+    }
+  }, [drag, width, height]);
+
+  const canDragNow = canInteract && zoomEnabled;
+
+  const onMouseDown = useCallback((e) => {
+    if (!canDragNow || e.button !== 0) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setDrag({ x0: x, y0: y, x1: x, y1: y });
+  }, [canDragNow]);
+
+  const onMouseMove = useCallback((e) => {
+    if (!drag) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setDrag((d) => ({ ...d, x1: x, y1: y }));
+  }, [drag]);
+
+  const onMouseUp = useCallback((e) => {
+    if (!drag) return;
+    e.preventDefault();
+
+    // Use same padding values as in useEffect
+    const PAD_LEFT = 35;
+    const PAD_RIGHT = 10;
+    const PAD_TOP = 8;
+    const PAD_BOTTOM = 28;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const W = rect.width;
+    const H = rect.height;
+    const gridW = W - PAD_LEFT - PAD_RIGHT;
+    const gridH = H - PAD_TOP - PAD_BOTTOM;
+
+    const x0 = Math.max(PAD_LEFT, Math.min(drag.x0, drag.x1));
+    const x1 = Math.min(W - PAD_RIGHT, Math.max(drag.x0, drag.x1));
+    const y0 = Math.max(PAD_TOP, Math.min(drag.y0, drag.y1));
+    const y1 = Math.min(H - PAD_BOTTOM, Math.max(drag.y0, drag.y1));
+
+    setDrag(null);
+
+    if (!canDragNow || (x1 - x0 < 4 && y1 - y0 < 4)) return;
+
+    if (typeof onZoom2D === "function" && ranges) {
+      const f2Range = ranges.f2[1] - ranges.f2[0];
+      const f1Range = ranges.f1[1] - ranges.f1[0];
+
+      const f2Min = ranges.f2[1] - ((x1 - PAD_LEFT) / gridW) * f2Range;
+      const f2Max = ranges.f2[1] - ((x0 - PAD_LEFT) / gridW) * f2Range;
+      const f1Min = ranges.f1[0] + ((y0 - PAD_TOP) / gridH) * f1Range;
+      const f1Max = ranges.f1[0] + ((y1 - PAD_TOP) / gridH) * f1Range;
+
+      onZoom2D({
+        f1: { min: f1Min, max: f1Max },
+        f2: { min: f2Min, max: f2Max },
+      });
+    }
+  }, [drag, canDragNow, onZoom2D, ranges]);
 
   useEffect(() => {
-    const cvs = canvasRef.current;
-    if (!cvs || !canInteract) return;
-
-    const handler = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const dy = e.deltaY;
-      window.clearTimeout(wheelTimeoutRef.current);
-      wheelTimeoutRef.current = window.setTimeout(() => {
-        onWheelDelta && onWheelDelta(dy);
-      }, 60);
+    const onKey = (e) => {
+      if (e.key === "Escape") setDrag(null);
     };
-
-    cvs.addEventListener("wheel", handler, { passive: false });
-    return () => cvs.removeEventListener("wheel", handler);
-  }, [canInteract, onWheelDelta]);
-
-  const onMouseDown = useCallback(
-    (e) => {
-      if (!canInteract || !zoomEnabled) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      setDrag({
-        x0: e.clientX - rect.left,
-        y0: e.clientY - rect.top,
-        x1: e.clientX - rect.left,
-        y1: e.clientY - rect.top,
-      });
-    },
-    [canInteract, zoomEnabled]
-  );
-
-  const onMouseMove = useCallback(
-    (e) => {
-      if (!drag) return;
-      const rect = e.currentTarget.getBoundingClientRect();
-      setDrag((d) => ({
-        ...d,
-        x1: e.clientX - rect.left,
-        y1: e.clientY - rect.top,
-      }));
-    },
-    [drag]
-  );
-
-  const onMouseUp = useCallback(
-    (e) => {
-      if (!drag) return;
-      const PAD = 36;
-      const rect = e.currentTarget.getBoundingClientRect();
-      const W = rect.width;
-      const H = rect.height;
-      const gridW = W - 2 * PAD;
-      const gridH = H - 2 * PAD;
-
-      const x0 = Math.max(PAD, Math.min(W - PAD, Math.min(drag.x0, drag.x1)));
-      const x1 = Math.max(PAD, Math.min(W - PAD, Math.max(drag.x0, drag.x1)));
-      const y0 = Math.max(PAD, Math.min(H - PAD, Math.min(drag.y0, drag.y1)));
-      const y1 = Math.max(PAD, Math.min(H - PAD, Math.max(drag.y0, drag.y1)));
-
-      setDrag(null);
-
-      if (!canInteract || !zoomEnabled || x1 - x0 < 8 || y1 - y0 < 8) {
-        return;
-      }
-
-      const tX0 = (x0 - PAD) / gridW;
-      const tX1 = (x1 - PAD) / gridW;
-      const tY0 = (y0 - PAD) / gridH;
-      const tY1 = (y1 - PAD) / gridH;
-
-      if (
-        backgroundMeta?.f2_left != null &&
-        backgroundMeta?.f2_right != null &&
-        backgroundMeta?.f1_top != null &&
-        backgroundMeta?.f1_bottom != null
-      ) {
-        const f2_left = Number(backgroundMeta.f2_left);
-        const f2_right = Number(backgroundMeta.f2_right);
-        const f1_top = Number(backgroundMeta.f1_top);
-        const f1_bottom = Number(backgroundMeta.f1_bottom);
-
-        const denomX = f2_left - f2_right || 1e-9;
-        const denomY = f1_top - f1_bottom || 1e-9;
-
-        const f2_A = f2_left - tX0 * denomX;
-        const f2_B = f2_left - tX1 * denomX;
-        const f1_A = f1_bottom + tY0 * denomY;
-        const f1_B = f1_bottom + tY1 * denomY;
-
-        onZoom2D &&
-          onZoom2D({
-            f2_min: Math.min(f2_A, f2_B),
-            f2_max: Math.max(f2_A, f2_B),
-            f1_min: Math.min(f1_A, f1_B),
-            f1_max: Math.max(f1_A, f1_B),
-          });
-      }
-    },
-    [drag, canInteract, zoomEnabled, backgroundMeta, onZoom2D]
-  );
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
-    <div
-      ref={wrapRef}
-      style={{
-        width: "100%",
-        position: "relative",
-        userSelect: "none",
-        overscrollBehavior: "contain",
-      }}
-    >
+    <div ref={wrapRef} style={{ width: "100%", position: "relative", userSelect: "none" }}>
       <canvas
         ref={canvasRef}
         style={{
           width: "100%",
           height,
           borderRadius: 8,
-          background: "#ffffff",
+          background: BG,
           boxShadow: "0 1px 4px rgba(0,0,0,.08)",
           display: "block",
-          cursor: canInteract && zoomEnabled ? "crosshair" : "default",
+        }}
+      />
+      {/* Overlay canvas for zoom rectangle - handles mouse events */}
+      <canvas
+        ref={overlayRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height,
+          borderRadius: 8,
+          cursor: canDragNow ? "crosshair" : "default",
+          pointerEvents: canDragNow ? "auto" : "none",
         }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={() => drag && setDrag(null)}
       />
-      {backgroundImage && !bgLoaded && (
-        <div
-          style={{
-            position: "absolute",
-            top: 10,
-            right: 10,
-            fontSize: 12,
-            color: "#666",
-            background: "rgba(255,255,255,0.85)",
-            padding: 4,
-            borderRadius: 4,
-          }}
-        >
-          Loading 2D background...
-        </div>
-      )}
       {canInteract && (
-        <div
-          style={{
-            position: "absolute",
-            top: 8,
-            left: 8,
-            fontSize: 12,
-            color: "#475569",
-          }}
-        >
-          Molette = niveaux • Glisser = zoom •{" "}
-          <button
-            onClick={onReset}
-            style={{
-              marginLeft: 6,
-              padding: "2px 6px",
-              borderRadius: 6,
-              border: "1px solid #cbd5e1",
-              background: "#fff",
-              cursor: "pointer",
-            }}
-          >
+        <div style={{ position: "absolute", top: 8, left: 48, fontSize: 12, color: "#475569", display: "flex", alignItems: "center", gap: 8, pointerEvents: "auto" }}>
+          <span>Drag to zoom •</span>
+          <button onClick={onReset} style={{ padding: "2px 6px", borderRadius: 6, border: "1px solid #cbd5e1", background: "#fff", cursor: "pointer" }}>
             Reset Zoom
           </button>
         </div>

@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
+import { stripExplicitHFromMolblock } from '../../utils/molParser';
+import { debugError } from '../../utils/debug';
 import './MoleculeGrid.css';
 
 // Chargeur RDKit
@@ -73,7 +75,7 @@ export const MoleculeGrid = ({
   const [moleculesSvg, setMoleculesSvg] = useState({});
   const [loading, setLoading] = useState(true);
   const [downloadCount, setDownloadCount] = useState(50);
-  const [columnsPerRow, setColumnsPerRow] = useState(5);
+  const [columnsPerRow, setColumnsPerRow] = useState(4);
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [moleculesData, setMoleculesData] = useState([]);
   const gridRef = useRef(null);
@@ -156,26 +158,34 @@ export const MoleculeGrid = ({
           let rdkMol = null;
           
           if (mol.molBlock) {
-            rdkMol = rdkit.get_mol(mol.molBlock);
+            const { molblock: cleanBlock } = stripExplicitHFromMolblock(mol.molBlock);
+            const tmpMol = rdkit.get_mol(cleanBlock);
+            if (tmpMol) {
+              const smiles = tmpMol.get_smiles();
+              tmpMol.delete();
+              if (smiles) rdkMol = rdkit.get_mol(smiles);
+            }
           } else if (mol.smiles) {
             rdkMol = rdkit.get_mol(mol.smiles);
           }
           
           if (rdkMol) {
             const svg = rdkMol.get_svg(JSON.stringify({
-              width: 150,
-              height: 120,
-              bondLineWidth: 1.2,
-              atomLabelFontSize: 9,
-              addAtomIndices: true,
-              addStereoAnnotation: true,
-              explicitMethyl: false
+              width: 460,
+              height: 380,
+              bondLineWidth: 2.0,
+              atomLabelFontSize: 14,
+              addAtomIndices: false,
+              addStereoAnnotation: false,
+              explicitMethyl: false,
+              useMolBlockCoords: false,
+              padding: 0.0,
             }));
             svgs[mol.source] = svg;
             rdkMol.delete();
           }
         } catch (err) {
-          console.warn(`Erreur génération SVG pour ${mol.source}:`, err);
+          debugError(`SVG gen failed for ${mol.source}:`, err);
         }
       }
       
@@ -354,14 +364,15 @@ export const MoleculeGrid = ({
         style={{ gridTemplateColumns: `repeat(${columnsPerRow}, 1fr)` }}
       >
         {moleculesData.map((mol) => (
-          <div 
+          <div
             key={mol.source}
             className={`molecule-grid-item ${selectedMolecule?.source === mol.source ? 'selected' : ''}`}
             onClick={() => onMoleculeSelect?.(mol)}
           >
+            <div className="mol-name">{mol.npaid || mol.source}</div>
             <div className="mol-svg-container">
               {moleculesSvg[mol.source] ? (
-                <div 
+                <div
                   className="mol-svg"
                   dangerouslySetInnerHTML={{ __html: moleculesSvg[mol.source] }}
                 />
@@ -372,15 +383,10 @@ export const MoleculeGrid = ({
               )}
             </div>
             <div className="mol-info">
-              <div className="mol-info-row">
-                <span className="mol-rank">Rank: {mol.rank}</span>
-                <span className="mol-mw">MW: {mol.mw}</span>
+              <div className="mol-rank-score">
+                <span className="mol-rank">Rank {mol.rank}</span>
+                <span className="mol-score">NMR score: {mol.score}</span>
               </div>
-              <div className="mol-id">{mol.npaid || mol.source}</div>
-              <div className="mol-info-row">
-                <span className="mol-score">Score: {mol.score}</span>
-              </div>
-              <div className="mol-deviation">Deviation: {mol.deviation} ppm</div>
             </div>
           </div>
         ))}

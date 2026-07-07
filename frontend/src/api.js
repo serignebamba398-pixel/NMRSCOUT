@@ -4,6 +4,77 @@ import axios from "axios";
 // Electron mode detection via window.electronAPI (exposed by preload.js)
 const IS_ELECTRON = window.electronAPI?.isElectron === true;
 
+/* ============================================================================
+   [NEW] BACKEND READINESS CHECK (for Electron)
+   ============================================================================ */
+
+let backendReadyPromise = null;
+let isBackendReady = false;
+
+/**
+ * Wait for backend to be ready (Electron only)
+ * In Electron, we need to ensure the backend is available before making requests
+ */
+const waitForBackendReady = async (timeout = 15000) => {
+  if (!IS_ELECTRON) {
+    // In web mode, assume backend is always ready
+    return true;
+  }
+
+  if (isBackendReady) {
+    return true;
+  }
+
+  if (backendReadyPromise) {
+    return backendReadyPromise;
+  }
+
+  backendReadyPromise = new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const timeoutId = setTimeout(() => {
+      console.warn('[waitForBackendReady] Backend ready timeout');
+      resolve(false); // Don't reject, just resolve with false
+    }, timeout);
+
+    // Listen for backend ready event from Electron main process
+    if (window.electronAPI?.onBackendReady) {
+      window.electronAPI.onBackendReady(() => {
+        clearTimeout(timeoutId);
+        isBackendReady = true;
+        console.log('[waitForBackendReady] Backend is ready');
+        resolve(true);
+      });
+    }
+
+    // Also try polling /health endpoint as fallback
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await fetch(`${window.location.protocol}//${window.location.host}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(2000),
+        });
+        if (response.ok) {
+          clearInterval(pollInterval);
+          clearTimeout(timeoutId);
+          isBackendReady = true;
+          console.log('[waitForBackendReady] Backend is ready (via polling)');
+          resolve(true);
+        }
+      } catch (err) {
+        // Keep polling
+        if (Date.now() - startTime > timeout) {
+          clearInterval(pollInterval);
+        }
+      }
+    }, 500);
+  });
+
+  return backendReadyPromise;
+};
+
+// Export for use in other modules
+export { waitForBackendReady };
+
 // Robust normalization of API base with double "/api" correction
 // In Electron mode, use http://127.0.0.1:5000 (use 127.0.0.1 to match UI origin loaded by main.js)
 const RAW_BASE = IS_ELECTRON
@@ -49,26 +120,6 @@ export const downloadBlob = (blob, filename) => {
   URL.revokeObjectURL(url);
 };
 
-export const formatFileSize = (bytes) => {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 Bytes";
-  const units = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.min(
-    units.length - 1,
-    Math.floor(Math.log(bytes) / Math.log(1024))
-  );
-  const val = bytes / Math.pow(1024, i);
-  return `${val.toFixed(val >= 10 || i === 0 ? 0 : 2)} ${units[i]}`;
-};
-
-export const formatDuration = (ms) => {
-  if (!Number.isFinite(ms) || ms < 0) return "0s";
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const h = Math.floor(m / 60);
-  if (h > 0) return `${h}h ${m % 60}m ${s % 60}s`;
-  if (m > 0) return `${m}m ${s % 60}s`;
-  return `${s}s`;
-};
 
 export const outputUrl = (taskId, filename) =>
   `${API_BASE_URL}/outputs/${encodeURIComponent(taskId)}/${encodeURIComponent(
@@ -130,13 +181,51 @@ export async function withRetry503(fn, { retries = 3, base = 600, factor = 1.8 }
   }
 }
 
+/* ============================================================================
+   [NEW] FETCH WITH TIMEOUT (for Electron)
+   ============================================================================ */
+
+/**
+ * Fetch with timeout to prevent hanging requests in Electron
+ * @param {string} url - URL to fetch
+ * @param {Object} options - Fetch options
+ * @param {number} timeout - Timeout in milliseconds (default: 10000)
+ */
+const fetchWithTimeout = async (url, options = {}, timeout = 10000) => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error(`Request timeout after ${timeout}ms`);
+    }
+    throw error;
+  }
+};
+
 // === Path normalization (Variante A) ========================================
 export async function normalizeServerPath(rawPath) {
-  const r = await fetch(`${API_BASE_URL}/path/normalize`, {
+  // Wait for backend to be ready in Electron mode
+  if (IS_ELECTRON) {
+    const ready = await waitForBackendReady(10000);
+    if (!ready) {
+      throw new Error('Backend not ready - please wait and try again');
+    }
+  }
+
+  const r = await fetchWithTimeout(`${API_BASE_URL}/path/normalize`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rawPath }),
-  });
+  }, 10000);
   const data = await r.json().catch(() => ({}));
   if (!r.ok || !data.ok) throw new Error(data.error || `HTTP ${r.status}`);
   return data.path; // ex: "/host/c/Users/.../pdata/1"
@@ -198,7 +287,7 @@ export const getPredictionTaskWithAnnotations = async (taskId) => {
 export const getAnnotationHistory = async (taskId, annotationType) => {
   try {
     const historyPath = `/outputs/${taskId}/annotations/history`;
-    const response = await fetch(`${API_BASE_URL}${historyPath}`);
+    const response = await fetchWithTimeout(`${API_BASE_URL}${historyPath}`, {}, 5000);
     if (!response.ok) return [];
     return [];
   } catch (e) {
@@ -394,10 +483,12 @@ const _normalizeUploadsPayload = (raw) => {
 export async function listUploads(kind) {
   // 1) Dedicated endpoint if available
   try {
-    const r = await fetch(
+    const r = await fetchWithTimeout(
       `${API_BASE_URL}/uploads${
         kind ? `?kind=${encodeURIComponent(kind)}` : ""
-      }`
+      }`,
+      {},
+      8000
     );
     if (r.ok) {
       const json = await r.json();
@@ -761,6 +852,7 @@ export const runAnnotation1H = (
     tol_correspondance: 0.1,
     tol_match: 0.1,
     correlation_threshold: 0.9,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.01,
@@ -793,6 +885,7 @@ export const runAnnotation13C = (
     tol_correspondance: 2,
     tol_match: 2,
     correlation_threshold: 0.9,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.1,
@@ -827,6 +920,7 @@ export const runAnnotationCOSY = (
     tol_match_F1: 0.2,
     tol_match_F2: 0.2,
     correlation_threshold: 0.8,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.01,
@@ -861,6 +955,7 @@ export const runAnnotationHSQC = (
     tol_match_F1: 4,
     tol_match_F2: 0.2,
     correlation_threshold: 0.8,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.1,
@@ -940,6 +1035,16 @@ export const getMetrics = async (format = "json") => {
 export const cleanup = async () => {
   const { data } = await api.post("/cleanup");
   return data;
+};
+
+export const getTaskParams = async (taskId) => {
+  try {
+    const { data } = await api.get(`/tasks/${encodeURIComponent(taskId)}/params`);
+    return data.parameters || {};
+  } catch (e) {
+    console.warn(`Failed to get params for task ${taskId}:`, e);
+    return {};
+  }
 };
 
 /* ============================================================================
@@ -1037,23 +1142,27 @@ export const getDefaultParameters = (annotationType) =>
       tol_correspondance: 0.1,
       tol_match: 0.1,
       correlation_threshold: 0.9,
+      correlation_method: "pearson",
       ratio_min: 0.01,
       ransy_cv_threshold: 0.05,
       coverage_threshold_group: 0,
       coverage_threshold_subchain: 0,
       coverage_threshold_ransy: 0,
       max_missing_ransy: 50,
+      nb_cores: 4,
     },
     "13C": {
       tol_correspondance: 2,
       tol_match: 2,
       correlation_threshold: 0.9,
+      correlation_method: "pearson",
       ratio_min: 0.1,
       ransy_cv_threshold: 0.1,
       coverage_threshold_group: 0,
       coverage_threshold_subchain: 0,
       coverage_threshold_ransy: 0,
       max_missing_ransy: 50,
+      nb_cores: 4,
     },
     COSY: {
       tol_correspondance_F1: 0.2,
@@ -1061,12 +1170,14 @@ export const getDefaultParameters = (annotationType) =>
       tol_match_F1: 0.2,
       tol_match_F2: 0.2,
       correlation_threshold: 0.8,
+      correlation_method: "pearson",
       ratio_min: 0.01,
       ransy_cv_threshold: 0.15,
       coverage_threshold_group: 0,
       coverage_threshold_subchain: 0,
       coverage_threshold_ransy: 0,
       max_missing_ransy: 50,
+      nb_cores: 4,
     },
     HSQC: {
       tol_correspondance_F1: 4,
@@ -1074,12 +1185,14 @@ export const getDefaultParameters = (annotationType) =>
       tol_match_F1: 4,
       tol_match_F2: 0.2,
       correlation_threshold: 0.8,
+      correlation_method: "pearson",
       coverage_threshold_group: 0,
       coverage_threshold_subchain: 0,
       ratio_min: 0.1,
       ransy_cv_threshold: 0.15,
       coverage_threshold_ransy: 0,
       max_missing_ransy: 50,
+      nb_cores: 4,
     },
   }[annotationType] || {});
 
@@ -1260,7 +1373,7 @@ export const runPredictionFromSmiles = (
 
 export const runPredictionFromCSV = (
   csvFile,
-  { idColumn, smilesColumn, methods = ["1H", "13C", "COSY", "HSQC"], methodOptions = {}, global = {} } = {},
+  { idColumn, smilesColumn, methods = ["1H", "13C", "COSY", "HSQC"], methodOptions = {}, global = {}, resumeFromDir = null } = {},
   onProgress,
   onLog,
   onError,
@@ -1271,8 +1384,8 @@ export const runPredictionFromCSV = (
     source: "csv",
     csvFile,
     methods,
-    options: sanitizePredictOptions({ 
-      ...DEFAULT_PREDICT_OPTIONS, 
+    options: sanitizePredictOptions({
+      ...DEFAULT_PREDICT_OPTIONS,
       ...global,
       extractors: {
         ...(methodOptions || {}),
@@ -1284,6 +1397,9 @@ export const runPredictionFromCSV = (
     body.id_column = String(idColumn).trim();
   if (smilesColumn && String(smilesColumn).trim())
     body.smiles_column = String(smilesColumn).trim();
+  // Support incremental prediction from existing task folder
+  if (resumeFromDir && String(resumeFromDir).trim())
+    body.resumeFromDir = String(resumeFromDir).trim();
 
   const primary = createPostSSEConnection(
     `${API_BASE_URL}/predict/start`,
@@ -1344,9 +1460,11 @@ export const getPredictionResult = async () => {
    ============================================================================ */
 export const getPredictionTasks = async () => {
   try {
-    const res = await fetch(`${API_BASE_URL}/prediction-tasks`);
+    const res = await fetchWithTimeout(`${API_BASE_URL}/prediction-tasks`, {}, 8000);
     if (res.ok) return await res.json();
-  } catch {}
+  } catch (err) {
+    console.warn('[getPredictionTasks] Fetch failed, falling back to axios:', err.message);
+  }
   try {
     const { data } = await api.get(`/predict/tasks`);
     return data;
@@ -1445,7 +1563,7 @@ export const downloadPredictionCsv = async (taskId, type) => {
     throw new Error(`CSV ${type} not available for task ${taskId}`);
   }
 
-  const response = await fetch(`${API_BASE_URL}${csvUrl}`);
+  const response = await fetchWithTimeout(`${API_BASE_URL}${csvUrl}`, {}, 15000);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
   const blob = await response.blob();
@@ -1468,6 +1586,7 @@ export const runIntegrated1H = (
     tol_correspondance: 0.1,
     tol_match: 0.1,
     correlation_threshold: 0.9,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.01,
@@ -1500,6 +1619,7 @@ export const runIntegrated13C = (
     tol_correspondance: 2,
     tol_match: 2,
     correlation_threshold: 0.9,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.1,
@@ -1534,6 +1654,7 @@ export const runIntegratedCOSY = (
     tol_match_F1: 0.2,
     tol_match_F2: 0.2,
     correlation_threshold: 0.8,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.01,
@@ -1568,6 +1689,7 @@ export const runIntegratedHSQC = (
     tol_match_F1: 4,
     tol_match_F2: 0.2,
     correlation_threshold: 0.8,
+    correlation_method: "pearson",
     coverage_threshold_group: 0,
     coverage_threshold_subchain: 0,
     ratio_min: 0.1,
@@ -2061,14 +2183,14 @@ export const spectralBgInteractive = async (method, pdataDir, opts = {}) => {
     };
   }
 
-  const res = await fetch(`${API_BASE_URL}/spectral-bg/interactive`, {
+  const res = await fetchWithTimeout(`${API_BASE_URL}/spectral-bg/interactive`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(withPersist(base, {
       persistKey: opts.taskId || DEFAULT_PERSIST_KEY,
       overwrite: true,
     })),
-  });
+  }, 20000);
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.ok === false) {
@@ -2694,6 +2816,10 @@ export const simulateSpectrum = async ({
   digital_resolution_hz = 0.1,
   ppm_range = [-0.5, 12],
   line_width_hz = 1.0,
+  // Paramètres dynamics post-processeur
+  enable_dynamics = false,
+  temperature_k = 298,
+  ph = 7.4,
 } = {}) => {
   // Vérifier qu'on a au moins une source de données
   if (!smiles && !multiplicity_json && !multiplicity_json_path) {
@@ -2712,6 +2838,10 @@ export const simulateSpectrum = async ({
       digital_resolution_hz,
       ppm_range,
       line_width_hz,
+      // Paramètres dynamics post-processeur
+      enable_dynamics,
+      temperature_k,
+      ph,
     });
 
     if (response.data.status === 'error') {
@@ -2721,6 +2851,72 @@ export const simulateSpectrum = async ({
     return response.data;
   } catch (err) {
     console.error('[simulateSpectrum] Error:', err);
+    throw err;
+  }
+};
+
+/**
+ * Simule les spectres de TOUTES les molécules d'un fichier all_multiplicities.json (mode batch)
+ *
+ * @param {Object} options
+ * @param {string} options.task_id - UUID de la tâche de prédiction
+ * @param {number} [options.freq_mhz=700] - Fréquence en MHz
+ * @param {string} [options.solvent='CDCl3'] - Solvant
+ * @param {string} [options.line_shape='lorentzian'] - Forme de ligne
+ * @param {number} [options.line_width_hz=1.0] - Largeur de ligne en Hz
+ * @param {boolean} [options.enable_dynamics=false] - Activer le post-processeur dynamics
+ * @param {number} [options.temperature_k=298] - Température en Kelvin
+ * @param {number} [options.ph=7.4] - pH
+ * @returns {Promise<Object>} Résultat batch
+ *   - status: "ok"
+ *   - mode: "batch"
+ *   - total_molecules: number
+ *   - successful: number
+ *   - failed: number
+ *   - spectra: array of spectrum objects
+ */
+export const simulateSpectrumBatch = async ({
+  task_id,
+  freq_mhz = 700,
+  solvent = 'CDCl3',
+  line_shape = 'lorentzian',
+  digital_resolution_hz = 0.1,
+  ppm_range = [-0.5, 12],
+  line_width_hz = 1.0,
+  enable_dynamics = false,
+  temperature_k = 298,
+  ph = 7.4,
+} = {}) => {
+  if (!task_id) {
+    throw new Error('task_id is required');
+  }
+
+  try {
+    console.log('[simulateSpectrumBatch] Requesting batch simulation for task:', task_id);
+    const response = await api.post('/simulate-spectrum-batch', {
+      task_id,
+      freq_mhz,
+      solvent,
+      line_shape,
+      digital_resolution_hz,
+      ppm_range,
+      line_width_hz,
+      enable_dynamics,
+      temperature_k,
+      ph,
+    });
+
+    if (response.data.status === 'error') {
+      throw new Error(response.data.error || 'Batch simulation failed');
+    }
+
+    console.log('[simulateSpectrumBatch] Success:', {
+      total: response.data.total_molecules,
+      successful: response.data.successful
+    });
+    return response.data;
+  } catch (err) {
+    console.error('[simulateSpectrumBatch] Error:', err);
     throw err;
   }
 };
@@ -2749,5 +2945,127 @@ export const getMultiplicityData = async (taskId, molId) => {
     throw err;
   }
 };
+
+/**
+ * Extrait les données brutes du spectre Bruker (ppm, intensity)
+ *
+ * @param {string} pdataDir - Chemin vers le dossier pdata/1
+ * @returns {Promise<{ppm: number[], intensity: number[], sf: number, status: string}>}
+ */
+export const extractBrukerSpectrum = async (pdataDir) => {
+  if (!pdataDir) {
+    throw new Error('pdataDir is required');
+  }
+
+  try {
+    const response = await api.get('/extract-bruker-spectrum', {
+      params: { pdata_dir: pdataDir }
+    });
+
+    if (response.data.status === 'error') {
+      throw new Error(response.data.error || 'Extraction failed');
+    }
+
+    return response.data;
+  } catch (err) {
+    console.error('[extractBrukerSpectrum] Error:', err);
+    throw err;
+  }
+};
+
+/**
+ * Extract 2D Bruker spectrum contours (COSY, HSQC) for direct canvas rendering.
+ * Returns polyline contours instead of PNG image.
+ * 
+ * @param {string} pdataDir - Path to pdata folder
+ * @param {Object} options - Optional parameters
+ * @param {number} options.levelStart - Contour start level (default 0.0001 = 0.01% of max for noise)
+ * @param {number} options.nLevels - Number of contour levels (default 60)
+ * @param {number} options.decimate - Decimation factor (default 2)
+ * @returns {Promise<{contours: Array, f1_range: number[], f2_range: number[], status: string}>}
+ */
+export const extractBruker2D = async (pdataDir, options = {}) => {
+  if (!pdataDir) {
+    throw new Error('pdataDir is required');
+  }
+
+  const { levelStart = 0.005, nLevels = 60, decimate = 2 } = options;
+
+  try {
+    const response = await api.get('/extract-bruker-2d', {
+      params: {
+        pdata_dir: pdataDir,
+        level_start: levelStart,
+        n_levels: nLevels,
+        decimate: decimate
+      }
+    });
+
+    if (response.data.status === 'error') {
+      throw new Error(response.data.error || 'Extraction failed');
+    }
+
+    return response.data;
+  } catch (err) {
+    console.error('[extractBruker2D] Error:', err);
+    throw err;
+  }
+};
+
+// ============================================================================
+// TOLERANCE OPTIMIZATION RESULTS PERSISTENCE
+// ============================================================================
+
+/**
+ * Save tolerance optimization results for a task
+ * @param {string} taskId - The task ID
+ * @param {Array} results - Array of tolerance optimization result sets
+ * @returns {Promise<{message: string, taskId: string, count: number}>}
+ */
+export async function saveToleranceResults(taskId, results) {
+  try {
+    const response = await api.post(`/tasks/${taskId}/tolerance-results`, {
+      results
+    });
+    return response.data;
+  } catch (err) {
+    console.error('[saveToleranceResults] Error:', err);
+    throw new Error(err.response?.data?.error || err.message || 'Failed to save tolerance results');
+  }
+}
+
+/**
+ * Load tolerance optimization results for a task
+ * @param {string} taskId - The task ID
+ * @returns {Promise<{taskId: string, results: Array, count: number}>}
+ */
+export async function loadToleranceResults(taskId) {
+  try {
+    const response = await api.get(`/tasks/${taskId}/tolerance-results`);
+    return response.data;
+  } catch (err) {
+    console.error('[loadToleranceResults] Error:', err);
+    // Don't throw if results don't exist, just return empty
+    if (err.response?.status === 404 || err.response?.data?.results) {
+      return { taskId, results: [], count: 0 };
+    }
+    throw new Error(err.response?.data?.error || err.message || 'Failed to load tolerance results');
+  }
+}
+
+/**
+ * Delete tolerance optimization results for a task
+ * @param {string} taskId - The task ID
+ * @returns {Promise<{message: string, taskId: string}>}
+ */
+export async function deleteToleranceResults(taskId) {
+  try {
+    const response = await api.delete(`/tasks/${taskId}/tolerance-results`);
+    return response.data;
+  } catch (err) {
+    console.error('[deleteToleranceResults] Error:', err);
+    throw new Error(err.response?.data?.error || err.message || 'Failed to delete tolerance results');
+  }
+}
 
 export default api;

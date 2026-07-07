@@ -55,33 +55,75 @@
 }
 
 .modal-fullscreen {
-  width: 95vw;
-  height: 90vh;
+  width: 98vw;
+  height: 96vh;
+  max-width: 98vw;
+  max-height: 96vh;
+  border-radius: 4px;
+}
+
+/* Transition douce entre les tailles */
+.modal-container {
+  transition: width 0.3s ease, height 0.3s ease, max-width 0.3s ease, max-height 0.3s ease;
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  padding: 8px 16px;
   background: linear-gradient(180deg, #4a90d9 0%, #357abd 100%);
   border-radius: 8px 8px 0 0;
   color: white;
+  min-height: 36px;
+}
+
+.modal-fullscreen .modal-header {
+  border-radius: 4px 4px 0 0;
 }
 
 .modal-title {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
+}
+
+.modal-header-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modal-fullscreen-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.modal-fullscreen-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-fullscreen-btn:active {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .modal-close-btn {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: white;
-  font-size: 18px;
-  width: 32px;
-  height: 32px;
+  font-size: 14px;
+  width: 26px;
+  height: 26px;
   border-radius: 4px;
   cursor: pointer;
   display: flex;
@@ -102,6 +144,18 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-fullscreen .modal-content {
+  padding: 16px;
+}
+
+/* Permettre aux enfants de remplir l'espace */
+.modal-content > * {
+  flex: 1;
+  min-height: 0;
 }
 
 /* Scrollbar styling */

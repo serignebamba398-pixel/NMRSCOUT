@@ -190,6 +190,43 @@ export const usePrediction = ({
     const hsqcLowUI = options.extractors?.hsqc?.fold_low ?? 4.8618;
     const hsqcHighUI = options.extractors?.hsqc?.fold_high ?? 69.8395;
 
+    // Experimental parameters for multiplicity JSON generation
+    const freqMhz = Number(options.freq_mhz) || 700;
+    const solvent = options.solvent || 'CDCl3';
+    const temperatureK = Number(options.temperature_k) || 298;
+    
+    // ✅ VALIDATION pH ULTRA-ROBUSTE - Prévention bug pH 26 (SMILES mode)
+    let pH = Number(options.ph) || 7.4;
+    
+    // Log pour debugging - voir toutes les valeurs pH reçues
+    console.log(`[DEBUG usePrediction SMILES] pH reçu: ${options.ph} (type: ${typeof options.ph}) → Converti: ${pH}`);
+    
+    if (pH === 26) {
+      console.warn('[usePrediction SMILES] DANGER: pH=26 détecté - probablement confusion avec année 2026 ou température! Fallback vers 7.4');
+      addLog('⚠️ pH=26 détecté et corrigé vers 7.4 (confusion probable avec année/température)', 'warning');
+      pH = 7.4;
+    } else if (pH === 2026) {
+      console.warn('[usePrediction SMILES] DANGER: pH=2026 détecté - probablement confusion avec année! Fallback vers 7.4');
+      addLog('⚠️ pH=2026 détecté et corrigé vers 7.4 (confusion probable avec année)', 'warning');
+      pH = 7.4;
+    } else if (pH === 15) {
+      console.warn('[usePrediction SMILES] DANGER: pH=15 détecté - probablement confusion avec température! Fallback vers 7.4');
+      addLog('⚠️ pH=15 détecté et corrigé vers 7.4 (confusion probable avec température)', 'warning');
+      pH = 7.4;
+    } else if (pH === 16) {
+      console.warn('[usePrediction SMILES] DANGER: pH=16 détecté - probablement confusion avec température! Fallback vers 7.4');
+      addLog('⚠️ pH=16 détecté et corrigé vers 7.4 (confusion probable avec température)', 'warning');
+      pH = 7.4;
+    } else if (pH >= 15 && pH <= 30) {
+      console.warn(`[usePrediction SMILES] DANGER: pH=${pH} dans plage suspecte [15-30] - probablement confusion! Fallback vers 7.4`);
+      addLog(`⚠️ pH=${pH} détecté et corrigé vers 7.4 (valeur suspecte)`, 'warning');
+      pH = 7.4;
+    } else if (pH < 1.0 || pH > 14.0) {
+      console.warn(`[usePrediction SMILES] pH=${pH} hors plage valide [1.0-14.0] - Fallback vers 7.4`);
+      addLog(`⚠️ pH=${pH} hors plage et corrigé vers 7.4`, 'warning');
+      pH = 7.4;
+    }
+
     try {
       const runPromise = runPredictionFromSmiles(
         smiles,
@@ -200,6 +237,11 @@ export const usePrediction = ({
             nb_cores: Number(options.nb_cores) || 2,
             min_bonds: normalizedMin,
             max_bonds: normalizedMax,
+            // Experimental parameters
+            freq_mhz: freqMhz,
+            solvent: solvent,
+            temperature_k: temperatureK,
+            ph: pH,
             extractors: {
               c13: { carbon_mode: carbonModeUI },
               hsqc: {
@@ -229,10 +271,15 @@ export const usePrediction = ({
           // Progression percentage (0-100)
           const pFromData = Number(data?.percent);
           if (Number.isFinite(pFromData) && pFromData >= 0 && pFromData <= 100) {
+            // Always use backend progress - it properly manages SDF (0-95%) and CSV extractors (95-100%)
             setProgress(pFromData);
           }
 
-          if (data?.message) {
+          // Phase-specific messages for CSV extractors
+          if (data?.phase === 'extractors') {
+            const extractorMsg = data?.message || 'Generating CSV files (1H, 13C, COSY, HSQC)...';
+            setProgressMessage(extractorMsg);
+          } else if (data?.message) {
             setProgressMessage(data.message);
           }
         },
@@ -252,23 +299,27 @@ export const usePrediction = ({
             setTotalMolecules(total);
             setCompletedMolecules(current);
 
+            // Only update progress from logs if backend hasn't sent progress events
+            // Backend sends: SDF (0-98%), CSV extractors (98-100%)
             const frac = total > 0 ? current / total : 0;
-            const newPercent = Math.min(98, frac * 98);
+            const newPercent = Math.min(98, frac * 98); // Cap at 98% for SDF phase
 
             setProgress((prev) => Math.max(prev, newPercent));
             setProgressMessage(`Molecule ${current}/${total} (SDF created)`);
             return;
           }
 
-          // Detect CSV phase
+          // Detect CSV phase messages (for logging only, backend handles progress 95-100%)
           const isCsvPhase =
             /extraction.*csv/i.test(msg) ||
             /post.*traitement/i.test(msg) ||
+            /generating csv/i.test(msg) ||
+            /predict_1h|predict_13c|predict_cosy|predict_hsqc/i.test(msg) ||
             /csv.*en cours/i.test(msg);
 
           if (isCsvPhase) {
-            setProgress((prev) => Math.max(prev, Math.min(100, Math.max(98, prev) + 0.5)));
-            setProgressMessage("Extraction CSV…");
+            // Just update message, let backend handle progress percentage
+            setProgressMessage("Generating CSV files (1H, 13C, COSY, HSQC)...");
           }
         },
         // onError
@@ -361,6 +412,43 @@ export const usePrediction = ({
     const hsqcLowUI = options.extractors?.hsqc?.fold_low ?? 4.8618;
     const hsqcHighUI = options.extractors?.hsqc?.fold_high ?? 69.8395;
 
+    // Experimental parameters for multiplicity JSON generation
+    const freqMhz = Number(options.freq_mhz) || 700;
+    const solvent = options.solvent || 'CDCl3';
+    const temperatureK = Number(options.temperature_k) || 298;
+    
+    // ✅ VALIDATION pH ULTRA-ROBUSTE - Prévention bug pH 26 (CSV mode)
+    let pH = Number(options.ph) || 7.4;
+    
+    // Log pour debugging - voir toutes les valeurs pH reçues
+    console.log(`[DEBUG usePrediction CSV] pH reçu: ${options.ph} (type: ${typeof options.ph}) → Converti: ${pH}`);
+    
+    if (pH === 26) {
+      console.warn('[usePrediction CSV] DANGER: pH=26 détecté - probablement confusion avec année 2026 ou température! Fallback vers 7.4');
+      addLog('⚠️ pH=26 détecté et corrigé vers 7.4 (confusion probable avec année/température)', 'warning');
+      pH = 7.4;
+    } else if (pH === 2026) {
+      console.warn('[usePrediction CSV] DANGER: pH=2026 détecté - probablement confusion avec année! Fallback vers 7.4');
+      addLog('⚠️ pH=2026 détecté et corrigé vers 7.4 (confusion probable avec année)', 'warning');
+      pH = 7.4;
+    } else if (pH === 15) {
+      console.warn('[usePrediction CSV] DANGER: pH=15 détecté - probablement confusion avec température! Fallback vers 7.4');
+      addLog('⚠️ pH=15 détecté et corrigé vers 7.4 (confusion probable avec température)', 'warning');
+      pH = 7.4;
+    } else if (pH === 16) {
+      console.warn('[usePrediction CSV] DANGER: pH=16 détecté - probablement confusion avec température! Fallback vers 7.4');
+      addLog('⚠️ pH=16 détecté et corrigé vers 7.4 (confusion probable avec température)', 'warning');
+      pH = 7.4;
+    } else if (pH >= 15 && pH <= 30) {
+      console.warn(`[usePrediction CSV] DANGER: pH=${pH} dans plage suspecte [15-30] - probablement confusion! Fallback vers 7.4`);
+      addLog(`⚠️ pH=${pH} détecté et corrigé vers 7.4 (valeur suspecte)`, 'warning');
+      pH = 7.4;
+    } else if (pH < 1.0 || pH > 14.0) {
+      console.warn(`[usePrediction CSV] pH=${pH} hors plage valide [1.0-14.0] - Fallback vers 7.4`);
+      addLog(`⚠️ pH=${pH} hors plage et corrigé vers 7.4`, 'warning');
+      pH = 7.4;
+    }
+
     try {
       const runPromise = runPredictionFromCSV(
         csvUploadedName,
@@ -368,10 +456,17 @@ export const usePrediction = ({
           idColumn: options.idColumn || "id",
           smilesColumn: options.smilesColumn || "smiles",
           methods: selectedPredMethods,
+          // Reprise incrémentale: réutiliser les molécules déjà prédites
+          resumeFromDir: options.resumeFromDir || null,
           global: {
             nb_cores: Number(options.nb_cores) || 2,
             min_bonds: normalizedMin,
             max_bonds: normalizedMax,
+            // Experimental parameters
+            freq_mhz: freqMhz,
+            solvent: solvent,
+            temperature_k: temperatureK,
+            ph: pH,
             extractors: {
               c13: { carbon_mode: carbonModeUI },
               hsqc: {
@@ -431,14 +526,11 @@ export const usePrediction = ({
             return;
           }
 
-          const isCsvPhase =
-            /extraction.*csv/i.test(msg) ||
-            /post.*traitement/i.test(msg) ||
-            /csv.*en cours/i.test(msg);
-
-          if (isCsvPhase) {
-            setProgress((prev) => Math.min(100, Math.max(98, prev) + 0.5));
-            setProgressMessage("CSV extraction…");
+          // Detect CSV/extractor phase - just update message, backend sends percent via onProgress
+          const isExtractorPhase = /extraction.*csv|post.*traitement|csv.*en cours|predict_.*_real|1H.*csv|13C.*csv|COSY.*csv|HSQC.*csv/i.test(msg);
+          if (isExtractorPhase) {
+            setProgressMessage("Generating CSV files...");
+            // Don't modify percent here - backend sends correct value via onProgress with phase='extractors'
           }
         },
         // onError

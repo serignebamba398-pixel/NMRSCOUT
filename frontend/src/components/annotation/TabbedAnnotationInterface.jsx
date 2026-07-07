@@ -378,6 +378,17 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
               />
             </div>
             <div className="param-row">
+              <label>Correlation method:</label>
+              <select
+                value={typeParams.correlation_method ?? "pearson"}
+                onChange={(e) => updateParameter(type, 'correlation_method', e.target.value)}
+                disabled={allRunning}
+              >
+                <option value="pearson">Pearson</option>
+                <option value="spearman">Spearman</option>
+              </select>
+            </div>
+            <div className="param-row">
               <label>Ratio min:</label>
               <input
                 type="number"
@@ -443,6 +454,47 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
                 disabled={allRunning}
               />
             </div>
+            <div className="param-row">
+              <label>Number of cores (nb_cores):</label>
+              <input
+                type="number"
+                step="1"
+                min="1"
+                max="16"
+                value={typeParams.nb_cores ?? 4}
+                onChange={(e) => updateParameter(type, 'nb_cores', parseInt(e.target.value) || 4)}
+                disabled={allRunning}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Spectral Normalization */}
+        <div className="settings-section">
+          <h4 className="section-title">Spectral Normalization</h4>
+          <p className="section-hint" style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>
+            Corrects dilution effects between samples. PQN is recommended for metabolomics.
+          </p>
+          <div className="params-grid">
+            <div className="param-row">
+              <label>Normalization method:</label>
+              <select
+                value={
+                  typeParams.use_pqn ? "pqn" :
+                  typeParams.use_csn ? "csn" : "none"
+                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateParameter(type, 'use_pqn', val === 'pqn');
+                  updateParameter(type, 'use_csn', val === 'csn');
+                }}
+                disabled={allRunning}
+              >
+                <option value="none">None (raw intensities)</option>
+                <option value="csn">CSN (Constant Sum Normalization)</option>
+                <option value="pqn">PQN (Probabilistic Quotient Normalization)</option>
+              </select>
+            </div>
           </div>
         </div>
 
@@ -462,6 +514,11 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
                   bgPdataDirs: {
                     ...prev.bgPdataDirs,
                     [type]: e.target.value,
+                  },
+                  // Clear the cached background status for this type when path changes
+                  bgStatus: {
+                    ...prev.bgStatus,
+                    [type]: null,
                   },
                 }))
               }

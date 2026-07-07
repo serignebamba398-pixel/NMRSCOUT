@@ -367,12 +367,15 @@ def run_chiral_and_symmetry_finder(smiles: str = "", compound_path: str = "", ex
 # 3) SELECTION / DEDUPLICATION / DATAFRAME
 # ===========================================================
 def selecting_shifts(c_h_connectivity_dict: Dict[int, List[int]],
-                     all_split_positions: List[int],
                      ml_shifts: List[float]) -> List[List[object]]:
     """
     Associates the 13C shift of the carbon (ml_shifts[c_pos]) and the 1H shift
-    (average or individual if CH2 is split).
+    (average or individual if CH2 is diastereotopic).
     Returns entries: [C_shift, H_shift, direction, C_index, H_indices_list]
+
+    The SDF is already corrected:
+    - Equivalent H have identical shifts → averaged together
+    - Diastereotopic H have different shifts → separate entries
     """
     shifts: List[List[object]] = []
     for c_pos, h_list in c_h_connectivity_dict.items():
@@ -380,7 +383,22 @@ def selecting_shifts(c_h_connectivity_dict: Dict[int, List[int]],
             continue
         c_shift = ml_shifts[c_pos] if 0 <= c_pos < len(ml_shifts) else None
         direction = 1.0 if (len(h_list) % 2) != 0 else -1.0
-        if (len(h_list) == 2) and (c_pos in all_split_positions):
+
+        # Pour CH2: split si les shifts sont différents (diastéréotopiques)
+        should_split = False
+        if len(h_list) == 2:
+            h1, h2 = h_list[0], h_list[1]
+            if 0 <= h1 < len(ml_shifts) and 0 <= h2 < len(ml_shifts):
+                try:
+                    shift1 = float(ml_shifts[h1])
+                    shift2 = float(ml_shifts[h2])
+                    # If shifts are different, they are diastereotopic
+                    if shift1 != shift2:
+                        should_split = True
+                except (ValueError, TypeError):
+                    pass
+
+        if should_split and len(h_list) == 2:
             for h in h_list:
                 h_shift = ml_shifts[h] if 0 <= h < len(ml_shifts) else None
                 shifts.append([c_shift, h_shift, direction, c_pos, h_list])
@@ -439,7 +457,7 @@ def generate_ml_dataframe(shifts: List[List[object]]) -> pd.DataFrame:
             'F2_ppm': H_shift if H_shift is not None else np.nan,   # 1H
             'Direction': float(direction),
             'Nb_H': len(flat_h),
-            'H_indices': ','.join(map(str, flat_h)) if flat_h else ''
+            'H_indices': '|'.join(map(str, flat_h)) if flat_h else ''
         })
     return pd.DataFrame(rows)
 
@@ -488,12 +506,12 @@ def build_hsqc_table_from_sdf(sdf_path: str, do_fold: bool, fold_low: float, fol
         atom_list, connectivity_list, _, _ = get_molecule_data(sdf_path)
         c_h_connectivity_dict = get_c_h_connectivity(connectivity_list, atom_list)
 
-        # chirality / symmetry → positions to split (CH2)
-        progress(40, "Detecting chirality and symmetry...")  # [NEW]
-        sym_dupl_lists, all_split_positions, _, _ = run_chiral_and_symmetry_finder(compound_path=sdf_path)
+        # symmetry detection (for deduplication of symmetric carbons)
+        progress(40, "Detecting symmetry...")  # [NEW]
+        sym_dupl_lists, _, _, _ = run_chiral_and_symmetry_finder(compound_path=sdf_path)
 
-        # select shifts (with split if needed) + symmetry deduplication
-        shifts = selecting_shifts(c_h_connectivity_dict, all_split_positions, ml_shifts)
+        # select shifts - auto-split CH2 if shifts different (diastereotopic already corrected in SDF)
+        shifts = selecting_shifts(c_h_connectivity_dict, ml_shifts)
         shifts = perform_deduplication_if_symmetric(shifts, sym_dupl_lists)
         progress(60, "Computing HSQC correlations...")  # [NEW]
 

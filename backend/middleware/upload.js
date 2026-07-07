@@ -7,6 +7,7 @@ const { logWithMemory } = require('../utils/logger');
 function sanitizeFilename(name) {
   const base = (name || '')
     .toString()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // accents -> ASCII
     .replace(/[\u0000-\u001f<>:"/\\|?*]+/g, '_')
     .replace(/\.{2,}/g, '.');
   return base.substring(0, 100);

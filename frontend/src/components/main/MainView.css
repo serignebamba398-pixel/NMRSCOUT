@@ -204,7 +204,7 @@
 .viewer-panel {
   flex: 1;
   padding: 16px;
-  overflow: hidden; /* Le Viewer gère son propre défilement */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -257,6 +257,77 @@
 }
 
 .filter-clear:hover {
+  color: #666;
+}
+
+/* Coverage range filter */
+.coverage-filter-container {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.coverage-filter-label {
+  display: block;
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.coverage-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.coverage-input {
+  width: 50px;
+  padding: 5px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 11px;
+  outline: none;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+
+.coverage-input:focus {
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.1);
+}
+
+.coverage-input::placeholder {
+  color: #aaa;
+}
+
+/* Hide spinner arrows on number inputs */
+.coverage-input::-webkit-outer-spin-button,
+.coverage-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.coverage-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.coverage-separator {
+  color: #999;
+  font-size: 12px;
+}
+
+.coverage-clear {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: #999;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+  margin-left: 2px;
+}
+
+.coverage-clear:hover {
   color: #666;
 }
 

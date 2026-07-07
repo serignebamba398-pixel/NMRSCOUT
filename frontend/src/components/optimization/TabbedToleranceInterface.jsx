@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { LockOverlay, ProgressBar } from '../common';
 import { ToleranceRangeInputs } from './ToleranceRangeInputs';
@@ -28,17 +28,35 @@ export const TabbedToleranceInterface = ({ onClose }) => {
     setUiLock,
   } = useAppState();
 
-  const { toleranceRanges, toleranceResults, parameters } = annotationState;
+  const { 
+    toleranceRanges, 
+    toleranceResults, 
+    parameters,
+    toleranceOptimProgress,
+    toleranceOptimRunning,
+    toleranceOptimCurrentTest,
+    toleranceOptimSelectedType,
+  } = annotationState;
 
   // Onglet actif: 'source' ou '1H', '13C', 'COSY', 'HSQC', 'results'
   const [activeTab, setActiveTab] = useState('source');
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [currentTest, setCurrentTest] = useState("");
   const [matrixUploads, setMatrixUploads] = useState([]);
   const [loadingMatrixUploads, setLoadingMatrixUploads] = useState(false);
-  // Type sélectionné pour l'optimisation
-  const [selectedType, setSelectedType] = useState('1H');
+  
+  // Use global state for running/progress (preserved when modal closes)
+  const running = toleranceOptimRunning;
+  const progress = toleranceOptimProgress;
+  const currentTest = toleranceOptimCurrentTest;
+  const selectedType = toleranceOptimSelectedType || '1H';
+  
+  const setRunning = (val) => setAnnotationState(prev => ({ ...prev, toleranceOptimRunning: val }));
+  const setProgress = (val) => setAnnotationState(prev => ({ ...prev, toleranceOptimProgress: val }));
+  const setCurrentTest = (val) => setAnnotationState(prev => ({ ...prev, toleranceOptimCurrentTest: val }));
+  const setSelectedType = (val) => setAnnotationState(prev => ({ ...prev, toleranceOptimSelectedType: val }));
+  
+  // Cancel mechanism
+  const cancelledRef = useRef(false);
+  const currentSSERef = useRef(null);
 
   const dimmed = uiLock.lockedBy === "PRED" || uiLock.lockedBy === "ANNO";
 
@@ -49,10 +67,18 @@ export const TabbedToleranceInterface = ({ onClose }) => {
     COSY: [
       "tol_correspondence_f1", "tol_correspondance_f1", "tol_match_f1",
       "tol_correspondence_f2", "tol_correspondance_f2", "tol_match_f2",
+      "tol_correspondance_F1", "tol_match_F1",
+      "tol_correspondance_F2", "tol_match_F2",
+      "tol_correspondance_f1", "tol_match_f1",
+      "tol_correspondance_f2", "tol_match_f2",
     ],
     HSQC: [
       "tol_correspondence_f1", "tol_correspondance_f1", "tol_match_f1",
       "tol_correspondence_f2", "tol_correspondance_f2", "tol_match_f2",
+      "tol_correspondance_F1", "tol_match_F1",
+      "tol_correspondance_F2", "tol_match_F2",
+      "tol_correspondance_f1", "tol_match_f1",
+      "tol_correspondance_f2", "tol_match_f2",
     ],
   };
 
@@ -190,10 +216,12 @@ export const TabbedToleranceInterface = ({ onClose }) => {
         totalCoverageSum += coverage;
 
         if (row.RANSY_signals && String(row.RANSY_signals).trim() !== "") {
-          const expSignals = String(row.RANSY_signals)
-            .split("|")
-            .map((s) => s.trim())
-            .filter((s) => s !== "");
+          const rawSignals = String(row.RANSY_signals).trim();
+          // Detect 2D format (COSY/HSQC uses "||" to separate signal pairs)
+          const is2D = rawSignals.includes("||");
+          const expSignals = is2D
+            ? rawSignals.split("||").map((s) => s.trim()).filter((s) => s !== "")
+            : rawSignals.split("|").map((s) => s.trim()).filter((s) => s !== "");
 
           expSignals.forEach((sig) => {
             matchedExpSignals.add(sig);
@@ -237,23 +265,70 @@ export const TabbedToleranceInterface = ({ onClose }) => {
 
   const runSingleAnnotation = (predTaskId, matrixFile, annotationType, params) => {
     return new Promise((resolve, reject) => {
-      createReconnectingSSE({
+      // Check if already cancelled before starting
+      if (cancelledRef.current) {
+        reject(new Error("Cancelled"));
+        return;
+      }
+      
+      const sse = createReconnectingSSE({
         endpoint: "/run-annotation-from-prediction",
         body: {
           predictionTaskId: predTaskId,
           matrixFile: matrixFile,
           annotationType: annotationType,
           parameters: params,
+          isOptimization: true,
         },
         onProgress: () => {},
         onLog: () => {},
-        onError: (err) => reject(err),
-        onComplete: (res) => resolve(res),
+        onError: (err) => {
+          currentSSERef.current = null;
+          // Don't reject if cancelled (will be handled by cancel check)
+          if (!cancelledRef.current) {
+            reject(err);
+          }
+        },
+        onComplete: (res) => {
+          currentSSERef.current = null;
+          // Don't resolve if cancelled
+          if (!cancelledRef.current) {
+            resolve(res);
+          }
+        },
       });
+      
+      // Store both SSE and reject function for cancel
+      currentSSERef.current = sse;
+      currentSSERef.current._rejectFn = reject;
     });
   };
 
+  const cancelOptimization = () => {
+    cancelledRef.current = true;
+    if (currentSSERef.current) {
+      const rejectFn = currentSSERef.current._rejectFn;
+      try {
+        currentSSERef.current.close();
+      } catch (e) {
+        console.warn("Error closing SSE:", e);
+      }
+      // Reject the pending promise to unblock the await
+      if (rejectFn) {
+        rejectFn(new Error("Cancelled by user"));
+      }
+      currentSSERef.current = null;
+    }
+    setRunning(false);
+    setProgress(0);
+    setCurrentTest("");
+    addLog("Optimization cancelled by user", "warn");
+  };
+
   const runToleranceTests = async () => {
+    // Reset cancel flag
+    cancelledRef.current = false;
+    
     const type = selectedType;
     const ranges = toleranceRanges[type];
     const baseParams = parameters[type];
@@ -312,6 +387,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
         const roundedTol = parseFloat(tol.toFixed(3));
         testCombinations.push({
           tol_correspondence: roundedTol,
+          tol_correspondance: roundedTol, // R script uses French spelling
           tol_match: roundedTol,
         });
       }
@@ -332,8 +408,12 @@ export const TabbedToleranceInterface = ({ onClose }) => {
           testCombinations.push({
             tol_correspondence_f1: roundedF1,
             tol_correspondence_f2: roundedF2,
+            tol_correspondance_F1: roundedF1, // R script uses French spelling + uppercase
+            tol_correspondance_F2: roundedF2, // R script uses French spelling + uppercase
             tol_match_f1: roundedF1,
             tol_match_f2: roundedF2,
+            tol_match_F1: roundedF1, // R script uses uppercase
+            tol_match_F2: roundedF2, // R script uses uppercase
           });
         }
       }
@@ -353,6 +433,12 @@ export const TabbedToleranceInterface = ({ onClose }) => {
     const results = [];
 
     for (let i = 0; i < testCombinations.length; i++) {
+      // Check if cancelled
+      if (cancelledRef.current) {
+        addLog(`Optimization stopped at test ${i + 1}/${testCombinations.length}`, "warn");
+        break;
+      }
+      
       const tolParams = testCombinations[i];
 
       const fullParams = {
@@ -379,6 +465,12 @@ export const TabbedToleranceInterface = ({ onClose }) => {
       updateTestProgress(0);
 
       try {
+        // Check again before starting annotation
+        if (cancelledRef.current) {
+          addLog(`Optimization stopped before test ${i + 1}`, "warn");
+          break;
+        }
+        
         updateTestProgress(1);
 
         const result = await runSingleAnnotation(
@@ -387,6 +479,12 @@ export const TabbedToleranceInterface = ({ onClose }) => {
           type,
           fullParams
         );
+
+        // Check if cancelled during annotation - skip processing result
+        if (cancelledRef.current) {
+          addLog(`Optimization stopped during test ${i + 1}`, "warn");
+          break;
+        }
 
         updateTestProgress(2);
 
@@ -422,6 +520,10 @@ export const TabbedToleranceInterface = ({ onClose }) => {
 
         updateTestProgress(3);
       } catch (e) {
+        // Check if cancelled (to avoid logging error for cancelled requests)
+        if (cancelledRef.current) {
+          break;
+        }
         addLog(`Error ${label} : ${e.message}`, "error");
         results.push({
           toleranceParams: tolParams,
@@ -436,25 +538,36 @@ export const TabbedToleranceInterface = ({ onClose }) => {
       }
     }
 
-    const resultSet = {
-      id: Date.now(),
-      type,
-      matrix: matrixName,
-      timestamp: new Date().toISOString(),
-      label: `${type} @ ${new Date().toLocaleTimeString()} - ${matrixName}`,
-      results,
-      totalExperimentalSignals,
-    };
+    // Only save results if not cancelled or if we have partial results
+    if (!cancelledRef.current || results.length > 0) {
+      const resultSet = {
+        id: Date.now(),
+        type,
+        matrix: matrixName,
+        timestamp: new Date().toISOString(),
+        label: `${type} @ ${new Date().toLocaleTimeString()} - ${matrixName}${cancelledRef.current ? ' (partial)' : ''}`,
+        results,
+        totalExperimentalSignals,
+        cancelled: cancelledRef.current,
+      };
 
-    setAnnotationState((prev) => ({
-      ...prev,
-      toleranceResults: [...(prev.toleranceResults || []), resultSet],
-    }));
+      if (results.length > 0) {
+        setAnnotationState((prev) => ({
+          ...prev,
+          toleranceResults: [...(prev.toleranceResults || []), resultSet],
+        }));
+      }
+    }
 
     setRunning(false);
     setProgress(0);
     setCurrentTest("");
-    addLog(`Tests completed for ${type}. ${results.length} results recorded.`);
+    
+    if (cancelledRef.current) {
+      addLog(`Optimization cancelled. ${results.length} results recorded before cancellation.`, "warn");
+    } else {
+      addLog(`Tests completed for ${type}. ${results.length} results recorded.`);
+    }
     
     // Switch to results tab
     setActiveTab('results');
@@ -610,12 +723,51 @@ export const TabbedToleranceInterface = ({ onClose }) => {
           />
         </div>
 
+        {/* Spectral Normalization */}
+        <div className="param-section">
+          <div className="section-title">Spectral Normalization</div>
+          <p style={{ fontSize: '11px', color: '#666', marginBottom: '8px' }}>
+            Corrects dilution effects between samples. PQN is recommended.
+          </p>
+          <div className="param-item">
+            <label>Normalization</label>
+            <select
+              value={
+                typeParams.use_pqn ? "pqn" :
+                typeParams.use_csn ? "csn" : "none"
+              }
+              onChange={(e) => {
+                const val = e.target.value;
+                updateParameter(type, 'use_pqn', val === 'pqn');
+                updateParameter(type, 'use_csn', val === 'csn');
+              }}
+              disabled={running}
+            >
+              <option value="none">None (raw intensities)</option>
+              <option value="csn">CSN (Constant Sum)</option>
+              <option value="pqn">PQN (Probabilistic Quotient)</option>
+            </select>
+          </div>
+        </div>
+
         {/* Other parameters */}
         <div className="param-section">
           <div className="section-title">Other Parameters</div>
           <div className="params-grid">
+            {/* Correlation method select */}
+            <div className="param-item">
+              <label>correlation method</label>
+              <select
+                value={typeParams.correlation_method ?? "pearson"}
+                onChange={(e) => updateParameter(type, 'correlation_method', e.target.value)}
+                disabled={running}
+              >
+                <option value="pearson">Pearson</option>
+                <option value="spearman">Spearman</option>
+              </select>
+            </div>
             {Object.entries(typeParams)
-              .filter(([key]) => !typeHiddenKeys.includes(key))
+              .filter(([key]) => !typeHiddenKeys.includes(key) && !['correlation_method', 'use_pqn', 'use_csn'].includes(key))
               .map(([key, value]) => (
                 <div key={key} className="param-item">
                   <label>{key.replace(/_/g, " ")}</label>
@@ -748,17 +900,25 @@ export const TabbedToleranceInterface = ({ onClose }) => {
           </div>
         )}
         <div className="action-buttons">
-          <button
-            className="btn-primary"
-            onClick={runToleranceTests}
-            disabled={running || !canRunTest()}
-          >
-            {running ? `Tests in progress... (${Math.round(progress)}%)` : `Run tests ${selectedType}`}
-          </button>
+          {running ? (
+            <button
+              className="btn-danger"
+              onClick={cancelOptimization}
+            >
+              Cancel ({Math.round(progress)}%)
+            </button>
+          ) : (
+            <button
+              className="btn-primary"
+              onClick={runToleranceTests}
+              disabled={!canRunTest()}
+            >
+              Run tests {selectedType}
+            </button>
+          )}
           <button
             className="btn-secondary"
             onClick={onClose}
-            disabled={running}
           >
             Close
           </button>

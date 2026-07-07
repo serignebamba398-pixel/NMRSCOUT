@@ -89,3 +89,14 @@ assets/icon.backup_*.ico
 # If you intentionally want to version logs, remove *.log above.
 
 R-Portable.zip
+
+# ===== Temp outputs =====
+backend/temp_output/
+$null
+
+# ===== Large data files (in Docker image, not in repo) =====
+*.pkl
+*.sdf
+backend/ml_dependencies/data/NPMRD/
+backend/ml_dependencies/data/sdf_bmrb_rdkit_v2/
+backend/ml_dependencies/data/with_experimental_data/

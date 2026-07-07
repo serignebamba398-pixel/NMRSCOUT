@@ -13,32 +13,43 @@ const connectSrc = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:4000',
   'http://127.0.0.1:5000',
+  // Add ws:// for WebSocket/SSE connections in Electron
+  'ws://localhost:3000',
+  'ws://localhost:5000',
+  'ws://127.0.0.1:3000',
+  'ws://127.0.0.1:5000',
 ];
 
 const scriptSrc = ["'self'", "'unsafe-inline'"];
 if (isDev) scriptSrc.push("'unsafe-eval'");
 
-const helmetConfig = helmet({
-  crossOriginEmbedderPolicy: false,
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      // CRA dev tooling may require eval in dev; keep it off in production.
-      scriptSrc,
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      connectSrc,
-      imgSrc: ["'self'", 'data:', 'blob:'],
-      fontSrc: ["'self'", 'data:'],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
-      baseUri: ["'self'"],
-      formAction: ["'self'"],
-      frameAncestors: ["'none'"],
-    },
-  },
-  // When running locally, we don't want CORP to block loading local resources.
-  crossOriginResourcePolicy: isElectron ? false : undefined,
-});
+// Disable CSP entirely in Electron mode to avoid fetch blocking issues
+const helmetConfig = isElectron
+  ? helmet({
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: false, // Disable CSP in Electron
+      crossOriginResourcePolicy: false,
+    })
+  : helmet({
+      crossOriginEmbedderPolicy: false,
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          // CRA dev tooling may require eval in dev; keep it off in production.
+          scriptSrc,
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          connectSrc,
+          imgSrc: ["'self'", 'data:', 'blob:'],
+          fontSrc: ["'self'", 'data:'],
+          objectSrc: ["'none'"],
+          mediaSrc: ["'self'"],
+          frameSrc: ["'none'"],
+          baseUri: ["'self'"],
+          formAction: ["'self'"],
+          frameAncestors: ["'none'"],
+        },
+      },
+      crossOriginResourcePolicy: undefined,
+    });
 
 module.exports = helmetConfig;

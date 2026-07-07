@@ -266,6 +266,35 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
               />
             </div>
           </div>
+
+          {/* Incremental prediction - resume from existing task */}
+          <div className="settings-section" style={{ marginTop: 16, padding: '12px', backgroundColor: '#f0f7ff', borderRadius: '6px', border: '1px solid #cce0ff' }}>
+            <h4 className="section-title" style={{ fontSize: '13px', marginBottom: 8, color: '#1a73e8' }}>
+              Incremental Prediction (optional)
+            </h4>
+            <p className="hint" style={{ marginBottom: 8, fontSize: '11px' }}>
+              Resume from a previous task: molecules already predicted with the same parameters (freq, solvent, T, pH) will be reused.
+            </p>
+            <div className="form-field">
+              <label>Previous Task Folder</label>
+              <input
+                type="text"
+                value={options.resumeFromDir || ''}
+                onChange={(e) => updateOption('resumeFromDir', e.target.value)}
+                disabled={running}
+                placeholder="e.g., C:\...\outputs\22c5f5d9-ee0c-4a5f-..."
+                style={{ fontFamily: 'monospace', fontSize: '11px' }}
+              />
+              <p className="hint" style={{ marginTop: 4 }}>
+                Paste the full path to a previous output folder containing checkpoint.json and SDF files.
+              </p>
+            </div>
+            {options.resumeFromDir && (
+              <div className="csv-status success" style={{ marginTop: 8 }}>
+                Incremental mode: will reuse molecules from previous task
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -336,36 +365,103 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
   );
 
   // 1H Tab
-  const render1HTab = () => (
-    <div className="tab-content">
-      <div className="settings-section">
-        <h4 className="section-title">1H NMR Parameters</h4>
-        
-        <div className="method-status-box">
-          <span className={selectedPredMethods.includes("1H") ? "enabled" : "disabled"}>
-            {selectedPredMethods.includes("1H") ? "Method enabled" : "Method disabled"}
-          </span>
-        </div>
+  const render1HTab = () => {
+    // Experimental parameters (for prediction-time JSON generation)
+    const freqMhz = options?.freq_mhz ?? 700;
+    const solvent = options?.solvent ?? 'CDCl3';
+    const temperatureK = options?.temperature_k ?? 298;
+    const pH = options?.ph ?? 7.4;
 
-        <div className="form-field">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={keepExchangeableUI}
-              onChange={(e) => updateExtractorOption('h1', 'keep_exchangeable', e.target.checked)}
-              disabled={running}
-            />
-            <span>Include exchangeable protons (OH, NH, SH)</span>
-          </label>
-          <p className="hint">
-            By default, protons attached to heteroatoms (oxygen, nitrogen, sulfur) are excluded 
-            because they are often absent from NMR spectra due to exchange with the solvent.
-            Check this option to include them in the prediction.
-          </p>
+    return (
+      <div className="tab-content">
+        <div className="settings-section">
+          <h4 className="section-title">1H NMR Parameters</h4>
+
+          <div className="method-status-box">
+            <span className={selectedPredMethods.includes("1H") ? "enabled" : "disabled"}>
+              {selectedPredMethods.includes("1H") ? "Method enabled" : "Method disabled"}
+            </span>
+          </div>
+
+          <div className="settings-section">
+            <h4 className="section-title" style={{ fontSize: '13px', marginTop: 16 }}>Experimental Conditions</h4>
+            <p className="hint" style={{ marginBottom: 12 }}>
+              These parameters are used during prediction to generate the multiplicity JSON with accurate shifts and J-couplings.
+            </p>
+
+            <div className="form-grid">
+              <div className="form-field">
+                <label>Spectrometer Frequency (MHz)</label>
+                <input
+                  type="number"
+                  value={freqMhz}
+                  onChange={(e) => updateOption('freq_mhz', parseFloat(e.target.value) || 700)}
+                  disabled={running}
+                  min={100}
+                  max={1200}
+                  step={50}
+                  style={{ width: 100 }}
+                />
+              </div>
+
+              <div className="form-field">
+                <label>Solvent</label>
+                <select
+                  value={solvent}
+                  onChange={(e) => updateOption('solvent', e.target.value)}
+                  disabled={running}
+                >
+                  <option value="CDCl3">CDCl3 (Chloroform-d)</option>
+                  <option value="DMSO-d6">DMSO-d6 (Dimethylsulfoxide-d6)</option>
+                  <option value="D2O">D2O (Deuterium oxide)</option>
+                  <option value="CD3OD">CD3OD (Methanol-d4)</option>
+                  <option value="acetone-d6">Acetone-d6</option>
+                  <option value="C6D6">C6D6 (Benzene-d6)</option>
+                  <option value="pyridine-d5">Pyridine-d5</option>
+                  <option value="CD3CN">CD3CN (Acetonitrile-d3)</option>
+                  <option value="THF-d8">THF-d8</option>
+                </select>
+                <p className="hint">
+                  Exchangeable protons (OH, NH, SH) will be included/excluded based on the solvent.
+                  In protic solvents (D2O, CD3OD), they exchange rapidly and are typically not visible.
+                </p>
+              </div>
+            </div>
+
+            <div className="form-grid">
+              <div className="form-field">
+                <label>Temperature (K)</label>
+                <input
+                  type="number"
+                  value={temperatureK}
+                  onChange={(e) => updateOption('temperature_k', parseFloat(e.target.value) || 298)}
+                  disabled={running}
+                  min={200}
+                  max={400}
+                  step={1}
+                  style={{ width: 80 }}
+                />
+              </div>
+
+              <div className="form-field">
+                <label>pH</label>
+                <input
+                  type="number"
+                  value={pH}
+                  onChange={(e) => updateOption('ph', parseFloat(e.target.value) || 7.4)}
+                  disabled={running}
+                  min={0}
+                  max={14}
+                  step={0.1}
+                  style={{ width: 80 }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // 13C Tab
   const render13CTab = () => (

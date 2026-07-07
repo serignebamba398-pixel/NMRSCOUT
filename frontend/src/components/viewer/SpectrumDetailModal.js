@@ -2,7 +2,7 @@
 // Modal pour afficher le spectre 1H simulé avec formes de raie
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
-import { simulateSpectrum, getMultiplicityData } from "../../api";
+import { simulateSpectrum, getMultiplicityData, extractBrukerSpectrum, getTaskParams } from "../../api";
 
 const MODAL_STYLES = {
   overlay: {
@@ -11,7 +11,7 @@ const MODAL_STYLES = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -19,15 +19,16 @@ const MODAL_STYLES = {
   },
   modal: {
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 4,
     padding: 20,
-    width: "90%",
-    maxWidth: 1200,
-    maxHeight: "90vh",
+    width: "99vw",
+    height: "98vh",
+    maxWidth: "none",
+    maxHeight: "none",
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
-    boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+    boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
   },
   header: {
     display: "flex",
@@ -45,11 +46,12 @@ const MODAL_STYLES = {
   closeBtn: {
     background: "none",
     border: "none",
-    fontSize: 24,
+    fontSize: 28,
     cursor: "pointer",
     color: "#64748b",
-    padding: "4px 8px",
+    padding: "4px 12px",
     borderRadius: 4,
+    lineHeight: 1,
   },
   controls: {
     display: "flex",
@@ -83,7 +85,7 @@ const MODAL_STYLES = {
   },
   canvasContainer: {
     flex: 1,
-    minHeight: 400,
+    minHeight: 0,
     position: "relative",
     backgroundColor: "#f8fafc",
     borderRadius: 8,
@@ -113,8 +115,8 @@ const MODAL_STYLES = {
     padding: 20,
   },
   peaksTable: {
-    marginTop: 12,
-    maxHeight: 150,
+    marginTop: 8,
+    maxHeight: 100,
     overflow: "auto",
     fontSize: 11,
     border: "1px solid #e5e7eb",
@@ -149,48 +151,203 @@ const spinnerKeyframes = `
 function SpectrumDetailModal({
   isOpen,
   onClose,
-  molId = "mol",
-  taskId = null,  // UUID de la tâche de prédiction (REQUIS)
-  theoryShifts = [],  // Positions théoriques (traits bleus)
-  expShifts = [],      // Positions expérimentales (traits rouges)
-  multiplicityJson = null,  // JSON de multiplicité pré-calculé (prioritaire sur taskId)
+  molId,
+  taskId,
+  theoryShifts = [],
+  expShifts = [],
+  pdataDir1H = null,
+  matchTolerancePpm = 0.05,  // Tolérance d'annotation par défaut
+  multiplicityJson = null,   // Données de multiplicité pré-chargées
+  preloadedSpectrumData = null,  // Spectre simulé pré-chargé
+  isPreloading = false       // Indicateur de pré-chargement en cours
 }) {
-  const canvasRef = useRef(null);
+  const canvasSimRef = useRef(null);  // Canvas pour spectre simulé (haut)
+  const canvasExpRef = useRef(null);  // Canvas pour spectre expérimental (bas)
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [spectrumData, setSpectrumData] = useState(null);
   const [fetchedMultiplicityData, setFetchedMultiplicityData] = useState(null);
   const [loadingMultiplicity, setLoadingMultiplicity] = useState(false);
+  const [multiplicityError, setMultiplicityError] = useState(null);
+
+  // Données expérimentales Bruker
+  const [expSpectrumData, setExpSpectrumData] = useState(null);
+  const [loadingExpSpectrum, setLoadingExpSpectrum] = useState(false);
+  const [expSpectrumError, setExpSpectrumError] = useState(null);
 
   // Options de simulation
-  const [freqMhz, setFreqMhz] = useState(700);
-  const [lineShape, setLineShape] = useState("lorentzian");
-  const [ppmMin, setPpmMin] = useState(-0.5);
-  const [ppmMax, setPpmMax] = useState(12);
-  const [lineWidthHz, setLineWidthHz] = useState(1.0);
+  const [freqMhz, setFreqMhzInternal] = useState(700);
+  const [lineShape, setLineShapeInternal] = useState("lorentzian");
+
+  // Fonction pour calculer la largeur de raie par défaut selon la fréquence
+  const getDefaultLineWidth = useCallback((freq) => {
+    // Correspondance avec FREQ_LINEWIDTH_TABLE du backend
+    if (freq <= 150) return 1.80;
+    if (freq <= 250) return 1.50;
+    if (freq <= 350) return 1.30;
+    if (freq <= 450) return 1.20;
+    if (freq <= 600) return 1.00;
+    if (freq <= 800) return 0.90;
+    return 0.80;
+  }, []);
+
+  const [lineWidthHz, setLineWidthHzInternal] = useState(() => getDefaultLineWidth(700));
+  const [isLineWidthAuto, setIsLineWidthAuto] = useState(true); // Track si valeur auto ou manuelle
+
+  // Paramètres dynamics post-processeur (solvant, température, pH)
+  // Le module dynamics gère automatiquement la visibilité des OH/NH selon le solvant
+  const [solvent, setSolventInternal] = useState('CDCl3');  // Solvant par défaut
+  const [temperature, setTemperatureInternal] = useState(298);  // Température en Kelvin
+  const [ph, setPhInternal] = useState(7.4);
+
+  // Flag pour forcer la re-simulation quand les paramètres changent
+  const [userChangedParams, setUserChangedParams] = useState(false);
+
+  // Wrappers pour mettre à jour les paramètres (SANS déclencher auto-simulation)
+  // L'utilisateur doit cliquer sur "Refresh" pour simuler
+  const setFreqMhz = useCallback((v) => {
+    setFreqMhzInternal(v);
+    // Si mode auto, recalculer la largeur de raie
+    if (isLineWidthAuto) {
+      setLineWidthHzInternal(getDefaultLineWidth(v));
+    }
+    // ❌ SUPPRIMÉ: setUserChangedParams(true) - ne plus auto-simuler
+  }, [isLineWidthAuto, getDefaultLineWidth]);
+
+  const setLineShape = useCallback((v) => { setLineShapeInternal(v); }, []);
+
+  const setLineWidthHz = useCallback((v) => {
+    setLineWidthHzInternal(v);
+    setIsLineWidthAuto(false); // Passage en mode manuel
+    // ❌ SUPPRIMÉ: setUserChangedParams(true) - ne plus auto-simuler
+  }, []);
+
+  const resetLineWidthToAuto = useCallback(() => {
+    setLineWidthHzInternal(getDefaultLineWidth(freqMhz));
+    setIsLineWidthAuto(true);
+    // ❌ SUPPRIMÉ: setUserChangedParams(true) - ne plus auto-simuler
+  }, [freqMhz, getDefaultLineWidth]);
+
+  const setSolvent = useCallback((v) => { setSolventInternal(v); }, []);
+  const setTemperature = useCallback((v) => { setTemperatureInternal(v); }, []);
+  const setPh = useCallback((v) => { setPhInternal(v); }, []);
 
   // Zoom state
   const [zoomRange, setZoomRange] = useState(null);
+  const [verticalScaleSim, setVerticalScaleSim] = useState(1.0); // Échelle verticale spectre simulé
+  const [verticalScaleExp, setVerticalScaleExp] = useState(1.0); // Échelle verticale spectre expérimental
+  const [ppmOffsetExp, setPpmOffsetExp] = useState(0.0); // Décalage horizontal du spectre expérimental (ppm)
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState(null);
+
+  // Reset userChangedParams quand le modal se ferme
+  useEffect(() => {
+    if (!isOpen) {
+      setUserChangedParams(false);
+    }
+  }, [isOpen]);
+
+  // Reset données quand molId change (nouvelle molécule sélectionnée)
+  useEffect(() => {
+    console.log('[SpectrumDetailModal] molId changed to:', molId, '- resetting data');
+    setSpectrumData(null);
+    setFetchedMultiplicityData(null);
+    setMultiplicityError(null);
+    setZoomRange(null);
+    setError(null);
+  }, [molId]);
+
+  // Tolérance d'annotation dynamique récupérée depuis les paramètres de la tâche
+  const [taskTolerancePpm, setTaskTolerancePpm] = useState(matchTolerancePpm);
+
+  // Récupérer les paramètres d'annotation de la tâche
+  useEffect(() => {
+    if (isOpen && taskId) {
+      getTaskParams(taskId)
+        .then(params => {
+          // Chercher deltaPpm ou ppmTol dans les paramètres
+          const tolerance = params.deltaPpm || params.ppmTol || params.match_tolerance_ppm || matchTolerancePpm;
+          setTaskTolerancePpm(tolerance);
+          console.log('[SpectrumDetailModal] Tolérance d\'annotation:', tolerance, 'ppm');
+        })
+        .catch(err => {
+          console.warn('[SpectrumDetailModal] Failed to get task params:', err);
+          setTaskTolerancePpm(matchTolerancePpm); // Fallback sur la valeur par défaut
+        });
+    }
+  }, [isOpen, taskId, matchTolerancePpm]);
 
   // Fetch multiplicity data from task directory when modal opens
   useEffect(() => {
     if (isOpen && taskId && molId && !multiplicityJson) {
       console.log('[SpectrumDetailModal] Fetching multiplicity data for:', { taskId, molId });
       setLoadingMultiplicity(true);
+      setMultiplicityError(null);
 
       getMultiplicityData(taskId, molId)
         .then(data => {
           console.log('[SpectrumDetailModal] Fetched multiplicity data:', data);
           setFetchedMultiplicityData(data.multiplicity_data);
           setLoadingMultiplicity(false);
+          setMultiplicityError(null);
         })
         .catch(err => {
-          console.warn('[SpectrumDetailModal] Failed to fetch multiplicity data:', err.message);
+          console.warn('[SpectrumDetailModal] Failed to fetch multiplicity data:', err);
+          const errorMsg = err.response?.data?.error || err.message || 'Unknown error';
+          const errorDetails = err.response?.data ? JSON.stringify(err.response.data, null, 2) : '';
+          setMultiplicityError(`${errorMsg}${errorDetails ? '\n\nDetails:\n' + errorDetails : ''}`);
           setFetchedMultiplicityData(null);
           setLoadingMultiplicity(false);
         });
     }
   }, [isOpen, taskId, molId, multiplicityJson]);
+
+  // Initialize parameters from multiplicity JSON
+  useEffect(() => {
+    const multData = multiplicityJson || fetchedMultiplicityData;
+    if (multData && !userChangedParams) {
+      // Load experimental parameters from multiplicity JSON
+      if (multData.freq_MHz) setFreqMhzInternal(multData.freq_MHz);
+      if (multData.solvent) setSolventInternal(multData.solvent);
+      if (multData.temperature_K) setTemperatureInternal(multData.temperature_K);
+      // pH not in JSON, keep default
+      console.log('[SpectrumDetailModal] Loaded parameters from multiplicity JSON:', {
+        freq: multData.freq_MHz,
+        solvent: multData.solvent,
+        temp: multData.temperature_K
+      });
+    }
+  }, [multiplicityJson, fetchedMultiplicityData, userChangedParams]);
+
+  // Fetch experimental Bruker spectrum data when modal opens
+  useEffect(() => {
+    if (isOpen && pdataDir1H) {
+      console.log('[SpectrumDetailModal] Extracting Bruker spectrum from:', pdataDir1H);
+      setLoadingExpSpectrum(true);
+      setExpSpectrumError(null);
+
+      extractBrukerSpectrum(pdataDir1H)
+        .then(data => {
+          // Use reduce to find min/max to avoid stack overflow with large arrays
+          const ppmMin = data.ppm.reduce((min, val) => Math.min(min, val), Infinity);
+          const ppmMax = data.ppm.reduce((max, val) => Math.max(max, val), -Infinity);
+
+          console.log('[SpectrumDetailModal] Extracted experimental spectrum:', {
+            n_points: data.n_points,
+            sf: data.sf,
+            ppm_range: [ppmMin, ppmMax]
+          });
+          setExpSpectrumData(data);
+          setLoadingExpSpectrum(false);
+        })
+        .catch(err => {
+          console.warn('[SpectrumDetailModal] Failed to extract Bruker spectrum:', err);
+          setExpSpectrumError(err.message || 'Failed to load experimental spectrum');
+          setExpSpectrumData(null);
+          setLoadingExpSpectrum(false);
+        });
+    }
+  }, [isOpen, pdataDir1H]);
 
   // Fetch spectrum data
   const fetchSpectrum = useCallback(async () => {
@@ -205,7 +362,10 @@ function SpectrumDetailModal({
 
     // Le JSON de multiplicité est REQUIS
     if (!multData) {
-      setError("No multiplicity data available. Please load a prediction task.");
+      const errorMessage = multiplicityError
+        ? `Failed to load multiplicity data: ${multiplicityError}`
+        : "No multiplicity data available. Please load a prediction task.";
+      setError(errorMessage);
       return;
     }
 
@@ -219,41 +379,67 @@ function SpectrumDetailModal({
         mol_id: molId,
         freq_mhz: freqMhz,
         line_shape: lineShape,
-        ppm_range: [ppmMin, ppmMax],
+        // ppm_range is auto-calculated by backend from molecule shifts
         digital_resolution_hz: 0.1,
-        line_width_hz: lineWidthHz,
+        line_width_hz: lineWidthHz, // Valeur par défaut auto ou manuelle
+        // Paramètres dynamics - le module gère automatiquement OH/NH selon le solvant
+        enable_dynamics: true,  // Toujours actif pour appliquer les corrections
+        solvent: solvent,
+        temperature_k: temperature,
+        ph: ph,
       });
 
       setSpectrumData(data);
       setZoomRange(null);  // Reset zoom on new data
     } catch (err) {
       console.error("[SpectrumDetailModal] Error:", err);
-      setError(err.message || "Failed to simulate spectrum");
+      // Show detailed error for debugging in production
+      let errorMsg = err.message || "Failed to simulate spectrum";
+      if (err.response?.data) {
+        console.error("[SpectrumDetailModal] Server error details:", err.response.data);
+        errorMsg = `${errorMsg}\n\nDetails: ${JSON.stringify(err.response.data, null, 2)}`;
+      }
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
-  }, [molId, freqMhz, lineShape, ppmMin, ppmMax, multiplicityJson, fetchedMultiplicityData, lineWidthHz, loadingMultiplicity]);
+  }, [molId, freqMhz, lineShape, multiplicityJson, fetchedMultiplicityData, lineWidthHz, solvent, temperature, ph, loadingMultiplicity, multiplicityError]);
 
-  // Trigger simulation when modal opens or data/params change
+  // Trigger simulation ONLY on modal open (not on param changes)
   useEffect(() => {
     // Ne pas lancer la simulation si on est encore en train de charger les données
-    if (loadingMultiplicity) {
+    if (loadingMultiplicity || isPreloading) {
       console.log('[SpectrumDetailModal] Waiting for multiplicity data to load...');
       return;
     }
 
-    // Lancer la simulation dès que le modal est ouvert ET qu'on a des données
+    // ✅ MODIFICATION: Ne simuler QUE lors du premier chargement
+    // Les changements de paramètres ne déclenchent PAS la simulation automatiquement
+    // L'utilisateur doit cliquer sur "Refresh" pour re-simuler
     if (isOpen && (multiplicityJson || fetchedMultiplicityData)) {
-      console.log('[SpectrumDetailModal] Triggering spectrum simulation');
-      fetchSpectrum();
+      if (!spectrumData && preloadedSpectrumData) {
+        // Utiliser les données pré-chargées seulement au premier rendu
+        console.log('[SpectrumDetailModal] Using preloaded data (first load)');
+        setSpectrumData(preloadedSpectrumData);
+        setLoading(false);
+        setError(null);
+      } else if (!spectrumData) {
+        // Première simulation sans données pré-chargées
+        console.log('[SpectrumDetailModal] Initial spectrum simulation');
+        fetchSpectrum();
+      }
+      // ❌ SUPPRIMÉ: Ne plus re-simuler automatiquement quand userChangedParams = true
+      // L'utilisateur doit maintenant cliquer sur "Refresh"
     }
-  }, [isOpen, loadingMultiplicity, multiplicityJson, fetchedMultiplicityData, freqMhz, lineShape, ppmMin, ppmMax, lineWidthHz, fetchSpectrum]);
+  }, [isOpen, loadingMultiplicity, isPreloading, multiplicityJson, fetchedMultiplicityData, preloadedSpectrumData, spectrumData, fetchSpectrum]);
+  // ✅ SUPPRIMÉ des dépendances: userChangedParams, freqMhz, lineShape, lineWidthHz, solvent, temperature, ph
+  // Car on ne veut PAS re-simuler automatiquement quand ces params changent
 
   // Draw spectrum on canvas
   useEffect(() => {
-    if (!spectrumData || !canvasRef.current) return;
+    if (!spectrumData || !canvasSimRef.current) return;
     
-    const canvas = canvasRef.current;
+    const canvas = canvasSimRef.current;
     const ctx = canvas.getContext("2d");
     const DPR = window.devicePixelRatio || 1;
     
@@ -275,8 +461,11 @@ function SpectrumDetailModal({
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, W, H);
     
-    // Determine PPM range (use zoom if set)
-    const range = zoomRange || { min: ppmMin, max: ppmMax };
+    // Determine PPM range (use zoom if set, otherwise use data range)
+    const defaultRange = spectrumData.ppm_range
+      ? { min: spectrumData.ppm_range[0], max: spectrumData.ppm_range[1] }
+      : { min: Math.min(...spectrumData.ppm), max: Math.max(...spectrumData.ppm) };
+    const range = zoomRange || defaultRange;
     const ppmToX = (ppm) => PAD.left + ((range.max - ppm) / (range.max - range.min)) * plotW;
     
     // Find data indices for current range
@@ -295,15 +484,30 @@ function SpectrumDetailModal({
     }
     if (maxInt === 0) maxInt = 1;
     
-    const intToY = (int) => PAD.top + plotH - (int / maxInt) * plotH * 0.9;
+    // Appliquer l'échelle verticale (verticalScaleSim)
+    const intToY = (int) => PAD.top + plotH - (int / maxInt) * plotH * 0.9 * verticalScaleSim;
     
-    // Draw grid
+    // Draw grid with adaptive step based on zoom level
     ctx.strokeStyle = "#e5e7eb";
     ctx.lineWidth = 1;
     
-    // Vertical grid lines (ppm)
-    const ppmStep = (range.max - range.min) > 6 ? 1 : 0.5;
-    for (let ppm = Math.ceil(range.min); ppm <= range.max; ppm += ppmStep) {
+    // Vertical grid lines (ppm) - adaptive step
+    const ppmRange = range.max - range.min;
+    let ppmStep;
+    if (ppmRange < 0.005) ppmStep = 0.0005;     // Zoom ultra serré: 0.0005 ppm (0.5 Hz à 1000 MHz)
+    else if (ppmRange < 0.01) ppmStep = 0.001;  // Zoom extrême: 0.001 ppm
+    else if (ppmRange < 0.05) ppmStep = 0.005;  // Zoom très très serré: 0.005 ppm
+    else if (ppmRange < 0.1) ppmStep = 0.01;    // Zoom très serré: 0.01 ppm
+    else if (ppmRange < 0.5) ppmStep = 0.05;    // Zoom serré: 0.05 ppm
+    else if (ppmRange < 1) ppmStep = 0.1;       // Zoom moyen: 0.1 ppm
+    else if (ppmRange < 3) ppmStep = 0.2;       // Zoom léger: 0.2 ppm
+    else if (ppmRange < 6) ppmStep = 0.5;       // Vue large: 0.5 ppm
+    else ppmStep = 1;                            // Vue très large: 1 ppm
+    
+    // Aligner sur des multiples du pas
+    const startPpm = Math.floor(range.min / ppmStep) * ppmStep;
+    for (let ppm = startPpm; ppm <= range.max; ppm += ppmStep) {
+      if (ppm < range.min) continue;
       const x = ppmToX(ppm);
       ctx.beginPath();
       ctx.moveTo(x, PAD.top);
@@ -378,74 +582,360 @@ function SpectrumDetailModal({
     ctx.lineTo(PAD.left + plotW, PAD.top + plotH);
     ctx.stroke();
     
-    // Draw ppm labels
+    // Draw ppm labels - adapt precision to zoom level
     ctx.fillStyle = "#374151";
     ctx.font = "11px system-ui, sans-serif";
     ctx.textAlign = "center";
-    for (let ppm = Math.ceil(range.min); ppm <= range.max; ppm += ppmStep) {
+    // Adapter la précision au niveau de zoom
+    const precision = ppmRange < 0.01 ? 4 : ppmRange < 0.1 ? 3 : ppmRange < 1 ? 2 : 1;
+    const startPpmLabel = Math.floor(range.min / ppmStep) * ppmStep;
+    for (let ppm = startPpmLabel; ppm <= range.max; ppm += ppmStep) {
+      if (ppm < range.min) continue;
       const x = ppmToX(ppm);
-      ctx.fillText(ppm.toFixed(1), x, PAD.top + plotH + 15);
+      ctx.fillText(ppm.toFixed(precision), x, PAD.top + plotH + 15);
     }
     
     // X-axis label
     ctx.fillStyle = "#64748b";
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillText("Chemical Shift (ppm)", PAD.left + plotW / 2, H - 8);
-    
-    // Title
-    ctx.fillStyle = "#1e293b";
-    ctx.font = "bold 13px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText(`¹H NMR Spectrum - ${molId}`, PAD.left, 14);
-    
-    // Legend
-    const legendX = W - 180;
-    ctx.font = "11px system-ui, sans-serif";
-    ctx.fillStyle = "#3b82f6";
-    ctx.fillRect(legendX, 8, 12, 3);
-    ctx.fillStyle = "#374151";
-    ctx.fillText("Predicted", legendX + 18, 12);
-    
-    ctx.fillStyle = "#dc2626";
-    ctx.fillRect(legendX + 80, 8, 12, 3);
-    ctx.fillStyle = "#374151";
-    ctx.fillText("Experimental", legendX + 98, 12);
-    
-  }, [spectrumData, theoryShifts, expShifts, zoomRange, ppmMin, ppmMax, molId]);
 
-  // Handle zoom with mouse wheel
+    // Draw zoom selection box if dragging
+    if (isDragging && dragStart) {
+      const currentPos = { x: dragStart.currentX, y: dragStart.currentY };
+      ctx.strokeStyle = "rgba(59, 130, 246, 0.8)";
+      ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+
+      const rectX = Math.min(dragStart.x, currentPos.x);
+      const rectY = PAD.top;
+      const rectW = Math.abs(currentPos.x - dragStart.x);
+      const rectH = plotH;
+
+      ctx.fillRect(rectX, rectY, rectW, rectH);
+      ctx.strokeRect(rectX, rectY, rectW, rectH);
+      ctx.setLineDash([]);
+    }
+
+    // Draw ONE global rectangle around all annotated signals with match tolerance
+    if (expShifts && expShifts.length > 0) {
+      const minSignal = Math.min(...expShifts);
+      const maxSignal = Math.max(...expShifts);
+      
+      const ppmMin = minSignal - taskTolerancePpm;
+      const ppmMax = maxSignal + taskTolerancePpm;
+
+      const xMin = ppmToX(ppmMax); // Reversed for NMR
+      const xMax = ppmToX(ppmMin);
+      const rectX = xMin;
+      const rectW = xMax - xMin;
+      const rectY = PAD.top;
+      const rectH = plotH;
+
+      ctx.strokeStyle = "#f59e0b";
+      ctx.fillStyle = "rgba(245, 158, 11, 0.08)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      ctx.fillRect(rectX, rectY, rectW, rectH);
+      ctx.strokeRect(rectX, rectY, rectW, rectH);
+      ctx.setLineDash([]);
+    }
+    
+  }, [spectrumData, theoryShifts, expShifts, zoomRange, molId, verticalScaleSim, isDragging, dragStart, taskTolerancePpm]);
+
+  // Draw experimental spectrum on canvas with zoom rectangles
+  useEffect(() => {
+    if (!expSpectrumData || !canvasExpRef.current || !spectrumData) return;
+
+    const canvas = canvasExpRef.current;
+    const ctx = canvas.getContext("2d");
+    const DPR = window.devicePixelRatio || 1;
+
+    const container = canvas.parentElement;
+    const W = container.clientWidth || 800;
+    const H = container.clientHeight || 400;
+
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    canvas.style.width = `${W}px`;
+    canvas.style.height = `${H}px`;
+    ctx.scale(DPR, DPR);
+
+    const PAD = { top: 20, right: 30, bottom: 40, left: 50 };
+    const plotW = W - PAD.left - PAD.right;
+    const plotH = H - PAD.top - PAD.bottom;
+
+    // Clear
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, W, H);
+
+    // Use same PPM range as simulated spectrum for alignment
+    const defaultRange = spectrumData.ppm_range
+      ? { min: spectrumData.ppm_range[0], max: spectrumData.ppm_range[1] }
+      : { min: Math.min(...spectrumData.ppm), max: Math.max(...spectrumData.ppm) };
+    const range = zoomRange || defaultRange;
+    const ppmToX = (ppm) => PAD.left + ((range.max - ppm) / (range.max - range.min)) * plotW;
+
+    // Filter experimental data in range (with offset applied)
+    const ppmArr = expSpectrumData.ppm;
+    const intArr = expSpectrumData.intensity;
+
+    let maxInt = 0;
+    const visibleData = [];
+    for (let i = 0; i < ppmArr.length; i++) {
+      // Apply ppm offset to shift experimental spectrum
+      const ppm = ppmArr[i] + ppmOffsetExp;
+      if (ppm >= range.min && ppm <= range.max) {
+        visibleData.push({ ppm, int: intArr[i] });
+        if (Math.abs(intArr[i]) > maxInt) maxInt = Math.abs(intArr[i]);
+      }
+    }
+    if (maxInt === 0) maxInt = 1;
+
+    // Apply vertical scale for experimental spectrum (independent)
+    const intToY = (int) => PAD.top + plotH - (int / maxInt) * plotH * 0.9 * verticalScaleExp;
+
+    // Draw grid with adaptive step
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.lineWidth = 1;
+
+    const ppmRange = range.max - range.min;
+    let ppmStep;
+    if (ppmRange < 0.005) ppmStep = 0.0005;     // Zoom ultra serré: 0.0005 ppm
+    else if (ppmRange < 0.01) ppmStep = 0.001;  // Zoom extrême: 0.001 ppm
+    else if (ppmRange < 0.05) ppmStep = 0.005;  // Zoom très très serré: 0.005 ppm
+    else if (ppmRange < 0.1) ppmStep = 0.01;    // Zoom très serré: 0.01 ppm
+    else if (ppmRange < 0.5) ppmStep = 0.05;    // Zoom serré: 0.05 ppm
+    else if (ppmRange < 1) ppmStep = 0.1;       // Zoom moyen: 0.1 ppm
+    else if (ppmRange < 3) ppmStep = 0.2;       // Zoom léger: 0.2 ppm
+    else if (ppmRange < 6) ppmStep = 0.5;       // Vue large: 0.5 ppm
+    else ppmStep = 1;                            // Vue très large: 1 ppm
+    
+    const startPpm = Math.floor(range.min / ppmStep) * ppmStep;
+    for (let ppm = startPpm; ppm <= range.max; ppm += ppmStep) {
+      if (ppm < range.min) continue;
+      const x = ppmToX(ppm);
+      ctx.beginPath();
+      ctx.moveTo(x, PAD.top);
+      ctx.lineTo(x, PAD.top + plotH);
+      ctx.stroke();
+    }
+
+    // Draw experimental spectrum (red)
+    ctx.strokeStyle = "#dc2626";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    let started = false;
+    for (const pt of visibleData) {
+      const x = ppmToX(pt.ppm);
+      const y = intToY(pt.int);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.stroke();
+
+    // Draw ONE global rectangle around all annotated signals with match tolerance  
+    if (expShifts && expShifts.length > 0) {
+      const minSignal = Math.min(...expShifts);
+      const maxSignal = Math.max(...expShifts);
+      
+      const ppmMin = minSignal - taskTolerancePpm;
+      const ppmMax = maxSignal + taskTolerancePpm;
+
+      const xMin = ppmToX(ppmMax); // Reversed for NMR
+      const xMax = ppmToX(ppmMin);
+      const rectX = xMin;
+      const rectW = xMax - xMin;
+      const rectY = PAD.top;
+      const rectH = plotH;
+
+      ctx.strokeStyle = "#f59e0b";
+      ctx.fillStyle = "rgba(245, 158, 11, 0.08)";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      ctx.fillRect(rectX, rectY, rectW, rectH);
+      ctx.strokeRect(rectX, rectY, rectW, rectH);
+      ctx.setLineDash([]);
+    }
+
+    // X-axis labels - show ORIGINAL ppm values (without offset) for experimental spectrum
+    // This way user sees the real experimental ppm values
+    ctx.fillStyle = "#64748b";
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    // Adapter la précision au niveau de zoom
+    const precision = ppmRange < 0.01 ? 4 : ppmRange < 0.1 ? 3 : ppmRange < 1 ? 2 : 1;
+    const startPpmLabel = Math.floor(range.min / ppmStep) * ppmStep;
+    for (let ppm = startPpmLabel; ppm <= range.max; ppm += ppmStep) {
+      if (ppm < range.min) continue;
+      const x = ppmToX(ppm);
+      // Display the original experimental ppm (subtract the offset to show what ppm the data really is)
+      const originalPpm = ppm - ppmOffsetExp;
+      ctx.fillText(originalPpm.toFixed(precision), x, H - 20);
+    }
+
+    ctx.fillText("Chemical Shift (ppm)", PAD.left + plotW / 2, H - 8);
+
+  }, [expSpectrumData, spectrumData, expShifts, zoomRange, taskTolerancePpm, verticalScaleExp, ppmOffsetExp]);
+
+  // Handle mouse wheel for vertical scale (intensity)
   const handleWheel = useCallback((e) => {
     e.preventDefault();
     if (!spectrumData) return;
-    
-    const canvas = canvasRef.current;
+
+    // Ctrl/Cmd + wheel = horizontal zoom, otherwise = vertical scale
+    if (e.ctrlKey || e.metaKey) {
+      // Horizontal zoom (PPM axis)
+      // Use the canvas that received the event (works for both simulated and experimental)
+      const canvas = e.currentTarget;
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+
+      const PAD = { left: 50, right: 30 };
+      const plotW = rect.width - PAD.left - PAD.right;
+
+      const defaultRange = spectrumData.ppm_range
+        ? { min: spectrumData.ppm_range[0], max: spectrumData.ppm_range[1] }
+        : { min: Math.min(...spectrumData.ppm), max: Math.max(...spectrumData.ppm) };
+      const range = zoomRange || defaultRange;
+      const centerPpm = range.max - ((mouseX - PAD.left) / plotW) * (range.max - range.min);
+
+      const zoomFactor = e.deltaY < 0 ? 0.8 : 1.25;
+      const newWidth = (range.max - range.min) * zoomFactor;
+
+      // Permettre un zoom très précis jusqu'à 0.001 ppm (1 Hz à 1000 MHz)
+      if (newWidth < 0.001 || newWidth > 15) return;
+
+      let newMin = centerPpm - newWidth / 2;
+      let newMax = centerPpm + newWidth / 2;
+
+      if (newMin < -1) { newMin = -1; newMax = newMin + newWidth; }
+      if (newMax > 15) { newMax = 15; newMin = 15 - newWidth; }
+
+      setZoomRange({ min: newMin, max: newMax });
+    } else {
+      // Vertical scale (intensity axis) - independent for each spectrum
+      const scaleDelta = e.deltaY < 0 ? 1.1 : 0.9;
+      const canvas = e.currentTarget;
+      const isExpCanvas = canvas === canvasExpRef.current;
+      if (isExpCanvas) {
+        const newScale = Math.max(0.1, Math.min(10, verticalScaleExp * scaleDelta));
+        setVerticalScaleExp(newScale);
+      } else {
+        const newScale = Math.max(0.1, Math.min(10, verticalScaleSim * scaleDelta));
+        setVerticalScaleSim(newScale);
+      }
+    }
+  }, [spectrumData, zoomRange, verticalScaleSim, verticalScaleExp]);
+
+  // Mouse handlers for drag-to-zoom selection and horizontal panning
+  const handleMouseDown = useCallback((e) => {
+    if (!spectrumData) return;
+    // Use the canvas that received the event (works for both simulated and experimental)
+    const canvas = e.currentTarget;
     const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const isExpCanvas = canvas === canvasExpRef.current;
+
+    const PAD = { top: 20, left: 50, bottom: 40, right: 30 };
+
+    // Only start drag in plot area
+    if (x >= PAD.left && x <= rect.width - PAD.right &&
+        y >= PAD.top && y <= rect.height - PAD.bottom) {
+      // Shift+drag on experimental canvas = horizontal panning
+      const isPanning = e.shiftKey && isExpCanvas;
+      setIsDragging(true);
+      setDragStart({ x, y, currentX: x, currentY: y, canvas, isPanning, startOffset: ppmOffsetExp });
+    }
+  }, [spectrumData, ppmOffsetExp]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isDragging || !dragStart) return;
+    const canvas = dragStart.canvas;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // If panning the experimental spectrum
+    if (dragStart.isPanning) {
+      const PAD = { left: 50, right: 30 };
+      const plotW = rect.width - PAD.left - PAD.right;
+      
+      const defaultRange = spectrumData.ppm_range
+        ? { min: spectrumData.ppm_range[0], max: spectrumData.ppm_range[1] }
+        : { min: Math.min(...spectrumData.ppm), max: Math.max(...spectrumData.ppm) };
+      const range = zoomRange || defaultRange;
+      
+      // Calculate ppm delta from pixel movement
+      const ppmPerPixel = (range.max - range.min) / plotW;
+      const deltaX = x - dragStart.x;
+      // Moving right (positive deltaX) = shift spectrum to lower ppm (negative offset)
+      const deltaPpm = -deltaX * ppmPerPixel;
+      
+      setPpmOffsetExp(dragStart.startOffset + deltaPpm);
+    }
+
+    setDragStart({ ...dragStart, currentX: x, currentY: y });
+  }, [isDragging, dragStart, spectrumData, zoomRange]);
+
+  const handleMouseUp = useCallback(() => {
+    if (!isDragging || !dragStart) return;
+
+    // If it was a panning operation, just end it (offset already applied in handleMouseMove)
+    if (dragStart.isPanning) {
+      setIsDragging(false);
+      setDragStart(null);
+      return;
+    }
+
+    // Use the canvas that was stored in dragStart (works for both simulated and experimental)
+    const canvas = dragStart.canvas;
+    if (!canvas) {
+      setIsDragging(false);
+      setDragStart(null);
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
     const PAD = { left: 50, right: 30 };
     const plotW = rect.width - PAD.left - PAD.right;
-    
-    const range = zoomRange || { min: ppmMin, max: ppmMax };
-    const centerPpm = range.max - ((mouseX - PAD.left) / plotW) * (range.max - range.min);
-    
-    const zoomFactor = e.deltaY < 0 ? 0.8 : 1.25;
-    const newWidth = (range.max - range.min) * zoomFactor;
-    
-    // Limit zoom
-    if (newWidth < 0.5 || newWidth > 15) return;
-    
-    let newMin = centerPpm - newWidth / 2;
-    let newMax = centerPpm + newWidth / 2;
-    
-    // Clamp to valid range
-    if (newMin < 0) { newMin = 0; newMax = newWidth; }
-    if (newMax > 15) { newMax = 15; newMin = 15 - newWidth; }
-    
-    setZoomRange({ min: newMin, max: newMax });
-  }, [spectrumData, zoomRange, ppmMin, ppmMax]);
+
+    const defaultRange = spectrumData.ppm_range
+      ? { min: spectrumData.ppm_range[0], max: spectrumData.ppm_range[1] }
+      : { min: Math.min(...spectrumData.ppm), max: Math.max(...spectrumData.ppm) };
+    const range = zoomRange || defaultRange;
+
+    // Convert pixel positions to PPM
+    const xToPpm = (x) => range.max - ((x - PAD.left) / plotW) * (range.max - range.min);
+
+    const ppm1 = xToPpm(dragStart.x);
+    const ppm2 = xToPpm(dragStart.currentX);
+
+    const newMin = Math.min(ppm1, ppm2);
+    const newMax = Math.max(ppm1, ppm2);
+
+    // Only zoom if selection is wide enough (0.001 ppm = ~0.7 Hz at 700 MHz)
+    if (Math.abs(newMax - newMin) > 0.001) {
+      setZoomRange({ min: newMin, max: newMax });
+    }
+
+    setIsDragging(false);
+    setDragStart(null);
+  }, [isDragging, dragStart, zoomRange, spectrumData]);
 
   // Reset zoom
-  const resetZoom = () => setZoomRange(null);
+  const resetZoom = () => {
+    setZoomRange(null);
+    setVerticalScaleSim(1.0);
+    setVerticalScaleExp(1.0);
+    setPpmOffsetExp(0.0);
+  };
 
   if (!isOpen) return null;
 
@@ -463,22 +953,6 @@ function SpectrumDetailModal({
           
           <div style={MODAL_STYLES.controls}>
             <div style={MODAL_STYLES.controlGroup}>
-              <span style={MODAL_STYLES.label}>Frequency:</span>
-              <select
-                style={MODAL_STYLES.select}
-                value={freqMhz}
-                onChange={(e) => setFreqMhz(Number(e.target.value))}
-              >
-                <option value={400}>400 MHz</option>
-                <option value={500}>500 MHz</option>
-                <option value={600}>600 MHz</option>
-                <option value={700}>700 MHz</option>
-                <option value={800}>800 MHz</option>
-                <option value={900}>900 MHz</option>
-              </select>
-            </div>
-            
-            <div style={MODAL_STYLES.controlGroup}>
               <span style={MODAL_STYLES.label}>Line Shape:</span>
               <select
                 style={MODAL_STYLES.select}
@@ -490,40 +964,64 @@ function SpectrumDetailModal({
                 <option value="voigt">Voigt</option>
               </select>
             </div>
-            
+
             <div style={MODAL_STYLES.controlGroup}>
               <span style={MODAL_STYLES.label}>Line Width:</span>
               <input
-                type="number"
-                style={{ ...MODAL_STYLES.input, width: 60 }}
+                type="range"
+                style={{ width: 120, marginRight: 8 }}
                 value={lineWidthHz}
                 onChange={(e) => setLineWidthHz(Number(e.target.value))}
+                min={0.1}
+                max={5}
+                step={0.1}
+              />
+              <input
+                type="number"
+                style={{ ...MODAL_STYLES.input, width: 50 }}
+                value={lineWidthHz}
+                onChange={(e) => {
+                  // Update value immediately for display
+                  setLineWidthHzInternal(Number(e.target.value));
+                }}
+                onBlur={(e) => {
+                  // Only trigger simulation when user finishes typing (blur)
+                  const newValue = Number(e.target.value);
+                  if (newValue >= 0.1 && newValue <= 10) {
+                    setLineWidthHz(newValue);
+                  } else {
+                    // Reset to valid value if out of range
+                    setLineWidthHzInternal(lineWidthHz);
+                  }
+                }}
                 min={0.1}
                 max={10}
                 step={0.1}
               />
               <span style={{ fontSize: 11, color: "#6b7280" }}>Hz</span>
+              <button
+                onClick={resetLineWidthToAuto}
+                style={{
+                  marginLeft: 8,
+                  padding: "3px 8px",
+                  fontSize: 11,
+                  borderRadius: 4,
+                  border: "1px solid #d1d5db",
+                  background: isLineWidthAuto ? "#e0f2fe" : "#fff",
+                  color: isLineWidthAuto ? "#0369a1" : "#64748b",
+                  cursor: "pointer",
+                  fontWeight: isLineWidthAuto ? 600 : 400,
+                }}
+                title={`Auto: ${getDefaultLineWidth(freqMhz).toFixed(2)} Hz at ${freqMhz} MHz`}
+              >
+                Auto
+              </button>
             </div>
-            
-            <div style={MODAL_STYLES.controlGroup}>
-              <span style={MODAL_STYLES.label}>PPM Range:</span>
-              <input
-                type="number"
-                style={MODAL_STYLES.input}
-                value={ppmMin}
-                onChange={(e) => setPpmMin(Number(e.target.value))}
-                step={0.5}
-              />
-              <span>-</span>
-              <input
-                type="number"
-                style={MODAL_STYLES.input}
-                value={ppmMax}
-                onChange={(e) => setPpmMax(Number(e.target.value))}
-                step={0.5}
-              />
+
+            <div style={{ display: 'flex', gap: 12, fontSize: 11, color: '#6b7280', alignItems: 'center', marginLeft: 12, paddingLeft: 12, borderLeft: '1px solid #e5e7eb' }}>
+              <span><strong>Conditions:</strong> {freqMhz} MHz, {solvent}, {temperature}K</span>
             </div>
-            
+
             <button
               onClick={fetchSpectrum}
               disabled={loading}
@@ -541,23 +1039,49 @@ function SpectrumDetailModal({
               {loading ? "Simulating..." : "Refresh"}
             </button>
             
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {zoomRange && (
-                <button
-                  onClick={resetZoom}
-                  style={{
-                    padding: "6px 12px",
-                    backgroundColor: "#f1f5f9",
-                    color: "#374151",
-                    border: "1px solid #d1d5db",
-                    borderRadius: 4,
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
-                >
-                  Reset Zoom
-                </button>
-              )}
+            <div style={MODAL_STYLES.controlGroup}>
+              <span style={MODAL_STYLES.label}>Vertical Scale:</span>
+              <input
+                type="range"
+                style={{ width: 100, marginRight: 8 }}
+                value={verticalScaleSim}
+                onChange={(e) => { setVerticalScaleSim(Number(e.target.value)); setVerticalScaleExp(Number(e.target.value)); }}
+                min={0.1}
+                max={10}
+                step={0.1}
+              />
+              <input
+                type="number"
+                style={{ ...MODAL_STYLES.input, width: 50 }}
+                value={verticalScaleSim.toFixed(1)}
+                onChange={(e) => { setVerticalScaleSim(Number(e.target.value)); setVerticalScaleExp(Number(e.target.value)); }}
+                min={0.1}
+                max={10}
+                step={0.1}
+              />
+              <span style={{ fontSize: 11, color: "#6b7280" }}>×</span>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                onClick={resetZoom}
+                disabled={!zoomRange && verticalScaleSim === 1.0 && verticalScaleExp === 1.0 && ppmOffsetExp === 0.0}
+                style={{
+                  padding: "6px 12px",
+                  backgroundColor: zoomRange || verticalScaleSim !== 1.0 || verticalScaleExp !== 1.0 || ppmOffsetExp !== 0.0 ? "#f1f5f9" : "#f8fafc",
+                  color: "#374151",
+                  border: "1px solid #d1d5db",
+                  borderRadius: 4,
+                  cursor: zoomRange || verticalScaleSim !== 1.0 || verticalScaleExp !== 1.0 || ppmOffsetExp !== 0.0 ? "pointer" : "not-allowed",
+                  fontSize: 12,
+                  opacity: zoomRange || verticalScaleSim !== 1.0 || verticalScaleExp !== 1.0 || ppmOffsetExp !== 0.0 ? 1 : 0.5,
+                }}
+              >
+                Reset View
+              </button>
+              <span style={{ fontSize: 10, color: "#64748b", fontStyle: "italic" }}>
+                💡 Drag to zoom | Scroll to scale | Ctrl+Scroll for H-zoom | Shift+Drag on Exp. to align
+              </span>
               <button
                 onClick={onClose}
                 style={{
@@ -611,11 +1135,110 @@ function SpectrumDetailModal({
             )}
             
             {!loading && !error && (
-              <canvas
-                ref={canvasRef}
-                onWheel={handleWheel}
-                style={{ display: "block", width: "100%", height: "100%" }}
-              />
+              <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 8 }}>
+                {/* Spectre simulé (en haut) */}
+                <div style={{ flex: 1, position: "relative", border: "1px solid #e5e7eb", borderRadius: 8, minHeight: 0 }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 4,
+                    left: 8,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#3b82f6",
+                    zIndex: 10
+                  }}>
+                    Simulated Spectrum
+                  </div>
+                  <canvas
+                    ref={canvasSimRef}
+                    onWheel={handleWheel}
+                    onMouseDown={handleMouseDown}
+                    onMouseMove={handleMouseMove}
+                    onMouseUp={handleMouseUp}
+                    onMouseLeave={handleMouseUp}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      height: "100%",
+                      cursor: isDragging ? "crosshair" : "default"
+                    }}
+                  />
+                </div>
+
+                {/* Spectre expérimental (en bas) */}
+                <div style={{ flex: 1, position: "relative", border: "1px solid #e5e7eb", borderRadius: 8, minHeight: 0 }}>
+                  <div style={{
+                    position: "absolute",
+                    top: 4,
+                    left: 8,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "#ef4444",
+                    zIndex: 10
+                  }}>
+                    Experimental Spectrum
+                    {ppmOffsetExp !== 0 && (
+                      <span style={{ marginLeft: 8, fontSize: 10, color: "#f97316", fontWeight: 500 }}>
+                        (shifted {ppmOffsetExp > 0 ? '+' : ''}{ppmOffsetExp.toFixed(2)} ppm)
+                      </span>
+                    )}
+                  </div>
+                  {loadingExpSpectrum && (
+                    <div style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                      textAlign: "center",
+                      color: "#64748b"
+                    }}>
+                      Loading experimental data...
+                    </div>
+                  )}
+                  {expSpectrumError && (
+                    <div style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                      textAlign: "center",
+                      color: "#ef4444",
+                      fontSize: 12
+                    }}>
+                      {expSpectrumError}
+                    </div>
+                  )}
+                  {!loadingExpSpectrum && !expSpectrumError && expSpectrumData && (
+                    <canvas
+                      ref={canvasExpRef}
+                      onWheel={handleWheel}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={handleMouseUp}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        height: "100%",
+                        cursor: isDragging ? "crosshair" : "default"
+                      }}
+                    />
+                  )}
+                  {!loadingExpSpectrum && !expSpectrumError && !expSpectrumData && (
+                    <div style={{
+                      position: "absolute",
+                      top: "50%",
+                      left: "50%",
+                      transform: "translate(-50%, -50%)",
+                      textAlign: "center",
+                      color: "#94a3b8",
+                      fontSize: 12
+                    }}>
+                      No experimental data available
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
           

@@ -190,6 +190,11 @@ hiddenimports.extend([
     'rdkit.Chem',
     'rdkit.Chem.Descriptors',
     'rdkit.Chem.AllChem',
+    'rdkit.Chem.rdmolfiles',
+    'rdkit.Chem.rdchem',
+    'rdkit.Chem.ChemicalFeatures',
+    'rdkit.RDConfig',
+    'rdkit.rdBase',
     # For nmr_export_bg.py spectral background export
     'nmrglue',
     'nmrglue.bruker',
@@ -199,6 +204,37 @@ hiddenimports.extend([
     'matplotlib.pyplot',
     'matplotlib.backends',
     'matplotlib.backends.backend_agg',
+    # Additional standard library and third-party
+    'concurrent.futures',
+    'dataclasses',
+    'pathlib',
+    'typing',
+    'uuid',
+    'csv',
+    'json',
+    'argparse',
+    'importlib.util',
+    'shutil',
+    'random',
+    'traceback',
+    'time',
+    're',
+    'os',
+    'sys',
+    # Local ML modules
+    'gnn_models.mpnn_proposed',
+    'gnn_models.mpnn_baseline',
+    'model',
+    'util',
+    'dataset',
+    'training',
+    'inference',
+    'collate_reaction_graphs',
+    'GraphDataset',
+    # NMR plugins
+    'nmr_plugins.dynamics',
+    # Diastereotopic delta table
+    'diastereotopic_delta_table',
 ])
 
 excludes = [
@@ -224,12 +260,31 @@ for item in datas:
             target_dest = os.path.join(dest, os.path.basename(src))
             final_datas.append((target_dest, src, 'DATA'))
         elif os.path.isdir(src):
+            # Windows reserved device names to skip
+            RESERVED_NAMES = {'con', 'prn', 'aux', 'nul', 'com1', 'com2', 'com3', 'com4',
+                              'com5', 'com6', 'com7', 'com8', 'com9', 'lpt1', 'lpt2',
+                              'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9'}
             for root, dirs, files in os.walk(src):
+                # Skip test directories
+                dirs[:] = [d for d in dirs if not d.startswith('test_output')]
                 for f in files:
+                    # Skip test files
+                    if f.startswith('test_') or f.startswith('trace_') or f.startswith('debug_'):
+                        continue
+                    # Skip Windows reserved device names (nul, con, prn, etc.)
+                    if f.lower().split('.')[0] in RESERVED_NAMES:
+                        continue
                     abs_file = os.path.join(root, f)
-                    rel_path = os.path.relpath(abs_file, src)
-                    target_dest = os.path.join(dest, rel_path)
-                    final_datas.append((target_dest, abs_file, 'DATA'))
+                    # Skip if not a real file (e.g., Windows devices)
+                    if not os.path.isfile(abs_file):
+                        continue
+                    try:
+                        rel_path = os.path.relpath(abs_file, src)
+                        target_dest = os.path.join(dest, rel_path)
+                        final_datas.append((target_dest, abs_file, 'DATA'))
+                    except ValueError as e:
+                        # Skip files with invalid paths
+                        print(f"Skipping invalid path: {abs_file} ({e})")
     elif len(item) == 3:
         final_datas.append(item)
 

@@ -98,12 +98,19 @@ function getRscript() {
     }
   }
 
-  // NO FALLBACK TO SYSTEM R - App must be autonomous
-  console.error('[getRscript] ERROR: R-Portable not found! App requires bundled R-Portable.');
+  // PRIORITY 4: Docker/server mode - use R_PATH env var (system R)
+  if (process.env.R_PATH && fs.existsSync(process.env.R_PATH)) {
+    console.log('[getRscript] Using R_PATH (Docker/server mode):', process.env.R_PATH);
+    return process.env.R_PATH;
+  }
+
+  // NO FALLBACK - App must have R available
+  console.error('[getRscript] ERROR: Rscript not found!');
   console.error('[getRscript] Checked BUNDLED_R_PATH:', process.env.BUNDLED_R_PATH);
   console.error('[getRscript] Checked RESOURCES_PATH:', process.env.RESOURCES_PATH);
+  console.error('[getRscript] Checked R_PATH:', process.env.R_PATH);
   console.error('[getRscript] Checked dev path:', devRPortable);
-  throw new Error('R-Portable not found. The application requires the bundled R-Portable to run.');
+  throw new Error('Rscript not found. Set R_PATH or provide bundled R-Portable.');
 }
 
 function buildREnv(memoryLimitMB, rscriptPath = null) {
@@ -190,10 +197,17 @@ function getPythonExe(forML = false) {
   // PRIORITY 2: Check RESOURCES_PATH for bundled Python (Electron packaged)
   if (process.env.RESOURCES_PATH) {
     for (const exeName of exeNames) {
-      const candidate = path.join(process.env.RESOURCES_PATH, 'python', exeName);
-      if (fs.existsSync(candidate)) {
-        console.log('[getPythonExe] Found bundled Python at:', candidate);
-        return candidate;
+      // Try python/nmr_engine_production/nmr_engine_production.exe (new structure)
+      const candidate1 = path.join(process.env.RESOURCES_PATH, 'python', 'nmr_engine_production', exeName);
+      if (fs.existsSync(candidate1)) {
+        console.log('[getPythonExe] Found bundled Python at:', candidate1);
+        return candidate1;
+      }
+      // Fallback to python/nmr_engine_production.exe (old structure)
+      const candidate2 = path.join(process.env.RESOURCES_PATH, 'python', exeName);
+      if (fs.existsSync(candidate2)) {
+        console.log('[getPythonExe] Found bundled Python at:', candidate2);
+        return candidate2;
       }
     }
   }
@@ -216,13 +230,19 @@ function getPythonExe(forML = false) {
     }
   }
   
+  // PRIORITY 5: Docker/server mode - use PRED_PYTHON env var (conda python)
+  if (process.env.PRED_PYTHON && fs.existsSync(process.env.PRED_PYTHON)) {
+    console.log('[getPythonExe] Using PRED_PYTHON (Docker/server mode):', process.env.PRED_PYTHON);
+    return process.env.PRED_PYTHON;
+  }
+
   // NO FALLBACK TO SYSTEM PYTHON - App must be autonomous
-  console.error('[getPythonExe] ERROR: Bundled Python not found! App requires bundled nmr_engine.');
+  console.error('[getPythonExe] ERROR: Python not found!');
   console.error('[getPythonExe] Checked BUNDLED_PYTHON_PATH:', process.env.BUNDLED_PYTHON_PATH);
   console.error('[getPythonExe] Checked RESOURCES_PATH:', process.env.RESOURCES_PATH);
+  console.error('[getPythonExe] Checked PRED_PYTHON:', process.env.PRED_PYTHON);
   console.error('[getPythonExe] Checked dev dist:', path.join(__dirname, '..', 'dist', 'nmr_engine_production'));
-  console.error('[getPythonExe] Checked dev prebuilt:', path.join(__dirname, '..', '..', 'resources', 'python'));
-  throw new Error('Bundled Python (nmr_engine) not found. The application requires the bundled Python to run predictions.');
+  throw new Error('Python not found. Set PRED_PYTHON or provide bundled nmr_engine.');
 }
 
 function detectDatasetDir() {
@@ -274,6 +294,13 @@ function buildPythonEnv() {
     env.PYTHONPATH = env.PYTHONPATH
       ? `${scriptsAbs}${path.delimiter}${env.PYTHONPATH}`
       : scriptsAbs;
+    
+    // Allow hot-patching bundled scripts without recompilation
+    // NMR_SCRIPTS_OVERRIDE tells the bundled exe to load scripts from external path
+    if (fs.existsSync(scriptsAbs)) {
+      env.NMR_SCRIPTS_OVERRIDE = scriptsAbs;
+      console.log('[buildPythonEnv] NMR_SCRIPTS_OVERRIDE:', scriptsAbs);
+    }
   } catch {}
 
   return env;

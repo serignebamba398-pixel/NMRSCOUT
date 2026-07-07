@@ -1,52 +1,60 @@
 #!/bin/bash
 # ==========================================
-# Script de build et push des images Docker v3
-# Avec les corrections Unicode et R
+# Script de build et push des images Docker
+# Multi-platform: linux/amd64 + linux/arm64
+# Compatible Windows (x64), Mac Intel, Mac ARM, Linux
 # ==========================================
 
 set -e
 
 REGISTRY="docker.io/serignebamba398"
-VERSION="v3"
+VERSION="${1:-v1}"
+PLATFORMS="linux/amd64,linux/arm64"
 BACKEND_IMAGE="${REGISTRY}/annotation-nmr-backend:${VERSION}"
 FRONTEND_IMAGE="${REGISTRY}/annotation-nmr-frontend:${VERSION}"
+BUILDER_NAME="nmr-multiarch"
 
 echo "=========================================="
-echo "Building Docker images version ${VERSION}"
+echo "Multi-platform Docker build (${PLATFORMS})"
+echo "Version: ${VERSION}"
 echo "=========================================="
 
-# Build Backend
+# ---- Ensure buildx builder exists ----
+if ! docker buildx inspect "${BUILDER_NAME}" > /dev/null 2>&1; then
+    echo "[setup] Creating buildx builder '${BUILDER_NAME}'..."
+    docker buildx create --name "${BUILDER_NAME}" --driver docker-container --use
+else
+    docker buildx use "${BUILDER_NAME}"
+fi
+
+# ---- Build & push backend (multi-arch) ----
 echo ""
-echo "[1/4] Building backend image..."
-docker build \
+echo "[1/2] Building & pushing backend (multi-arch)..."
+docker buildx build \
+    --platform "${PLATFORMS}" \
     -f docker/Dockerfile.backend \
-    -t ${BACKEND_IMAGE} \
-    --platform linux/amd64 \
+    -t "${BACKEND_IMAGE}" \
+    --push \
     .
 
+# ---- Build & push frontend (multi-arch) ----
 echo ""
-echo "[2/4] Building frontend image..."
-docker build \
+echo "[2/2] Building & pushing frontend (multi-arch)..."
+docker buildx build \
+    --platform "${PLATFORMS}" \
     -f docker/Dockerfile.frontend \
-    -t ${FRONTEND_IMAGE} \
-    --platform linux/amd64 \
+    -t "${FRONTEND_IMAGE}" \
+    --push \
     .
-
-echo ""
-echo "[3/4] Pushing backend image..."
-docker push ${BACKEND_IMAGE}
-
-echo ""
-echo "[4/4] Pushing frontend image..."
-docker push ${FRONTEND_IMAGE}
 
 echo ""
 echo "=========================================="
-echo "Done! Images pushed:"
+echo "Done! Multi-arch images pushed:"
 echo "  - ${BACKEND_IMAGE}"
 echo "  - ${FRONTEND_IMAGE}"
+echo ""
+echo "Supported platforms: ${PLATFORMS}"
 echo "=========================================="
 echo ""
-echo "Update docker-compose.shareable.yml with:"
-echo "  backend:  image: ${BACKEND_IMAGE}"
-echo "  frontend: image: ${FRONTEND_IMAGE}"
+echo "Users can now run on any OS with:"
+echo "  docker compose -f docker-compose.shareable.yml up -d"
