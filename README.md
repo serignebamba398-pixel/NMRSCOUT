@@ -1,72 +1,110 @@
-# annotation-nmr (NMRScout)
+# NMRScout
 
-Desktop app (Electron) for NMR annotation.
+Application d'annotation et de prédiction RMN (NMR) pour les produits naturels.
 
-## Repo structure
+Disponible en deux versions :
+- **Docker** : application web accessible via navigateur (recommandé)
+- **Electron** : application desktop Windows
 
-- `frontend/`: React (Create React App)
-- `backend/`: Node.js API + Python ML/NMR engine entrypoints
-- `docker/` + `docker-compose*.yml`: container workflows
-- `R-Portable/`: bundled R runtime (used by annotation scripts; required at runtime)
+## Installation Docker (recommandé)
 
-## Prerequisites
+Fonctionne sur **Windows, macOS (Intel + Apple Silicon), et Linux**.
 
-- Git LFS: `git lfs install` (required for large models/data)
-- Node.js (for Electron + frontend/backend)
-- Python (for ML/NMR scripts; see `requirements.txt` and `backend/requirements.cpu.txt`)
+### Prérequis
 
-## Development
+- [Docker Desktop](https://docs.docker.com/desktop/install/) installé et démarré
 
-Run everything (backend + frontend + Electron):
+### Installation
 
-```powershell
-npm install
-npm start
+**Windows** : double-cliquez sur `install.bat`
+
+**macOS / Linux** :
+```bash
+chmod +x install.sh
+./install.sh
 ```
 
-Frontend only:
+L'application sera accessible sur **http://localhost:3000**
 
-```powershell
-cd frontend
-npm install
-npm start
+### Commandes utiles
+
+```bash
+# Arrêter
+docker compose -f docker-compose.shareable.yml down
+
+# Relancer
+docker compose -f docker-compose.shareable.yml up -d
+
+# Voir les logs
+docker compose -f docker-compose.shareable.yml logs -f
 ```
 
-Backend only:
+## Installation Electron (Windows)
 
-```powershell
-cd backend
-npm install
-npm start
+Téléchargez l'installateur depuis la page [Releases](https://github.com/serignebamba398-pixel/annotation-nmr/releases) :
+- `NMRScout-vX.X.X-Setup.exe` : installateur classique
+- `NMRScout-vX.X.X-portable.zip` : version portable (pas d'installation requise)
+
+## Structure du projet
+
+```
+frontend/          React (Create React App)
+backend/           Node.js API + Python ML/NMR engine
+docker/            Dockerfiles + nginx.conf
+scripts/           Scripts de build et déploiement
 ```
 
-## Build / packaging
+## Développement
 
-Build the Python bundle + frontend build, then package Electron:
+### Prérequis dev
 
-```powershell
+- Node.js 18+
+- Python 3.10+ (avec les dépendances de `backend/requirements.cpu.txt`)
+- R (pour les scripts d'annotation)
+
+### Lancer en dev
+
+```bash
+# Tout (backend + frontend + Electron)
+npm install
+npm start
+
+# Frontend seul
+cd frontend && npm install && npm start
+
+# Backend seul
+cd backend && npm install && npm start
+```
+
+### Build Electron
+
+```bash
 npm run build:production
 ```
 
-Python bundle only:
+## CI/CD (GitHub Actions)
 
-```powershell
-npm run build:python
-```
+| Workflow | Déclencheur | Action |
+|----------|-------------|--------|
+| **CI** (`ci.yml`) | Push / PR | Tests, lint, build frontend |
+| **Release** (`release.yml`) | Tag `v*` | Build Electron Windows + publication GitHub Release |
+| **Docker Publish** (`docker-publish.yml`) | Manuel / Tag `v*` | Build multi-arch + push sur Docker Hub |
 
-## Notes
+### Secrets GitHub requis
 
-- Large files are tracked via Git LFS (`.gitattributes`).
-- Outputs/caches/uploads are ignored by Git (`.gitignore`).
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Nom d'utilisateur Docker Hub |
+| `DOCKERHUB_TOKEN` | Token d'accès Docker Hub |
+| `MODELS_ZIP_URL` | URL du zip contenant les modèles ML et données |
+| `R_PORTABLE_ZIP_URL` | URL du zip R-Portable pour le build Electron |
 
-## Releases (GitHub Actions)
+### Fichiers volumineux
 
-- Pushing a tag like `v1.2.3` triggers `.github/workflows/release.yml`.
-- The Release publishes installers for **Windows** (Setup + Portable `.exe`).
-- The workflow requires **bundled R** which is not in Git; provide it via a repo secret:
+Les modèles ML et données (`.pt`, `.npz`, `.pkl`, `.sd`, `.jar`) ne sont pas dans le repo Git. Ils sont :
+- Intégrés dans les **images Docker** sur Docker Hub
+- Téléchargés depuis les **GitHub Release assets** lors des builds CI
 
-| Secret name          | Contents                                               |
-| -------------------- | ------------------------------------------------------ |
-| `R_PORTABLE_ZIP_URL` | Archive of `R-Portable/` folder with `bin/Rscript.exe` |
+## Licence
 
-> The Python engine is built in CI via PyInstaller. Alternatively, set `PYTHON_ENGINE_ZIP_URL` secret to skip PyInstaller build.
+Projet privé - Tous droits réservés.
