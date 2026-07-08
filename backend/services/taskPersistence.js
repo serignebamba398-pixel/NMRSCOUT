@@ -8,7 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { outputsDir } = require('../config/paths');
+const { outputsDir, getActiveOutputsDir } = require('../config/paths');
 const { logWithMemory } = require('../utils/logger');
 const { ENABLE_CHECKPOINTS } = require('../config');
 
@@ -34,7 +34,7 @@ function saveCheckpoint(taskId, checkpointData) {
   if (!ENABLE_CHECKPOINTS) return false;
   
   try {
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     if (!fs.existsSync(workDir)) {
       fs.mkdirSync(workDir, { recursive: true });
     }
@@ -61,7 +61,7 @@ function saveCheckpoint(taskId, checkpointData) {
  */
 function loadCheckpoint(taskId) {
   try {
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     const checkpointPath = path.join(workDir, CHECKPOINT_FILE);
     
     if (!fs.existsSync(checkpointPath)) {
@@ -102,7 +102,7 @@ function markTaskInterrupted(taskId, reason = 'connection_lost') {
  */
 function markTaskCompleted(taskId, outputs = {}) {
   try {
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     const checkpointPath = path.join(workDir, CHECKPOINT_FILE);
     
     if (fs.existsSync(checkpointPath)) {

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-const { outputsDir } = require('../config/paths');
+const { outputsDir, getActiveOutputsDir } = require('../config/paths');
 const { safeResolve } = require('../utils/filesystem');
 const { logWithMemory } = require('../utils/logger');
 const { getAllTasks, getTask, deleteTask, killProcessGracefully } = require('../services/processManager');
@@ -171,7 +171,7 @@ router.post('/api/tasks/:taskId/stop', (req, res) => {
 
 router.get('/api/download/:taskId/:filename', (req, res) => {
   try {
-    const dir = safeResolve(outputsDir, req.params.taskId);
+    const dir = safeResolve(getActiveOutputsDir(), req.params.taskId);
     const filepath = safeResolve(dir, req.params.filename);
     if (!fs.existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
     res.download(filepath, req.params.filename);
@@ -182,7 +182,7 @@ router.get('/api/download/:taskId/:filename', (req, res) => {
 
 router.get('/api/inspect/:taskId', (req, res) => {
   try {
-    const workDir = safeResolve(outputsDir, req.params.taskId);
+    const workDir = safeResolve(getActiveOutputsDir(), req.params.taskId);
     if (!fs.existsSync(workDir)) return res.status(404).json({ error: 'Task not found' });
     const items = fs
       .readdirSync(workDir)
@@ -209,7 +209,7 @@ router.get('/api/inspect/:taskId', (req, res) => {
 router.get('/api/tasks/:taskId/params', (req, res) => {
   try {
     const taskId = req.params.taskId;
-    const workDir = safeResolve(outputsDir, taskId);
+    const workDir = safeResolve(getActiveOutputsDir(), taskId);
     const paramsPath = path.join(workDir, 'params.json');
     
     if (!fs.existsSync(paramsPath)) {
@@ -318,7 +318,7 @@ router.get('/api/tasks/:taskId/status', (req, res) => {
     }
     
     // Vérifier si le dossier existe (tâche terminée sans checkpoint)
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     if (fs.existsSync(workDir)) {
       return res.json({
         taskId,
@@ -388,7 +388,7 @@ router.post('/api/tasks/:taskId/tolerance-results', (req, res) => {
       return res.status(400).json({ error: 'Invalid results format (expected array)' });
     }
 
-    const taskDir = safeResolve(outputsDir, taskId);
+    const taskDir = safeResolve(getActiveOutputsDir(), taskId);
     if (!fs.existsSync(taskDir)) {
       fs.mkdirSync(taskDir, { recursive: true });
     }
@@ -417,7 +417,7 @@ router.post('/api/tasks/:taskId/tolerance-results', (req, res) => {
 router.get('/api/tasks/:taskId/tolerance-results', (req, res) => {
   try {
     const taskId = req.params.taskId;
-    const taskDir = safeResolve(outputsDir, taskId);
+    const taskDir = safeResolve(getActiveOutputsDir(), taskId);
     const resultsPath = path.join(taskDir, 'tolerance_results.json');
 
     if (!fs.existsSync(resultsPath)) {
@@ -448,7 +448,7 @@ router.get('/api/tasks/:taskId/tolerance-results', (req, res) => {
 router.delete('/api/tasks/:taskId/tolerance-results', (req, res) => {
   try {
     const taskId = req.params.taskId;
-    const taskDir = safeResolve(outputsDir, taskId);
+    const taskDir = safeResolve(getActiveOutputsDir(), taskId);
     const resultsPath = path.join(taskDir, 'tolerance_results.json');
 
     if (!fs.existsSync(resultsPath)) {

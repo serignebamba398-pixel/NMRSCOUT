@@ -286,6 +286,7 @@ export const AppStateProvider = ({ children }) => {
     setViewerData,
     addLog,
     setShowLogs,
+    setUiLock,
   });
 
   // ========== PERSISTENT PREDICTION HOOK ==========

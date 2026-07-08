@@ -20,6 +20,7 @@ export const useAnnotation = ({
   setViewerData,
   addLog,
   setShowLogs,
+  setUiLock,
 }) => {
   const [matrixUploads, setMatrixUploads] = useState([]);
   const [loadingMatrixUploads, setLoadingMatrixUploads] = useState(false);
@@ -468,6 +469,11 @@ export const useAnnotation = ({
       globalProgressMessage: 'Completed',
     }));
 
+    // Clear UI lock set by annotation modal (important when modal is closed during run)
+    if (setUiLock) {
+      setUiLock({ lockedBy: null, message: "" });
+    }
+
     addLog('[OK] Workflow completed');
   }, [
     annotationState,
@@ -476,6 +482,7 @@ export const useAnnotation = ({
     canRunAnnotation,
     addLog,
     setShowLogs,
+    setUiLock,
   ]);
 
   /**
@@ -527,8 +534,12 @@ export const useAnnotation = ({
       globalProgress: 0,
     }));
 
+    if (setUiLock) {
+      setUiLock({ lockedBy: null, message: "" });
+    }
+
     setCancelRequested(false);
-  }, [setAnnotationState, addLog]);
+  }, [setAnnotationState, addLog, setUiLock]);
 
   // NOTE: No cleanup on unmount!
   // The hook now lives in the global context (AppStateContext)

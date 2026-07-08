@@ -117,11 +117,34 @@ const legacyOut = {
   HSQC: 'HSQC_With_Ransy_and_ECFP4.csv',
 };
 
+/**
+ * Returns the active outputs directory.
+ * If a project is current, returns its workDir so results go into the project folder.
+ * Otherwise returns the default outputsDir.
+ */
+function getActiveOutputsDir() {
+  try {
+    // Lazy require to avoid circular dependency
+    const projectService = require('../services/projectService');
+    const current = projectService.getCurrent();
+    if (current?.workDir) {
+      if (!fs.existsSync(current.workDir)) {
+        fs.mkdirSync(current.workDir, { recursive: true });
+      }
+      return current.workDir;
+    }
+  } catch (_) {
+    // projectService not ready yet (startup)
+  }
+  return outputsDir;
+}
+
 module.exports = {
   scriptsDir,
   uploadsDir,
   outputsDir,
   cacheDir,
+  getActiveOutputsDir,
   PRED_SCRIPT,
   BG_SCRIPT,
   INTERACT_SCRIPT,

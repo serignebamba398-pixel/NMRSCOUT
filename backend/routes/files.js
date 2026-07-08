@@ -84,7 +84,7 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
     const currentProject = projectService.getCurrent();
     console.log('[MULTIPLICITY] Current project:', currentProject?.name || 'none');
     const baseDir = currentProject?.workDir
-      ? path.join(currentProject.workDir, 'outputs')
+      ? currentProject.workDir
       : outputsDir;
 
     console.log('[MULTIPLICITY] baseDir:', baseDir);

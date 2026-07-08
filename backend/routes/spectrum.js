@@ -571,7 +571,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
   const currentProject = projectService.getCurrent();
   const outputsDir = path.resolve(__dirname, '../../outputs');
   const baseDir = currentProject?.workDir
-    ? path.join(currentProject.workDir, 'outputs')
+    ? currentProject.workDir
     : outputsDir;
 
   const taskDir = path.join(baseDir, task_id);
