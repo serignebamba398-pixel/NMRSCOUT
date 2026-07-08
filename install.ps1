@@ -171,8 +171,8 @@ if ($LASTEXITCODE -ne 0) { throw "Failed to pull images" }
 # ---- Stop/remove old containers if they exist ----
 Write-Host ""
 Write-Host "[2/2] Starting services..." -ForegroundColor Cyan
-docker stop nmr-backend nmr-frontend 2>$null | Out-Null
-docker rm nmr-backend nmr-frontend 2>$null | Out-Null
+try { docker stop nmr-backend nmr-frontend 2>&1 | Out-Null } catch {}
+try { docker rm nmr-backend nmr-frontend 2>&1 | Out-Null } catch {}
 Invoke-Expression "$COMPOSE_CMD -f $COMPOSE_FILE -f $VOLUMES_FILE up -d"
 if ($LASTEXITCODE -ne 0) { throw "Failed to start services" }
 
