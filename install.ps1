@@ -168,9 +168,11 @@ Write-Host "[1/2] Pulling Docker images (this may take a while on first run)..."
 Invoke-Expression "$COMPOSE_CMD -f $COMPOSE_FILE -f $VOLUMES_FILE pull"
 if ($LASTEXITCODE -ne 0) { throw "Failed to pull images" }
 
-# ---- Start services ----
+# ---- Stop/remove old containers if they exist ----
 Write-Host ""
 Write-Host "[2/2] Starting services..." -ForegroundColor Cyan
+docker stop nmr-backend nmr-frontend 2>$null | Out-Null
+docker rm nmr-backend nmr-frontend 2>$null | Out-Null
 Invoke-Expression "$COMPOSE_CMD -f $COMPOSE_FILE -f $VOLUMES_FILE up -d"
 if ($LASTEXITCODE -ne 0) { throw "Failed to start services" }
 

@@ -195,9 +195,11 @@ echo ""
 echo -e "${CYAN}[1/2] Pulling Docker images (this may take a while on first run)...${NC}"
 $COMPOSE_CMD -f "$COMPOSE_FILE" -f "$VOLUMES_FILE" pull
 
-# ---- Start services ----
+# ---- Stop/remove old containers if they exist ----
 echo ""
 echo -e "${CYAN}[2/2] Starting services...${NC}"
+docker stop nmr-backend nmr-frontend 2>/dev/null || true
+docker rm nmr-backend nmr-frontend 2>/dev/null || true
 $COMPOSE_CMD -f "$COMPOSE_FILE" -f "$VOLUMES_FILE" up -d
 
 # ---- Wait for health ----
