@@ -20,24 +20,23 @@ Fonctionne sur **Windows, macOS (Intel + Apple Silicon), et Linux**.
 
 **macOS / Linux** :
 ```bash
-chmod +x install.sh
+chmod +x install.sh start.sh stop.sh
 ./install.sh
 ```
+
+L'installation détecte automatiquement tous vos disques (internes, externes, clés USB) pour que l'application puisse lire vos spectres Bruker.
 
 L'application sera accessible sur **http://localhost:3000**
 
 ### Commandes utiles
 
-```bash
-# Arrêter
-docker compose -f docker-compose.shareable.yml down
+| Action | Windows | macOS / Linux |
+|--------|---------|---------------|
+| Démarrer | double-clic `start.bat` | `./start.sh` |
+| Arrêter | double-clic `stop.bat` | `./stop.sh` |
+| Logs | `docker compose -f docker-compose.shareable.yml -f docker-compose.volumes.yml logs -f` | idem |
 
-# Relancer
-docker compose -f docker-compose.shareable.yml up -d
-
-# Voir les logs
-docker compose -f docker-compose.shareable.yml logs -f
-```
+> **Nouveau disque externe ?** Relancez `install.bat` (ou `./install.sh`) pour le détecter.
 
 ## Installation Electron (Windows)
 

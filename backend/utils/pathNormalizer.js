@@ -8,51 +8,49 @@ function lstripSlash(p) {
   return String(p).replace(/^\/+/, '');
 }
 
-const MAPS = [
-  // Windows "C:/..." -> /host/c/...
-  {
-    test: p => /^[A-Za-z]:\//.test(p),
-    map: p => `/host/${p[0].toLowerCase()}/${lstripSlash(p.slice(3))}`,
-  },
-  // Windows profils "*/Users/<login>/*" -> /host/winhome/...
-  {
-    test: p => /\/users\//i.test(p),
-    map: p => p.replace(/^.*?\/users\//i, '/host/winhome/'),
-  },
-  // Linux/macOS $HOME -> /host/home/...
-  {
-    test: p => {
-      const home = process.env.HOME || '/home';
-      return p === home || p.startsWith(home + '/');
-    },
-    map: p => p.replace(process.env.HOME || '/home', '/host/home'),
-  },
-  // macOS absolu: /Users/<login>/... -> /host/home/...
-  {
-    test: p => /^\/Users\/[^/]+\//.test(p),
-    map: p => p.replace(/^\/Users\/[^/]+/, '/host/home'),
-  },
-];
-
+/**
+ * Normalize a host filesystem path to its container mount path.
+ *
+ * The install scripts (install.ps1 / install.sh) generate docker-compose.volumes.yml
+ * which mounts host directories into the container under /host/:
+ *
+ *   Windows (all drives):
+ *     C:/  -> /host/c/       D:/  -> /host/d/       E:/ (USB) -> /host/e/
+ *
+ *   macOS:
+ *     /Users           -> /host/Users
+ *     /Volumes/USB-NMR -> /host/Volumes/USB-NMR
+ *
+ *   Linux:
+ *     /home              -> /host/home
+ *     /media/<user>/usb  -> /host/media/<user>/usb
+ *     /mnt/data          -> /host/mnt/data
+ *     /run/media/...     -> /host/run/media/...
+ *
+ * This function converts paths the user pastes in the UI to the
+ * corresponding path inside the container.
+ */
 function normalizeHostPathToContainer(raw) {
   if (!raw) return '';
   let p = toForward(raw);
 
+  // Already normalized
   if (p.startsWith('/host/')) return p;
 
+  // Windows: C:/anything -> /host/c/anything
+  // Covers all drives (C:, D:, E: USB, etc.)
   if (/^[A-Za-z]:\//.test(p)) {
     return `/host/${p[0].toLowerCase()}/${lstripSlash(p.slice(3))}`;
   }
 
-  if (!p.startsWith('/')) {
-    return `/host/home/${lstripSlash(p)}`;
+  // macOS & Linux absolute paths: prepend /host
+  // Covers: /Users/..., /Volumes/..., /home/..., /media/..., /mnt/..., /run/media/...
+  if (p.startsWith('/')) {
+    return `/host${p}`;
   }
 
-  for (const m of MAPS) {
-    if (m.test(p)) return m.map(p);
-  }
-
-  return p;
+  // Relative path fallback
+  return `/host/home/${lstripSlash(p)}`;
 }
 
 module.exports = { normalizeHostPathToContainer };

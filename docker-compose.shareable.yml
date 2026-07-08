@@ -24,11 +24,8 @@ services:
       - backend_uploads:/app/backend/uploads
       - backend_outputs:/app/backend/outputs
       - backend_cache:/app/backend/cache
-      # Mount optionnel : dossier local pour importer des fichiers
-      # Décommenter et adapter le chemin selon votre OS :
-      # Windows:  - C:/Users/vous/Documents/nmr-data:/host/data:ro
-      # macOS:    - ~/Documents/nmr-data:/host/data:ro
-      # Linux:    - /home/vous/nmr-data:/host/data:ro
+      # Les volumes pour accéder aux spectres Bruker sont dans
+      # docker-compose.volumes.yml (généré par install.bat / install.sh)
 
     networks:
       - nmr-network
