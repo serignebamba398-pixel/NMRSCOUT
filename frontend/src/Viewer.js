@@ -315,8 +315,10 @@ function MoleculePane({
   const viewerRef = useRef(null);
 
   // Safe accessors — customColors may come from sessionStorage with missing fields
-  const safeRgb = (key) => customColors?.[key]?.rgb || [0.5, 0.5, 0.5];
-  const safeHex = (key) => customColors?.[key]?.hex || '#808080';
+  const defaultRgb = { H1: [0, 0.72, 0.66], C13: [0.23, 0.05, 0.64], COSY: [1, 0.69, 0], HSQC: [0.97, 0.15, 0.52] };
+  const defaultHex = { H1: '#00B8A9', C13: '#3A0CA3', COSY: '#FFB000', HSQC: '#F72585' };
+  const safeRgb = (key) => customColors?.[key]?.rgb || defaultRgb[key] || [0, 0.5, 0.5];
+  const safeHex = (key) => customColors?.[key]?.hex || defaultHex[key] || '#008080';
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const COLORS_RDK = {
