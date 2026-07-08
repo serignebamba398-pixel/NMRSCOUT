@@ -36,6 +36,12 @@ const AppContent = () => {
   // Web mode: project list dialog
   const [showProjectList, setShowProjectList] = useState(false);
   const [projectList, setProjectList] = useState([]);
+  // Web mode: new project name dialog
+  const [showNewProjectDialog, setShowNewProjectDialog] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  // Web mode: save-as dialog
+  const [showSaveAsDialog, setShowSaveAsDialog] = useState(false);
+  const [saveAsName, setSaveAsName] = useState('');
 
   // ========== PROJECT HANDLERS ==========
   const handleNewProject = useCallback(async () => {
@@ -51,9 +57,15 @@ const AppContent = () => {
       }
       return;
     }
-    // Web/Docker mode: prompt for name, create via API
-    const name = prompt('Project name:');
+    // Web/Docker mode: show name dialog
+    setNewProjectName('');
+    setShowNewProjectDialog(true);
+  }, [setCurrentProject]);
+
+  const handleCreateProjectConfirm = useCallback(async () => {
+    const name = newProjectName.trim();
     if (!name) return;
+    setShowNewProjectDialog(false);
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/projects`, {
@@ -73,7 +85,7 @@ const AppContent = () => {
     } finally {
       setLoading(false);
     }
-  }, [setCurrentProject, addLog]);
+  }, [newProjectName, setCurrentProject, addLog]);
 
   const handleOpenProject = useCallback(async () => {
     if (IS_ELECTRON) {
@@ -180,9 +192,15 @@ const AppContent = () => {
       }
       return;
     }
-    // Web/Docker mode: create a copy with new name
-    const newName = prompt('Save as (new name):', currentProject.name + ' (copy)');
-    if (!newName) return;
+    // Web/Docker mode: show save-as dialog
+    setSaveAsName(currentProject.name + ' (copy)');
+    setShowSaveAsDialog(true);
+  }, [currentProject, predictionState, annotationState, viewerData, customColors, setCurrentProject, addLog, setShowLogs]);
+
+  const handleSaveAsConfirm = useCallback(async () => {
+    const newName = saveAsName.trim();
+    if (!newName || !currentProject) return;
+    setShowSaveAsDialog(false);
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/projects`, {
@@ -192,7 +210,6 @@ const AppContent = () => {
       });
       const newProject = await res.json();
       if (newProject?.id) {
-        // Save current state to the new project
         const stateKeys = { predictionState, annotationState, viewerData, customColors };
         for (const [key, value] of Object.entries(stateKeys)) {
           await fetch(`${API_BASE_URL}/projects/${newProject.id}/state`, {
@@ -210,7 +227,7 @@ const AppContent = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentProject, predictionState, annotationState, viewerData, customColors, setCurrentProject, addLog, setShowLogs]);
+  }, [saveAsName, currentProject, predictionState, annotationState, viewerData, customColors, setCurrentProject, addLog]);
 
   // ========== HANDLERS COMPUTE ==========
   const handleComputePrediction = useCallback(() => {
@@ -322,6 +339,55 @@ const AppContent = () => {
               </div>
             ))
           )}
+        </div>
+      </Modal>
+
+      {/* New project dialog (web/Docker mode) */}
+      <Modal
+        isOpen={showNewProjectDialog}
+        onClose={() => setShowNewProjectDialog(false)}
+        title="New Project"
+        size="small"
+      >
+        <div style={{ padding: '16px' }}>
+          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Project name</label>
+          <input
+            type="text"
+            value={newProjectName}
+            onChange={(e) => setNewProjectName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleCreateProjectConfirm(); }}
+            placeholder="My NMR Project"
+            autoFocus
+            style={{ width: '100%', padding: '8px 12px', fontSize: '14px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button onClick={() => setShowNewProjectDialog(false)} style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={handleCreateProjectConfirm} disabled={!newProjectName.trim()} style={{ padding: '8px 16px', border: 'none', borderRadius: 4, background: '#2563eb', color: '#fff', cursor: 'pointer', opacity: newProjectName.trim() ? 1 : 0.5 }}>Create</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Save As dialog (web/Docker mode) */}
+      <Modal
+        isOpen={showSaveAsDialog}
+        onClose={() => setShowSaveAsDialog(false)}
+        title="Save As"
+        size="small"
+      >
+        <div style={{ padding: '16px' }}>
+          <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>New project name</label>
+          <input
+            type="text"
+            value={saveAsName}
+            onChange={(e) => setSaveAsName(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveAsConfirm(); }}
+            autoFocus
+            style={{ width: '100%', padding: '8px 12px', fontSize: '14px', border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+            <button onClick={() => setShowSaveAsDialog(false)} style={{ padding: '8px 16px', border: '1px solid #ccc', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={handleSaveAsConfirm} disabled={!saveAsName.trim()} style={{ padding: '8px 16px', border: 'none', borderRadius: 4, background: '#2563eb', color: '#fff', cursor: 'pointer', opacity: saveAsName.trim() ? 1 : 0.5 }}>Save</button>
+          </div>
         </div>
       </Modal>
 

@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
-import { getDefaultParameters } from '../api';
+import { getDefaultParameters, API_BASE_URL } from '../api';
 import { useAnnotation, usePrediction, useToleranceOptimization } from '../hooks';
-import { 
-  DEFAULT_COLORS, 
+import {
+  DEFAULT_COLORS,
   sessionStorage as ss,
   DEFAULT_PREDICTION_OPTIONS,
   DEFAULT_TOLERANCE_RANGES,
@@ -10,6 +10,8 @@ import {
 } from '../constants';
 import { normalizeStaticUrl } from '../utils';
 import { logStore } from '../stores/logStore';
+
+const IS_ELECTRON = window.electronAPI?.isElectron === true;
 
 const AppStateContext = createContext();
 
@@ -351,6 +353,23 @@ export const AppStateProvider = ({ children }) => {
   useEffect(() => {
     ss.set("customColors", customColors);
   }, [customColors]);
+
+  // ========== WEB/DOCKER: load last project on startup ==========
+  useEffect(() => {
+    if (IS_ELECTRON) return;
+    const loadCurrentProject = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/projects/current`);
+        const project = await res.json();
+        if (project?.id) {
+          setCurrentProject(project);
+        }
+      } catch {
+        // No current project or backend not ready yet
+      }
+    };
+    loadCurrentProject();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ========== PERSISTENCE PROJET (Electron) ==========
   // IMPORTANT UX: do not overwrite `project.nmrproj` unless the user explicitly
