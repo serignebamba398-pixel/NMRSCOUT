@@ -15,6 +15,7 @@ nul
 .env
 .env.*
 !.env.example
+!backend/.env.docker
 
 # ===== Node / JS (root + backend + frontend) =====
 node_modules/
