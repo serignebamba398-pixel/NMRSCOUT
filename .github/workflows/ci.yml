@@ -29,6 +29,8 @@ jobs:
         env:
           CI: true
       - run: npm run build
+        env:
+          CI: false
 
   backend_node:
     name: Backend Node (install + smoke)
