@@ -62,13 +62,22 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     exit 1
 fi
 
+# ---- Create NMRScout projects folder ----
+PROJECTS_DIR="$HOME/Documents/NMRScout"
+mkdir -p "$PROJECTS_DIR/uploads" "$PROJECTS_DIR/outputs" "$PROJECTS_DIR/cache"
+# projects.json must exist before Docker mounts it (bind mount of a file)
+if [ ! -f "$PROJECTS_DIR/projects.json" ]; then
+    echo "[]" > "$PROJECTS_DIR/projects.json"
+fi
+echo -e "${GREEN}[OK] Projects folder: $PROJECTS_DIR${NC}"
+
 # ---- Create .env if missing ----
 if [ ! -f "$ENV_FILE" ]; then
     if [ -f "$ENV_EXAMPLE" ]; then
         cp "$ENV_EXAMPLE" "$ENV_FILE"
         echo -e "${YELLOW}[INFO] Created .env from .env.example${NC}"
     else
-        cat > "$ENV_FILE" << 'ENVEOF'
+        cat > "$ENV_FILE" << ENVEOF
 PORT=4000
 NODE_ENV=production
 FRONTEND_URL=http://localhost:3000
@@ -91,11 +100,18 @@ PROCESS_TIMEOUT_HOURS=8
 MEMORY_LIMIT_MB=6144
 OMP_NUM_THREADS=4
 MKL_NUM_THREADS=4
+NMR_PROJECTS_DIR=${PROJECTS_DIR}
 ENVEOF
         echo -e "${YELLOW}[INFO] Created default .env file${NC}"
     fi
 else
     echo -e "${GREEN}[OK] .env file exists${NC}"
+    # Ensure NMR_PROJECTS_DIR exists in .env
+    if ! grep -q "NMR_PROJECTS_DIR" "$ENV_FILE"; then
+        echo "" >> "$ENV_FILE"
+        echo "NMR_PROJECTS_DIR=${PROJECTS_DIR}" >> "$ENV_FILE"
+        echo -e "${YELLOW}[INFO] Added projects folder to .env: ${PROJECTS_DIR}${NC}"
+    fi
 fi
 
 # ---- Generate docker-compose.volumes.yml (detect mount points) ----

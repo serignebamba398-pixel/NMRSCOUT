@@ -64,6 +64,22 @@ if (-not (Test-Path $COMPOSE_FILE)) {
     exit 1
 }
 
+# ---- Create NMRScout projects folder ----
+$docsPath = [Environment]::GetFolderPath('MyDocuments')
+$projectsDir = Join-Path $docsPath "NMRScout"
+New-Item -ItemType Directory -Path $projectsDir -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $projectsDir "uploads") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $projectsDir "outputs") -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $projectsDir "cache") -Force | Out-Null
+# projects.json must exist before Docker mounts it (bind mount of a file)
+$projectsJsonPath = Join-Path $projectsDir "projects.json"
+if (-not (Test-Path $projectsJsonPath)) {
+    "[]" | Out-File -FilePath $projectsJsonPath -Encoding utf8 -NoNewline
+}
+Write-Host "[OK] Projects folder: $projectsDir" -ForegroundColor Green
+# Convert to Docker-compatible path (C:\Users\... -> C:/Users/...)
+$projectsDirDocker = $projectsDir -replace '\\', '/'
+
 # ---- Create .env if missing ----
 if (-not (Test-Path $ENV_FILE)) {
     if (Test-Path $ENV_EXAMPLE) {
@@ -93,11 +109,18 @@ PROCESS_TIMEOUT_HOURS=8
 MEMORY_LIMIT_MB=6144
 OMP_NUM_THREADS=4
 MKL_NUM_THREADS=4
+NMR_PROJECTS_DIR=$projectsDirDocker
 "@ | Out-File -FilePath $ENV_FILE -Encoding utf8
         Write-Host "[INFO] Created default .env file" -ForegroundColor Yellow
     }
 } else {
     Write-Host "[OK] .env file exists" -ForegroundColor Green
+    # Ensure NMR_PROJECTS_DIR exists in .env
+    $envContent = Get-Content $ENV_FILE -Raw
+    if ($envContent -notmatch "NMR_PROJECTS_DIR") {
+        Add-Content -Path $ENV_FILE -Value "`nNMR_PROJECTS_DIR=$projectsDirDocker"
+        Write-Host "[INFO] Added projects folder to .env: $projectsDir" -ForegroundColor Yellow
+    }
 }
 
 # ---- Generate docker-compose.volumes.yml (detect all drives) ----

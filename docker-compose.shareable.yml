@@ -21,9 +21,12 @@ services:
       - "${BACKEND_PORT:-4000}:4000"
 
     volumes:
-      - backend_uploads:/app/backend/uploads
-      - backend_outputs:/app/backend/outputs
-      - backend_cache:/app/backend/cache
+      # Projets stockés dans Documents/NMRScout sur le PC
+      # NMR_PROJECTS_DIR est défini par install.bat / install.sh
+      - ${NMR_PROJECTS_DIR:-nmr_data}/uploads:/app/backend/uploads
+      - ${NMR_PROJECTS_DIR:-nmr_data}/outputs:/app/backend/outputs
+      - ${NMR_PROJECTS_DIR:-nmr_data}/cache:/app/backend/cache
+      - ${NMR_PROJECTS_DIR:-nmr_data}/projects.json:/app/backend/projects.json
       # Les volumes pour accéder aux spectres Bruker sont dans
       # docker-compose.volumes.yml (généré par install.bat / install.sh)
 
@@ -60,17 +63,6 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-
-volumes:
-  backend_uploads:
-    driver: local
-    name: nmr_uploads
-  backend_outputs:
-    driver: local
-    name: nmr_outputs
-  backend_cache:
-    driver: local
-    name: nmr_cache
 
 networks:
   nmr-network:
