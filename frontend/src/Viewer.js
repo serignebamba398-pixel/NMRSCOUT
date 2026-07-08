@@ -314,19 +314,23 @@ function MoleculePane({
   const div3DRef = useRef(null);
   const viewerRef = useRef(null);
 
+  // Safe accessors — customColors may come from sessionStorage with missing fields
+  const safeRgb = (key) => customColors?.[key]?.rgb || [0.5, 0.5, 0.5];
+  const safeHex = (key) => customColors?.[key]?.hex || '#808080';
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const COLORS_RDK = {
-    H1:  customColors.H1.rgb,
-    C13: customColors.C13.rgb,
-    COSY:customColors.COSY.rgb,
-    HSQC:customColors.HSQC.rgb,
+    H1:  safeRgb('H1'),
+    C13: safeRgb('C13'),
+    COSY:safeRgb('COSY'),
+    HSQC:safeRgb('HSQC'),
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const COLORS_3D = {
-    H1:  customColors.H1.hex,
-    C13: customColors.C13.hex,
-    COSY:customColors.COSY.hex,
-    HSQC:customColors.HSQC.hex,
+    H1:  safeHex('H1'),
+    C13: safeHex('C13'),
+    COSY:safeHex('COSY'),
+    HSQC:safeHex('HSQC'),
   };
 
   // --- HSQC: colorer la liaison C–H en 2D -----------------------------------
