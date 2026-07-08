@@ -108,9 +108,8 @@ function getCurrentOutputsDir() {
   // Second priority: projectService current project (for API-based project switching)
   const current = projectService.getCurrent();
   if (current && current.workDir) {
-    const projectOutputs = path.join(current.workDir, 'outputs');
-    if (fs.existsSync(projectOutputs)) {
-      return projectOutputs;
+    if (fs.existsSync(current.workDir)) {
+      return current.workDir;
     }
   }
   

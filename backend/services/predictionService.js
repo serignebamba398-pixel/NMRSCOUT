@@ -4,7 +4,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 const { PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE, ENABLE_TASK_PERSISTENCE } = require('../config');
-const { PRED_SCRIPT, MULT_SIMULATOR_SCRIPT, outputsDir, uploadsDir } = require('../config/paths');
+const { PRED_SCRIPT, MULT_SIMULATOR_SCRIPT, outputsDir, uploadsDir, getActiveOutputsDir } = require('../config/paths');
 const { ensureDir } = require('../utils/filesystem');
 const { getPythonExe, buildPythonEnv, detectDatasetDir } = require('../utils/spawn');
 const { logWithMemory } = require('../utils/logger');
@@ -129,7 +129,7 @@ function handlePrediction(req, res) {
     } else {
       // Nouveau taskId et dossier
       taskId = uuidv4();
-      workDir = path.join(outputsDir, taskId);
+      workDir = path.join(getActiveOutputsDir(), taskId);
       ensureDir(workDir);
     }
 

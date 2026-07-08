@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
-const { outputsDir } = require('../config/paths');
+const { outputsDir, getActiveOutputsDir } = require('../config/paths');
 const { handlePrediction } = require('../services/predictionService');
 
 router.post('/api/predict/start', handlePrediction);
@@ -11,9 +11,9 @@ router.get('/api/prediction-tasks', (req, res) => {
   try {
     const tasks = [];
     const outputDirs = fs
-      .readdirSync(outputsDir)
+      .readdirSync(getActiveOutputsDir())
       .filter(dir => {
-        const dirPath = path.join(outputsDir, dir);
+        const dirPath = path.join(getActiveOutputsDir(), dir);
         return fs.statSync(dirPath).isDirectory();
       });
 
@@ -29,7 +29,7 @@ router.get('/api/prediction-tasks', (req, res) => {
     };
 
     for (const taskId of outputDirs) {
-      const taskDir = path.join(outputsDir, taskId);
+      const taskDir = path.join(getActiveOutputsDir(), taskId);
       const files = fs.readdirSync(taskDir);
 
       const csvFiles = {

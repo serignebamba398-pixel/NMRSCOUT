@@ -6,7 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const { Semaphore } = require('async-mutex');
 
 const { DEFAULT_LIGHT_PARAMS, MEMORY_LIMIT_MB, PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE, ENABLE_TASK_PERSISTENCE } = require('../config');
-const { scriptsDir, outputsDir, uploadsDir, scriptMap, legacyOut } = require('../config/paths');
+const { scriptsDir, outputsDir, uploadsDir, scriptMap, legacyOut, getActiveOutputsDir } = require('../config/paths');
 const { ensureDir, safeResolve } = require('../utils/filesystem');
 const { getRscript, buildREnv } = require('../utils/spawn');
 const { logWithMemory } = require('../utils/logger');
@@ -70,7 +70,7 @@ async function handleAnnotation(req, res, method) {
     }
 
     const taskId = uuidv4();
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     ensureDir(workDir);
 
     const optimizedParams = { ...DEFAULT_LIGHT_PARAMS, ...parameters };
@@ -424,7 +424,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
       return res.status(400).json({ error: 'predictionTaskId and matrixFile are required' });
     }
 
-    const predictionDir = path.join(outputsDir, predictionTaskId);
+    const predictionDir = path.join(getActiveOutputsDir(), predictionTaskId);
     if (!fs.existsSync(predictionDir)) {
       return res.status(400).json({ error: 'Prediction task not found' });
     }

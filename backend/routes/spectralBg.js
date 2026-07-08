@@ -4,7 +4,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { outputsDir } = require('../config/paths');
+const { outputsDir, getActiveOutputsDir } = require('../config/paths');
 const { ensureDir } = require('../utils/filesystem');
 const { normalizeHostPathToContainer } = require('../utils/pathNormalizer');
 const { logWithMemory } = require('../utils/logger');
@@ -66,7 +66,7 @@ router.post('/api/spectral-bg/export', async (req, res) => {
     }
 
     const taskId = req.body?.persistKey || req.body?.taskId || uuidv4();
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     ensureDir(workDir);
 
     // PY already declared at top of function
@@ -322,7 +322,7 @@ router.post('/api/spectral-bg/zoom', async (req, res) => {
     }
 
     const taskId = req.body?.persistKey || req.body?.taskId || uuidv4();
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     ensureDir(workDir);
 
     const figW = Number(meta?.fig_px?.w) || 0;
@@ -401,7 +401,7 @@ router.post('/api/spectral-bg/relevel', async (req, res) => {
     if (!pdataDir || !meta) return res.status(400).json({ error: 'pdata_dir and meta are required' });
 
     const taskId = req.body?.persistKey || req.body?.taskId || uuidv4();
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     ensureDir(workDir);
 
     const _num = v => {
@@ -475,7 +475,7 @@ async function handleBgInteractive(req, res, method) {
     }
 
     const taskId = raw?.persistKey || raw?.taskId || uuidv4();
-    const workDir = path.join(outputsDir, taskId);
+    const workDir = path.join(getActiveOutputsDir(), taskId);
     ensureDir(workDir);
 
     const options = {};
