@@ -16,17 +16,34 @@ Fonctionne sur **Windows, macOS (Intel + Apple Silicon), et Linux**.
 
 ### Installation
 
-**Windows** : double-cliquez sur `install.bat`
+1. Téléchargez le zip correspondant à votre système :
 
-**macOS / Linux** :
-```bash
-chmod +x install.sh start.sh stop.sh
-./install.sh
-```
+| Système | Téléchargement |
+|---------|---------------|
+| **Windows** | [NMRScout-Docker-Windows.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Windows.zip) |
+| **macOS / Linux** | [NMRScout-Docker-Unix.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Unix.zip) |
+
+2. Décompressez le zip dans un dossier de votre choix
+
+3. Lancez l'installation :
+   - **Windows** : double-cliquez sur `install.bat`
+   - **macOS / Linux** :
+     ```bash
+     chmod +x install.sh start.sh stop.sh
+     ./install.sh
+     ```
 
 L'installation détecte automatiquement tous vos disques (internes, externes, clés USB) pour que l'application puisse lire vos spectres Bruker.
 
+Les projets sont stockés dans `Documents/NMRScout/` sur votre PC.
+
 L'application sera accessible sur **http://localhost:3000**
+
+#### Contenu des zips
+
+**Windows** : `install.bat`, `install.ps1`, `docker-compose.shareable.yml`, `start.bat`, `stop.bat`
+
+**macOS/Linux** : `install.sh`, `docker-compose.shareable.yml`, `start.sh`, `stop.sh`
 
 ### Commandes utiles
 
