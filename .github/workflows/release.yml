@@ -225,6 +225,8 @@ jobs:
 
       - name: Build frontend
         run: npm run build:frontend
+        env:
+          CI: false
 
       - name: Verify assets
         run: node scripts/verify_assets.js --strict --release
