@@ -243,7 +243,7 @@ jobs:
           if (-not (Test-Path $unpackedDir)) {
             throw "win-unpacked folder not found"
           }
-          $zipPath = "dist\NMRScout-${{ github.ref_name }}-portable.zip"
+          $zipPath = "dist\NMRScout-v1.0.1-portable.zip"
           Write-Host "Creating portable ZIP: $zipPath"
           Compress-Archive -Path "$unpackedDir\*" -DestinationPath $zipPath -Force
           Write-Host "ZIP created: $((Get-Item $zipPath).Length / 1MB) MB"
@@ -265,7 +265,10 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v1.0.1
+          name: NMRScout v1.0.1
           generate_release_notes: true
+          make_latest: true
           files: |
             dist/*Setup*.exe
             dist/*-portable.zip
