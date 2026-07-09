@@ -4,7 +4,7 @@ numpy>=1.23,<2.0
 pandas>=1.5,<2.1
 tqdm
 cairosvg
-torch==2.1.2
+torch==2.13.0
 
 # NMR processing (Bruker file reading)
 nmrglue>=0.9
