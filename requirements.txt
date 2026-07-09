@@ -167,7 +167,7 @@ pubchempy>=1.0.4,<1.1.0
 # ============================================================================
 
 # NetworkX - Analyse de graphes
-networkx>=2.6.0,<3.2.0
+networkx>=3.6.1,<3.7.0
 
 # Graph-tool (installation complexe, décommenter si nécessaire)
 # graph-tool
