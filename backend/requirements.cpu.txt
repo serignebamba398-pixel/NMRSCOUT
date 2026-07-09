@@ -1,7 +1,7 @@
 # Noyau scientifique
 # IMPORTANT: NumPy <2.0 required for torch/rdkit/dgl compatibility
 numpy>=1.23,<2.0
-pandas>=1.5,<2.1
+pandas>=3.0.3,<3.1
 tqdm
 cairosvg
 torch==2.1.2
