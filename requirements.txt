@@ -98,7 +98,7 @@ urllib3>=1.26.0,<2.1.0
 # ============================================================================
 
 # Numba - Compilation JIT pour accélération
-numba>=0.56.0,<0.59.0
+numba>=0.66.0,<0.67.0
 
 # Psutil - Monitoring système et ressources
 psutil>=5.8.0,<5.10.0
