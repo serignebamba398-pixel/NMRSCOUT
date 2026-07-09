@@ -7,7 +7,7 @@ cairosvg
 torch==2.1.2
 
 # NMR processing (Bruker file reading)
-nmrglue>=0.9
+nmrglue>=0.11
 
 # Plotting (for spectrum background export)
 matplotlib>=3.5
