@@ -18,4 +18,4 @@ dgl==2.0.0
 dgllife==0.3.2
 
 # RDKit : roue pip (marche souvent sous Win/CPU ; sinon voir message serveur -> conda)
-rdkit-pypi>=2022.9
+rdkit-pypi>=2022.9.5
