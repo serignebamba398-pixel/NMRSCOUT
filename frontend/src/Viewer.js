@@ -1042,10 +1042,10 @@ function MoleculePane({
       {showLocalToggles && (
         <div style={{ marginTop:8, display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", fontSize:12 }}>
           {[
-            ["H1", customColors.H1.hex],
-            ["C13", customColors.C13.hex],
-            ["COSY", customColors.COSY.hex],
-            ["HSQC", customColors.HSQC.hex],
+            ["H1", safeHex('H1')],
+            ["C13", safeHex('C13')],
+            ["COSY", safeHex('COSY')],
+            ["HSQC", safeHex('HSQC')],
           ].map(([k,hex]) => (
             <label key={k}
               style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 8px",
@@ -1252,10 +1252,10 @@ function ShowAllMoleculesModal({
             const rdkMol = RDKit.get_mol(molBlock);
             if (rdkMol) {
               const PDF_COLORS = {
-                H1:   customColors.H1.rgb,
-                C13:  customColors.C13.rgb,
-                COSY: customColors.COSY.rgb,
-                HSQC: customColors.HSQC.rgb,
+                H1:   safeRgb('H1'),
+                C13:  safeRgb('C13'),
+                COSY: safeRgb('COSY'),
+                HSQC: safeRgb('HSQC'),
               };
               let svgStr;
               try {
