@@ -65,7 +65,7 @@ openpyxl>=3.0.0,<3.2.0
 xlsxwriter>=3.0.0,<3.2.0
 
 # PyYAML - Fichiers de configuration YAML
-pyyaml>=6.0,<6.1
+pyyaml>=6.0.3,<6.1
 
 # H5py - Fichiers HDF5 (pour certains datasets)
 h5py>=3.6.0,<3.10.0
