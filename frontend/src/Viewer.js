@@ -1165,6 +1165,10 @@ function ShowAllMoleculesModal({
   const [maximized, setMaximized] = useState(false);
   const gridRef = useRef(null);
 
+  // Safe accessors — customColors may come from sessionStorage with missing fields
+  const defaultRgb = { H1: [0, 0.72, 0.66], C13: [0.23, 0.05, 0.64], COSY: [1, 0.69, 0], HSQC: [0.97, 0.15, 0.52] };
+  const safeRgb = (key) => customColors?.[key]?.rgb || defaultRgb[key] || [0, 0.5, 0.5];
+
 
   const totalPages = Math.max(1, Math.ceil(sources.length / pageSize));
   const clampedPage = Math.min(Math.max(1, page), totalPages);
