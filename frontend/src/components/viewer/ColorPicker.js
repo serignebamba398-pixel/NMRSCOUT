@@ -71,7 +71,7 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
   };
 
   const MethodRow = ({ method, title }) => {
-    const current = customColors[method];
+    const current = safeColors[method];
     const d = draft[method];
     const newRGB = hexToRgb255(d.hex);
 

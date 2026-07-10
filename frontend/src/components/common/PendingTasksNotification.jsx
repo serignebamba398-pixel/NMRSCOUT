@@ -17,7 +17,7 @@ export const PendingTasksNotification = () => {
   // Vérifier les tâches en attente au chargement
   const checkPendingTasks = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/pending`);
+      const response = await fetch(`${API_BASE_URL}/tasks/pending`);
       if (response.ok) {
         const data = await response.json();
         if (data.tasks && data.tasks.length > 0) {
@@ -48,7 +48,7 @@ export const PendingTasksNotification = () => {
   // Ignorer une tâche (ne pas la reprendre)
   const handleDismissTask = async (taskId) => {
     try {
-      await fetch(`${API_BASE_URL}/api/tasks/${taskId}/dismiss`, {
+      await fetch(`${API_BASE_URL}/tasks/${taskId}/dismiss`, {
         method: 'POST',
       });
       setPendingTasks(prev => prev.filter(t => t.taskId !== taskId));
@@ -66,7 +66,7 @@ export const PendingTasksNotification = () => {
   const handleDismissAll = async () => {
     for (const task of pendingTasks) {
       try {
-        await fetch(`${API_BASE_URL}/api/tasks/${task.taskId}/dismiss`, {
+        await fetch(`${API_BASE_URL}/tasks/${task.taskId}/dismiss`, {
           method: 'POST',
         });
       } catch (error) {
@@ -81,7 +81,7 @@ export const PendingTasksNotification = () => {
   // Consulter les résultats d'une tâche
   const handleViewTask = async (task) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${task.taskId}/checkpoint`);
+      const response = await fetch(`${API_BASE_URL}/tasks/${task.taskId}/checkpoint`);
       if (response.ok) {
         const data = await response.json();
         if (data.checkpoint?.status === 'completed' && data.checkpoint?.outputs) {
