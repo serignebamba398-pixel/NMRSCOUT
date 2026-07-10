@@ -20,13 +20,25 @@ import {
  * Advanced color selection component
  */
 function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
-  const [draft, setDraft] = useState(customColors);
+  // Merge with defaults so every method always has hex/rgb fields
+  const safeColors = {
+    H1:   { ...DEFAULT_COLORS.H1,   ...customColors?.H1 },
+    C13:  { ...DEFAULT_COLORS.C13,  ...customColors?.C13 },
+    COSY: { ...DEFAULT_COLORS.COSY, ...customColors?.COSY },
+    HSQC: { ...DEFAULT_COLORS.HSQC, ...customColors?.HSQC },
+  };
+  const [draft, setDraft] = useState(safeColors);
   const [active, setActive] = useState("H1");
   const [showColorPalette, setShowColorPalette] = useState(false);
   const [tempColor, setTempColor] = useState({ h: 180, s: 70, l: 50 });
 
   useEffect(() => {
-    setDraft(customColors);
+    setDraft({
+      H1:   { ...DEFAULT_COLORS.H1,   ...customColors?.H1 },
+      C13:  { ...DEFAULT_COLORS.C13,  ...customColors?.C13 },
+      COSY: { ...DEFAULT_COLORS.COSY, ...customColors?.COSY },
+      HSQC: { ...DEFAULT_COLORS.HSQC, ...customColors?.HSQC },
+    });
   }, [customColors]);
 
   if (!isOpen) return null;
