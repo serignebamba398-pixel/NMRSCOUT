@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { getPythonExe } = require('../utils/spawn');
+const { normalizeHostPathToContainer } = require('../utils/pathNormalizer');
 
 /**
  * POST /api/simulate-spectrum
@@ -283,6 +284,10 @@ router.get('/api/extract-bruker-spectrum', async (req, res) => {
   const isBundledEnv = process.env.IS_ELECTRON_BUNDLED === 'true';
   const isActuallyBundled = isBundledEnv && pythonPath.endsWith('.exe') && fs.existsSync(pythonPath);
 
+  // Normalize host path to container path in Docker mode
+  const resolvedPdataDir = isActuallyBundled ? pdata_dir : normalizeHostPathToContainer(pdata_dir);
+  console.log('[extract-bruker] Resolved pdata_dir:', resolvedPdataDir);
+
   let args;
   if (isActuallyBundled) {
     // Mode bundled: exe extract_bruker_spectrum [args]
@@ -302,7 +307,7 @@ router.get('/api/extract-bruker-spectrum', async (req, res) => {
   }
 
   args.push(
-    '--pdata_dir', pdata_dir,
+    '--pdata_dir', resolvedPdataDir,
     '--output', 'json'
   );
 
@@ -417,6 +422,10 @@ router.get('/api/extract-bruker-2d', async (req, res) => {
   const isBundledEnv = process.env.IS_ELECTRON_BUNDLED === 'true';
   const isActuallyBundled = isBundledEnv && pythonPath.endsWith('.exe') && fs.existsSync(pythonPath);
 
+  // Normalize host path to container path in Docker mode
+  const resolvedPdataDir = isActuallyBundled ? pdata_dir : normalizeHostPathToContainer(pdata_dir);
+  console.log('[extract-bruker-2d] Resolved pdata_dir:', resolvedPdataDir);
+
   let args;
   if (isActuallyBundled) {
     console.log('[extract-bruker-2d] Running in BUNDLED mode');
@@ -434,7 +443,7 @@ router.get('/api/extract-bruker-2d', async (req, res) => {
   }
 
   args.push(
-    '--pdata_dir', pdata_dir,
+    '--pdata_dir', resolvedPdataDir,
     '--level_start', String(level_start),
     '--n_levels', String(n_levels),
     '--decimate', String(decimate),
