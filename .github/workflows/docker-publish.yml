@@ -47,13 +47,27 @@ jobs:
 
       - name: Download ML data for Docker build
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+
           echo "Downloading models.zip from release assets..."
-          curl -sL -H "Authorization: Bearer $GITHUB_TOKEN" \
+          asset_id="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/serignebamba398-pixel/annotation-nmr/releases/tags/assets" \
+            | jq -er '.assets[] | select(.name == "models.zip") | .id')"
+
+          curl --fail --location --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/octet-stream" \
             -o models.zip \
-            "https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/models.zip"
+            "https://api.github.com/repos/serignebamba398-pixel/annotation-nmr/releases/assets/${asset_id}"
+
+          if ! unzip -tq models.zip; then
+            echo "::error::Downloaded models.zip is not a valid ZIP archive."
+            exit 1
+          fi
 
           echo "Extracting to backend directories..."
           mkdir -p backend/models backend/ml_dependencies/data
