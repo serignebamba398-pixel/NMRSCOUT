@@ -1,10 +1,10 @@
 // src/components/viewer/Pill.js
-// Composant pastille métrique
+// Metric label and value.
 
 import React from "react";
 
 /**
- * Petite pastille affichant une métrique (label: value)
+ * Display a metric as a label and value.
  */
 const Pill = ({ label, value }) => (
   <div

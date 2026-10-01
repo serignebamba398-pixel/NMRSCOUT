@@ -81,6 +81,7 @@ const scriptMap = {
   '1H': 'annotation_1H.R',
   '13C': 'annotation_13C.R',
   COSY: 'annotation_COSY.R',
+  TOCSY: 'annotation_COSY.R',
   HSQC: 'annotation_HSQC.R',
 };
 
@@ -114,6 +115,7 @@ const legacyOut = {
   '1H': '1H_With_Ransy_Julien.csv',
   '13C': '13C_With_Ransy_and_ECFP4.csv',
   COSY: 'COSY_With_Ransy_and_ECFP4.csv',
+  TOCSY: 'TOCSY_With_Ransy_and_ECFP4.csv',
   HSQC: 'HSQC_With_Ransy_and_ECFP4.csv',
 };
 

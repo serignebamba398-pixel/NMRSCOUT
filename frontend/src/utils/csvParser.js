@@ -1,10 +1,10 @@
 /**
- * Parser CSV intelligent avec détection automatique du délimiteur
+ * CSV parser with delimiter detection.
  */
 
 /**
- * Parse un texte CSV en objet { headers, data }
- * @param {string} text - Contenu du CSV
+ * Parse CSV text into { headers, data }.
+ * @param {string} text - CSV text.
  * @returns {{ headers: string[], data: object[] }}
  */
 export function parseCSVSmart(text) {
@@ -12,7 +12,7 @@ export function parseCSVSmart(text) {
     return { headers: [], data: [] };
   }
 
-  // Détection du délimiteur en analysant les 5 premières lignes
+  // Detect the delimiter from the first five lines.
   const firstLines = text.split(/\r?\n/).slice(0, 5).join("\n");
   const candidates = [";", ",", "\t"];
   let bestDelimiter = ";";
@@ -30,14 +30,14 @@ export function parseCSVSmart(text) {
     }
   }
 
-  // Parsing avec gestion des guillemets doubles
+  // Parse quoted fields and escaped double quotes.
   const rows = [];
   let currentRow = [];
   let currentValue = "";
   let inQuotes = false;
 
   const pushValue = () => {
-    // Retirer BOM si présent au début
+    // Remove a leading byte-order mark, if present.
     if (currentValue && currentValue.charCodeAt(0) === 0xfeff) {
       currentValue = currentValue.slice(1);
     }
@@ -57,7 +57,7 @@ export function parseCSVSmart(text) {
 
     if (inQuotes) {
       if (char === '"') {
-        // Échappement de guillemet : "" → "
+        // Decode escaped double quotes: "" → ".
         if (text[i + 1] === '"') {
           currentValue += '"';
           i++;
@@ -82,7 +82,7 @@ export function parseCSVSmart(text) {
     }
   }
 
-  // Dernière valeur/ligne
+  // Flush the last field and row.
   if (currentValue.length > 0 || currentRow.length > 0) {
     pushValue();
     pushRow();
@@ -92,7 +92,7 @@ export function parseCSVSmart(text) {
     return { headers: [], data: [] };
   }
 
-  // Première ligne = headers
+  // Use the first row as column headers.
   const headers = rows[0].map((h) => (h || "").trim());
 
   // Lignes suivantes = data (filtrer lignes vides)
@@ -111,8 +111,8 @@ export function parseCSVSmart(text) {
 }
 
 /**
- * Détermine si une ligne CSV est un header (première ligne)
- * @param {string} line - Ligne CSV
+ * Check whether a CSV line looks like a header.
+ * @param {string} line - CSV line.
  * @returns {boolean}
  */
 export const isHeaderLine = (line) => {
@@ -121,13 +121,13 @@ export const isHeaderLine = (line) => {
   const firstCell = line.split(/[;, \t]/)[0].trim().toLowerCase();
   if (!firstCell) return false;
 
-  // Détection de headers communs
+  // Recognize common column names.
   const commonHeaders = ["ppm", "ppm_f1", "ppm_f2", "id", "smiles", "mol_id"];
   if (commonHeaders.includes(firstCell)) {
     return true;
   }
 
-  // Si la première cellule n'est pas numérique, probablement un header
+  // Treat a nonnumeric first cell as a likely header.
   const numericPattern = /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i;
   return !numericPattern.test(firstCell);
 };

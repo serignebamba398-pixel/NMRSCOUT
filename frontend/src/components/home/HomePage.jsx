@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ProjectManager } from '../project';
@@ -11,14 +12,14 @@ export const HomePage = () => {
   const navigate = useNavigate();
   const { currentProject } = useAppState();
 
-  // Debug: afficher l'état du projet
+  // Log project state for debugging.
   console.log('[HomePage] currentProject:', currentProject);
 
   const shortcuts = [
     {
       title: 'NMR Prediction',
-      description: 'Predict NMR spectra (1H, 13C, COSY, HSQC) from SMILES or CSV',
-      icon: '🔮',
+      description: `Predict NMR spectra (${['1H', '13C', 'COSY', 'TOCSY', 'HSQC'].filter(isMethodAvailable).join(', ')}) from SMILES or CSV`,
+      icon: '¹H',
       path: '/prediction',
       color: 'blue',
       disabled: !currentProject,
@@ -26,7 +27,7 @@ export const HomePage = () => {
     {
       title: 'Integrated Annotation',
       description: 'Annotate NMR spectra with predicted data',
-      icon: '🏷️',
+      icon: 'ID',
       path: '/annotation',
       color: 'green',
       disabled: !currentProject,
@@ -34,7 +35,7 @@ export const HomePage = () => {
     {
       title: 'Tolerance Optimization',
       description: 'Optimize tolerance parameters for annotation',
-      icon: '⚙️',
+      icon: '±',
       path: '/optimization',
       color: 'purple',
       disabled: !currentProject,
@@ -42,7 +43,7 @@ export const HomePage = () => {
     {
       title: 'Results',
       description: 'View results and annotated spectra',
-      icon: '📊',
+      icon: '≡',
       path: '/results',
       color: 'orange',
       disabled: !currentProject,
@@ -59,13 +60,13 @@ export const HomePage = () => {
         </p>
       </div>
 
-      {/* Gestionnaire de projets */}
+      {/* Project manager */}
       <ProjectManager />
 
       {/* Message if no project */}
       {!currentProject && (
         <div className="warning-box">
-          <span className="warning-icon">⚠️</span>
+          <span className="warning-icon" aria-hidden="true">!</span>
           <div>
             <h3 className="warning-title">No project open</h3>
             <p className="warning-text">
@@ -91,7 +92,7 @@ export const HomePage = () => {
               <p className="shortcut-description">{shortcut.description}</p>
               {shortcut.disabled && (
                 <p className="shortcut-warning">
-                  ⚠️ Open a project to access this feature
+                  Open a project to access this feature
                 </p>
               )}
             </div>
@@ -103,10 +104,10 @@ export const HomePage = () => {
       {currentProject && (
         <div className="project-info-box">
           <h3 className="project-info-title">
-            ✅ Active project: {currentProject.name}
+            Active project: {currentProject.name}
           </h3>
           <div className="project-info-content">
-            <p className="project-path">📁 {currentProject.path}</p>
+            <p className="project-path">{currentProject.path}</p>
             <p className="project-info-label">
               Files will be saved in:
             </p>

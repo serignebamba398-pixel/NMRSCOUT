@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useEffect } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { LockOverlay } from '../common';
@@ -95,7 +96,7 @@ export const PredictionInterface = ({ inModal = false, onClose }) => {
       <div className="header">
         <h1>NMR Predictions (SMILES/CSV)</h1>
         <p>
-          Generates SDF + CSV (1H/13C/COSY/HSQC) usable for annotations
+          Generates SDF + CSV ({['1H', '13C', 'COSY', 'TOCSY', 'HSQC'].filter(isMethodAvailable).join('/')}) usable for annotations
           and visualization
         </p>
       </div>

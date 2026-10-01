@@ -2,7 +2,7 @@ import React from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import './Toolbar.css';
 
-// Icônes SVG professionnelles
+// Toolbar SVG icons.
 const Icons = {
   newFile: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -83,12 +83,12 @@ export const Toolbar = ({
   currentProject,
   loading = false,
 }) => {
-  // Accès au contexte pour les états de running
+  // Read task execution state from context.
   const { prediction, annotationState } = useAppState();
   
   const predictionRunning = prediction?.running || false;
   const annotationRunning = annotationState?.allRunning || false;
-  // TODO: optimizationRunning quand le hook sera prêt
+  // TODO: Connect optimizationRunning when the hook exposes it.
   const optimizationRunning = false;
 
   const anyRunning = predictionRunning || annotationRunning || optimizationRunning;
@@ -144,7 +144,7 @@ export const Toolbar = ({
 
       <div className="toolbar-separator" />
 
-      {/* Section Paramètres (ouvre les modales) */}
+      {/* Settings dialogs. */}
       <div className="toolbar-section">
         <button 
           className="toolbar-btn" 
@@ -182,7 +182,7 @@ export const Toolbar = ({
 
       <div className="toolbar-separator" />
 
-      {/* Section Compute (lance les calculs) */}
+      {/* Task launch controls. */}
       <div className="toolbar-section toolbar-compute-section">
         <button 
           className={`toolbar-btn compute-btn ${predictionRunning ? 'running' : ''}`}

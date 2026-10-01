@@ -36,6 +36,7 @@ router.get('/api/prediction-tasks', (req, res) => {
         '1H': findCsv(files, '1H'),
         '13C': findCsv(files, '13C'),
         COSY: findCsv(files, 'COSY'),
+        TOCSY: findCsv(files, 'TOCSY'),
         HSQC: findCsv(files, 'HSQC'),
       };
 

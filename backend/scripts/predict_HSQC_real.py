@@ -1,31 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-predict_HSQC_real.py (server version, optional 13C folding on F1)
------------------------------------------------------------------
-Reconstructs HSQC from SDF containing an atom-wise shift vector.
-The vector is recovered robustly via ml_sdf_utils.get_atom_shift_vector().
-
-Arguments:
-    --sdf_path     : .sdf file or folder of .sdf files
-    --output_dir   : output folder
-    --task_id      : task identifier (CSV naming)
-    --recursive    : recursive traversal if --sdf_path is a folder
-
-    # NEW:
-    --no-fold      : disables folding (otherwise folded by default for compatibility)
-    --fold-low     : F1 lower bound (ppm), default 4.8618
-    --fold-high    : F1 upper bound (ppm), default 69.8395
-                                     mid is derived: mid = 2*fold_high - fold_low
-
-Output:
-    <output_dir>/prediction_HSQC_<task_id>.csv
-
-Columns (0-based indices):
-    Filename, C_index, F1_ppm, F1_folded, F2_ppm, Direction, Nb_H, H_indices, ECFP4, Method
-"""
-
 import os
 import sys
 import json
@@ -368,15 +343,7 @@ def run_chiral_and_symmetry_finder(smiles: str = "", compound_path: str = "", ex
 # ===========================================================
 def selecting_shifts(c_h_connectivity_dict: Dict[int, List[int]],
                      ml_shifts: List[float]) -> List[List[object]]:
-    """
-    Associates the 13C shift of the carbon (ml_shifts[c_pos]) and the 1H shift
-    (average or individual if CH2 is diastereotopic).
-    Returns entries: [C_shift, H_shift, direction, C_index, H_indices_list]
-
-    The SDF is already corrected:
-    - Equivalent H have identical shifts → averaged together
-    - Diastereotopic H have different shifts → separate entries
-    """
+   
     shifts: List[List[object]] = []
     for c_pos, h_list in c_h_connectivity_dict.items():
         if not h_list:
@@ -384,7 +351,7 @@ def selecting_shifts(c_h_connectivity_dict: Dict[int, List[int]],
         c_shift = ml_shifts[c_pos] if 0 <= c_pos < len(ml_shifts) else None
         direction = 1.0 if (len(h_list) % 2) != 0 else -1.0
 
-        # Pour CH2: split si les shifts sont différents (diastéréotopiques)
+        # Split CH2 signals when the shifts differ (diastereotopic protons).
         should_split = False
         if len(h_list) == 2:
             h1, h2 = h_list[0], h_list[1]
@@ -484,7 +451,7 @@ def fold_13C_shift(vi: float, low: float, high: float) -> float:
         return float(low) + (vi - float(mid))
 
 # ===========================================================
-# 5) PIPE POUR UN SDF
+# SDF pipeline
 # ===========================================================
 def build_hsqc_table_from_sdf(sdf_path: str, do_fold: bool, fold_low: float, fold_high: float) -> pd.DataFrame:
     """Builds the HSQC table for a single SDF (optional 13C F1 folding)."""
@@ -519,7 +486,7 @@ def build_hsqc_table_from_sdf(sdf_path: str, do_fold: bool, fold_low: float, fol
         if df.empty:
             return df
 
-        # Conversion propre + application optionnelle du folding sur F1 (13C)
+        # Convert and optionally fold F1 (13C).
         df['F1_ppm'] = pd.to_numeric(df['F1_ppm'], errors='coerce')
 
         if do_fold:

@@ -1,3 +1,4 @@
+import { isMethodAvailable, restoreAvailableSelections } from '../constants/releaseFeatures';
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo, useSyncExternalStore } from 'react';
 import { getDefaultParameters, API_BASE_URL } from '../api';
 import { useAnnotation, usePrediction, useToleranceOptimization } from '../hooks';
@@ -24,7 +25,7 @@ const INITIAL_PREDICTION_STATE = {
   csvUploadedName: null,
   uploading: false,
   options: DEFAULT_PREDICTION_OPTIONS,
-  selectedPredMethods: ["1H", "13C", "COSY", "HSQC"],
+  selectedPredMethods: ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable),
   artifacts: [],
   predictionTaskId: null,
   showCombinedViewer: false,
@@ -50,6 +51,7 @@ const getInitialAnnotationState = () => ({
     "1H": getDefaultParameters("1H"),
     "13C": getDefaultParameters("13C"),
     COSY: getDefaultParameters("COSY"),
+    TOCSY: getDefaultParameters("TOCSY"),
     HSQC: getDefaultParameters("HSQC"),
   },
   lastResultByType: {},
@@ -59,8 +61,8 @@ const getInitialAnnotationState = () => ({
   globalProgress: 0,
   globalProgressMessage: "",
   readyToView: false,
-  selectedMethods: ["1H", "13C", "COSY", "HSQC"],
-  bgPdataDirs: { "1H": "", "13C": "", "COSY": "", "HSQC": "" },
+  selectedMethods: ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable),
+  bgPdataDirs: { "1H": "", "13C": "", "COSY": "", "TOCSY": "", "HSQC": "" },
   bgOptions: DEFAULT_BG_OPTIONS,
   bgStatus: {},
   toleranceRanges: DEFAULT_TOLERANCE_RANGES,
@@ -144,7 +146,7 @@ export const AppStateProvider = ({ children }) => {
     if (projectState.predictionState && typeof projectState.predictionState === 'object') {
       setPredictionState((prev) => {
         const base = INITIAL_PREDICTION_STATE;
-        const saved = projectState.predictionState;
+        const saved = restoreAvailableSelections(projectState.predictionState);
         return {
           ...base,
           ...saved,
@@ -162,7 +164,7 @@ export const AppStateProvider = ({ children }) => {
     if (projectState.annotationState && typeof projectState.annotationState === 'object') {
       setAnnotationState(() => {
         const base = getInitialAnnotationState();
-        const saved = projectState.annotationState;
+        const saved = restoreAvailableSelections(projectState.annotationState);
 
         // Deep merge toleranceRanges to preserve structure
         const mergedToleranceRanges = { ...base.toleranceRanges };
@@ -269,7 +271,7 @@ export const AppStateProvider = ({ children }) => {
     previousProjectRef.current = newProjectKey;
   }, [currentProject, getProjectKey, hydrateFromProjectState]);
 
-  // ========== GESTION DES LOGS ==========
+  // Log state
   const addLog = useCallback((message, type = "info") => {
     const timestamp = new Date().toLocaleTimeString();
     logStore.addLog({ message, type, timestamp });
@@ -313,7 +315,7 @@ export const AppStateProvider = ({ children }) => {
 
   // ========== PERSISTENCE (sessionStorage) ==========
   useEffect(() => {
-    // Charger viewerData depuis sessionStorage (fallback dev/web)
+    // Restore viewer data from session storage in development or browser mode.
     const savedViewer = ss.get("viewerData", null);
     if (savedViewer && typeof savedViewer === "object") {
       const fixed = {
@@ -334,14 +336,14 @@ export const AppStateProvider = ({ children }) => {
       setViewerData(fixed);
     }
 
-    // Charger customColors depuis sessionStorage
+    // Restore custom colors from session storage.
     const savedColors = ss.get("customColors", null);
     if (savedColors && typeof savedColors === "object") {
       setCustomColors(savedColors);
     }
   }, []);
 
-  // Sauvegarder viewerData quand il change (ou supprimer si null)
+  // Persist viewerData changes, removing the saved value when null.
   useEffect(() => {
     if (viewerData) {
       ss.set("viewerData", viewerData);
@@ -350,7 +352,7 @@ export const AppStateProvider = ({ children }) => {
     }
   }, [viewerData]);
 
-  // Sauvegarder customColors quand ils changent
+  // Persist custom color changes.
   useEffect(() => {
     ss.set("customColors", customColors);
   }, [customColors]);
@@ -373,14 +375,14 @@ export const AppStateProvider = ({ children }) => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ========== PERSISTENCE PROJET (Electron) ==========
-  // IMPORTANT UX: do not overwrite `project.nmrproj` unless the user explicitly
+  // Do not overwrite `project.nmrproj` unless the user explicitly
   // clicks Save / Save As. Annotation/prediction updates must not auto-persist
   // to disk because it can overwrite a previous project state without consent.
   //
   // We still persist lightweight state to sessionStorage above (viewer/customColors)
   // for the current session, but disk writes are manual-only.
 
-  // ========== NORMALISATION OPTIONS PRÉDICTION ==========
+  // Normalize prediction settings.
   useEffect(() => {
     setPredictionState((prev) => {
       const o = prev?.options || {};
@@ -422,43 +424,16 @@ export const AppStateProvider = ({ children }) => {
     });
   }, []);
 
-  // ========== SYNC bgPdataDirs/bgOptions TO viewerData ==========
-  // When the user changes Bruker background paths in annotation settings,
-  // sync them to viewerData so the Viewer component sees the update.
-  // We use a ref to avoid infinite loops since we're updating viewerData.
-  const lastSyncedPdataDirsRef = useRef(null);
-
+  // Keep axis limits synchronized even when the Bruker path is unchanged.
   useEffect(() => {
     const { bgPdataDirs, bgOptions } = annotationState;
-
-    // Create a key to compare - only sync when actual paths change
-    const pdataDirsKey = JSON.stringify(bgPdataDirs);
-    if (pdataDirsKey === lastSyncedPdataDirsRef.current) return;
-
-    // Only sync if viewerData exists (viewer is active)
-    setViewerData((prev) => {
+    setViewerData(prev => {
       if (!prev) return prev;
-
-      // Check if any path actually differs from current viewerData
-      const currentPdataDirs = prev.pdataDirs || {};
-      let needsUpdate = false;
-      for (const type of ["1H", "13C", "COSY", "HSQC"]) {
-        if (bgPdataDirs[type] && bgPdataDirs[type] !== currentPdataDirs[type]) {
-          needsUpdate = true;
-          break;
-        }
-      }
-
-      if (!needsUpdate) return prev;
-
-      // Mark as synced
-      lastSyncedPdataDirsRef.current = pdataDirsKey;
-
-      return {
-        ...prev,
-        pdataDirs: { ...prev.pdataDirs, ...bgPdataDirs },
-        bgOptions: { ...prev.bgOptions, ...bgOptions },
-      };
+      const pdataDirs = { ...prev.pdataDirs, ...bgPdataDirs };
+      const options = { ...prev.bgOptions, ...bgOptions };
+      if (JSON.stringify(pdataDirs) === JSON.stringify(prev.pdataDirs || {}) &&
+          JSON.stringify(options) === JSON.stringify(prev.bgOptions || {})) return prev;
+      return { ...prev, pdataDirs, bgOptions: options };
     });
   }, [annotationState.bgPdataDirs, annotationState.bgOptions]);
 

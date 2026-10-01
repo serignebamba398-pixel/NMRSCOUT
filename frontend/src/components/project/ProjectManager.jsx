@@ -97,14 +97,14 @@ export const ProjectManager = () => {
             disabled={loading}
             className="btn btn-primary"
           >
-            📁 New project
+            New project
           </button>
           <button
             onClick={handleOpenProject}
             disabled={loading}
             className="btn btn-secondary"
           >
-            📂 Open project
+            Open project
           </button>
           {currentProject && (
             <button
@@ -133,9 +133,9 @@ export const ProjectManager = () => {
       {currentProject && (
         <div className="project-info">
           <div className="project-info-header">
-            <h3 className="project-info-name">📁 {currentProject.name}</h3>
+            <h3 className="project-info-name">{currentProject.name}</h3>
             <span className={`backend-status ${backendReady ? 'ready' : 'loading'}`}>
-              {backendReady ? '✓ Backend ready' : '⏳ Backend starting...'}
+              {backendReady ? '✓ Backend ready' : 'Backend starting...'}
             </span>
           </div>
           <p className="project-info-path">{currentProject.path}</p>

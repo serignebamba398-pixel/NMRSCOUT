@@ -1,4 +1,4 @@
-/* Overlay de progression globale - fenêtre flottante sans backdrop */
+/* Floating progress panel without a backdrop. */
 .global-progress-overlay {
   position: fixed;
   top: 0;
@@ -14,14 +14,14 @@
   animation: fadeIn 0.2s ease;
 }
 
-/* Nouvelle version: pas de backdrop, juste une fenêtre flottante */
+/* Keep the progress panel independent of the page backdrop. */
 .global-progress-floating {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  pointer-events: none; /* Laisser passer les clics vers la page */
+  pointer-events: none; /* Allow clicks to reach the underlying page. */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,7 +41,7 @@
   max-width: 500px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
   animation: slideIn 0.3s ease;
-  pointer-events: auto; /* Réactiver les clics sur la carte */
+  pointer-events: auto; /* Keep the panel controls clickable. */
   user-select: none;
 }
 
@@ -196,7 +196,7 @@
   font-style: italic;
 }
 
-/* Barres de progression par méthode (pour les annotations) */
+/* Annotation progress bars by method. */
 .method-progress-container {
   display: flex;
   flex-direction: column;
@@ -253,7 +253,7 @@
   white-space: nowrap;
 }
 
-/* Vue minimisée - petite barre compacte */
+/* Minimized progress bar. */
 .global-progress-minimized {
   position: fixed;
   bottom: 20px;

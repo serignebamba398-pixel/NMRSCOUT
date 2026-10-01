@@ -1,4 +1,4 @@
-/* MoleculeGrid - Grille de molécules style SIRIUS/MS-FINDER */
+/* Molecule grid. */
 
 .molecule-grid-container {
   display: flex;
@@ -115,7 +115,7 @@
   background: #c82333;
 }
 
-/* Grille */
+/* Grid. */
 .molecule-grid {
   display: grid;
   gap: 12px;
@@ -146,7 +146,7 @@
   background: #f0f7ff;
 }
 
-/* Nom molécule en haut */
+/* Molecule name above the structure. */
 .mol-name {
   font-size: 12px;
   font-weight: 700;
@@ -192,7 +192,7 @@
   color: #ccc;
 }
 
-/* Infos molécule */
+/* Molecule details. */
 .mol-info {
   margin-top: 6px;
 }
@@ -215,7 +215,7 @@
   color: #4a90d9;
 }
 
-/* Dialogue téléchargement */
+/* Export dialog. */
 .download-dialog-overlay {
   position: fixed;
   top: 0;

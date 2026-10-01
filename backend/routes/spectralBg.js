@@ -59,7 +59,7 @@ router.post('/api/spectral-bg/export', async (req, res) => {
     const methods =
       Array.isArray(req.body?.methods) && req.body.methods.length
         ? req.body.methods
-        : Object.keys(pdata).filter(k => ['1H', '13C', 'COSY', 'HSQC'].includes(k));
+        : Object.keys(pdata).filter(k => ['1H', '13C', 'COSY', 'TOCSY', 'HSQC'].includes(k));
 
     if (!methods.length) {
       return res.status(400).json({ error: 'No methods to process' });
@@ -94,6 +94,15 @@ router.post('/api/spectral-bg/export', async (req, res) => {
       new Promise(resolve => {
         const pdataDir = pdata[method];
         if (!pdataDir) return resolve({ method, ok: false, error: 'Missing pdata' });
+        if (!BG_OUTPUT_NAMES[method]) return resolve({ method, ok: false, error: 'Unsupported spectrum method' });
+        const requiredFiles = method === '1H' || method === '13C'
+          ? ['1r', 'procs'] : ['2rr', 'procs', 'proc2s'];
+        const missing = requiredFiles.filter(name => !fs.existsSync(path.join(pdataDir, name)));
+        if (missing.length) {
+          return resolve({ method, ok: false, error:
+            `Incomplete Bruker pdata folder: missing ${missing.join(', ')} in ${pdataDir}. ` +
+            'A processed Bruker spectrum is required. NMRPipe .ft2 files are not supported by this reader.' });
+        }
 
         const out_png = path.join(workDir, BG_OUTPUT_NAMES[method].png);
         const out_json = path.join(workDir, BG_OUTPUT_NAMES[method].json);
@@ -170,8 +179,8 @@ router.post('/api/spectral-bg/export', async (req, res) => {
           }
 
           baseArgs.push('--line_color', String(o.line_color), '--line_width', String(o.line_width));
-        } else if (method === 'COSY') {
-          const o = { ...defaults.cosy, ...(opts.cosy || {}) };
+        } else if (method === 'COSY' || method === 'TOCSY') {
+          const o = { ...defaults.cosy, ...(opts[method === 'TOCSY' ? 'tocsy' : 'cosy'] || {}) };
           baseArgs.push(
             '--f2_ppm_min',
             String(o.f2_ppm_min),

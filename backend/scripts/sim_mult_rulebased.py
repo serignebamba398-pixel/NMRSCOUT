@@ -1,38 +1,4 @@
-# sim_mult_rulebased.py
 # -*- coding: utf-8 -*-
-"""
-Rule-based ¹H NMR Multiplicity Simulator — High-Fidelity Edition
-=================================================================
-
-Simulateur de multiplicité RMN ¹H basé sur les règles physiques établies.
-
-RÉFÉRENCES PRINCIPALES:
------------------------
-- Karplus M., J. Chem. Phys. 30, 11 (1959) - Équation Karplus originale
-- Haasnoot C.A.G. et al., Tetrahedron 36, 2783-2792 (1980) - Équation complète
-- Bystrov V.F., Prog. NMR Spectrosc. 10, 41-82 (1976) - ³J(H-N-C-H) peptides
-- Jackman L.M. & Sternhell S., Applications of NMR Spectroscopy (1969)
-- Günther H., NMR Spectroscopy, 3rd Ed. (2013) - Systèmes AB, raies combinaison
-- Kalinowski H.-O. et al., Carbon-13 NMR Spectroscopy (1988) - ¹J(C-H)
-- Reich H.J., Structure Determination Using NMR - Effet de toit
-
-CARACTÉRISTIQUES:
------------------
-✓ Équation Karplus-Haasnoot-Altona complète (7 paramètres)
-✓ ²J geminaux paramétrés selon environnement chimique
-✓ ¹J(C-H) variables selon hybridation (125-250 Hz)
-✓ Détection second ordre (Δν/J raffinée)
-✓ Effet de toit (roof effect) pour systèmes AB
-✓ Raies de combinaison pour systèmes fortement couplés
-✓ ³J(H-N-C-H) pour peptides/amides (Bystrov)
-✓ Couplages hétéronucléaires (¹⁹F, ³¹P)
-✓ Mode sucres (anomères α/β, pyranoses)
-✓ Satellites ¹³C avec abondance naturelle
-
-VERSION: 2.0.0 - High-Fidelity Edition
-AUTEUR: NMR Simulation Team
-DATE: Décembre 2025
-"""
 
 from __future__ import annotations
 from typing import Dict, List, Tuple, Optional, Iterable, Any
@@ -49,35 +15,33 @@ from rdkit.Chem import AllChem
 from rdkit.Chem import rdchem
 from rdkit.Chem import Descriptors
 
-# ✅ Configuration de debug global
-DEBUG_LOGGING = False  # Mettre à True pour activer les logs de debug
+DEBUG_LOGGING = False
 
-# Import du module hétérocycles complet
 try:
     from heterocycles_complete import (
         identify_heterocycle,
         get_heterocycle_coupling,
         is_heterocycle_singlet,
         estimate_heterocycle_couplings_complete,
-        identify_saturated_heterocycle,  # NEW
-        get_saturated_heterocycle_restrictions,  # NEW
-        estimate_saturated_heterocycle_couplings,  # NEW
-        should_differentiate_diastereotopic_J,  # GENERIC DIASTEREOTOPIC LOGIC
+        identify_saturated_heterocycle,
+        get_saturated_heterocycle_restrictions,
+        estimate_saturated_heterocycle_couplings,
+        should_differentiate_diastereotopic_J,
         HeterocycleMatch
     )
     HETEROCYCLES_MODULE_AVAILABLE = True
 except (ImportError, ModuleNotFoundError) as e:
-    # Try relative import if direct import fails
+
     try:
         from .heterocycles_complete import (
             identify_heterocycle,
             get_heterocycle_coupling,
             is_heterocycle_singlet,
             estimate_heterocycle_couplings_complete,
-            identify_saturated_heterocycle,  # NEW
-            get_saturated_heterocycle_restrictions,  # NEW
-            estimate_saturated_heterocycle_couplings,  # NEW
-            should_differentiate_diastereotopic_J,  # GENERIC DIASTEREOTOPIC LOGIC
+            identify_saturated_heterocycle,
+            get_saturated_heterocycle_restrictions,
+            estimate_saturated_heterocycle_couplings,
+            should_differentiate_diastereotopic_J,
             HeterocycleMatch
         )
         HETEROCYCLES_MODULE_AVAILABLE = True
@@ -89,7 +53,6 @@ except Exception as e:
     traceback.print_exc()
     HETEROCYCLES_MODULE_AVAILABLE = False
 
-# Import du module sucres complet
 try:
     from sugars_complete import (
         estimate_sugar_couplings_complete,
@@ -100,7 +63,6 @@ try:
 except ImportError:
     SUGARS_MODULE_AVAILABLE = False
 
-# Import du module couplages complets (alcynes, aldéhydes, phosphines, stéroïdes, etc.)
 try:
     from coupling_tables_complete import (
         get_specialized_coupling,
@@ -115,7 +77,7 @@ try:
         get_terpene_coupling,
         get_macrocycle_coupling,
         get_nucleotide_coupling,
-        # NEW: Extended glycosidic and chi angle couplings
+
         get_glycosidic_long_range_coupling,
         get_nucleoside_chi_coupling,
     )
@@ -123,7 +85,6 @@ try:
 except ImportError:
     COUPLING_TABLES_MODULE_AVAILABLE = False
 
-# Import du module peptides robuste
 try:
     from peptide_couplings import (
         get_peptide_coupling_robust,
@@ -132,7 +93,7 @@ try:
         calculate_2J_geminal as calculate_peptide_2J_geminal,
         KARPLUS_PARAMETERS,
         AMINO_ACID_SPECIFIC_COUPLINGS,
-        # Nouvelles fonctions pour moyennage rotamérique
+
         rotamer_averaged_J,
         get_diastereotopic_J_pair,
         ROTAMER_POPULATIONS,
@@ -144,17 +105,16 @@ except ImportError:
     PEPTIDE_MODULE_AVAILABLE = False
     ROTAMER_AVERAGING_AVAILABLE = False
 
-# Import du module extensions (aromatiques polycycliques, cycles tendus, exotiques, etc.)
 try:
     from coupling_extensions import (
         get_extended_coupling,
         get_polycyclic_aromatic_coupling,
         get_strained_ring_coupling,
         detect_strained_ring,
-        # Nouveaux: carbocycles exotiques
+
         detect_exotic_carbocycle,
         get_exotic_carbocycle_coupling,
-        # NEW: Aromatic fluorine couplings
+
         get_aromatic_F_coupling,
         AROMATIC_FLUORINE_COUPLINGS,
         POLYCYCLIC_AROMATIC_COUPLINGS,
@@ -164,13 +124,13 @@ try:
         STEROID_RING_COUPLINGS,
         PHOSPHOLIPID_COUPLINGS,
         NUCLEOTIDE_COUPLINGS,
-        # Nouveaux: tables exotiques
+
         ANNULENE_COUPLINGS,
         TROPYLIUM_COUPLINGS,
         ANTIAROMATIC_COUPLINGS,
         CURVED_AROMATIC_COUPLINGS,
         EXOTIC_CAGE_COUPLINGS,
-        # NEW: Differentiated estimation functions
+
         estimate_steroid_couplings_differentiated,
         estimate_terpene_couplings_differentiated,
         estimate_macrocycle_couplings_differentiated,
@@ -182,7 +142,6 @@ try:
 except ImportError:
     COUPLING_EXTENSIONS_AVAILABLE = False
 
-# Import du module tables ultimes (couverture maximale)
 try:
     from coupling_tables_ultimate import (
         get_ultimate_coupling,
@@ -201,7 +160,6 @@ try:
 except ImportError:
     ULTIMATE_TABLES_AVAILABLE = False
 
-# Import du module dynamics pour effets dynamiques (pH, solvant, température)
 try:
     from nmr_plugins.dynamics import apply_dynamics_to_coupling, clear_dynamics_cache, should_merge_diastereotopic_CH2
     DYNAMICS_MODULE_AVAILABLE = True
@@ -211,17 +169,11 @@ except ImportError:
         DYNAMICS_MODULE_AVAILABLE = True
     except ImportError:
         DYNAMICS_MODULE_AVAILABLE = False
-        # Fallback si le module dynamics n'est pas disponible
+
         def should_merge_diastereotopic_CH2(mol, heavy_idx, h_a, h_b, temperature_k=298.15, spectrometer_mhz=700.0):
-            # Par défaut: ne pas fusionner (conservateur)
+
             return (False, "Module dynamics non disponible", {})
 
-# ==============================================================================
-# IMPORT TABLE DIASTÉRÉOTOPIQUE CENTRALISÉE
-# ==============================================================================
-# Source unique de vérité pour les valeurs Δδ diastéréotopiques
-# Utilise les valeurs expérimentales validées (BMRB, SDBS, littérature)
-# ==============================================================================
 try:
     from diastereotopic_delta_table import (
         get_diastereotopic_delta,
@@ -234,7 +186,7 @@ try:
         AMINO_ACID_BETA_DELTA,
         ANISOTROPIC_SYSTEMS,
         DEFAULT_DELTA,
-        # Nouvelles tables ajoutées
+
         BENZYLIC_DELTA,
         ALLYLIC_DELTA,
         EPOXIDE_DELTA,
@@ -250,14 +202,14 @@ try:
         CYCLODEXTRIN_DELTA,
         ROTAMER_DELTA,
         METAL_COMPLEX_DELTA,
-        # CH3 diastéréotopiques
+
         CH3_DIASTEREOTOPIC_DELTA,
         get_ch3_diastereotopic_delta,
     )
     DIASTEREOTOPIC_TABLE_AVAILABLE = True
 except ImportError:
     DIASTEREOTOPIC_TABLE_AVAILABLE = False
-    # Fallback minimal si table non disponible
+
     CH2_CHIRAL_DELTA_BY_DISTANCE = {
         1: (0.12, 0.20, "distance 1"),
         2: (0.10, 0.15, "distance 2"),
@@ -272,109 +224,88 @@ except ImportError:
         "unknown": 0.10,
     }
 
-
-# ==============================================================================
-# CACHE INTELLIGENT - AMÉLIORATION PERFORMANCE
-# ==============================================================================
-# Cache les calculs coûteux (distances topologiques, aromatic maps, conformers)
-# basé sur la signature SMILES de la molécule
-# ==============================================================================
-
 class MoleculeCache:
-    """
-    Cache intelligent pour les calculs moléculaires coûteux.
-    
-    Stocke les résultats par clé SMILES pour éviter les recalculs:
-    - Distances topologiques
-    - Maps aromatiques
-    - Rangs canoniques
-    - Conformères
-    """
-    
+
     _instance = None
     _cache_topo_dist: Dict[str, np.ndarray] = {}
     _cache_aromatic_map: Dict[str, List[Dict[int, int]]] = {}
     _cache_ranks: Dict[str, List[int]] = {}
     _cache_conformers: Dict[str, List[Chem.Mol]] = {}
-    _max_size = 100  # Limite pour éviter les fuites mémoire
-    
+    _max_size = 100
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     @classmethod
     def get_key(cls, mol: Chem.Mol) -> str:
-        """Génère une clé unique pour la molécule (basée sur SMILES canonique)."""
+
         try:
             return Chem.MolToSmiles(mol, canonical=True)
         except Exception:
-            # Fallback: hash des atomes
+
             atoms_str = "".join(f"{a.GetSymbol()}{a.GetIdx()}" for a in mol.GetAtoms())
             return hashlib.md5(atoms_str.encode()).hexdigest()
-    
+
     @classmethod
     def get_topological_distances(cls, mol: Chem.Mol) -> np.ndarray:
-        """Récupère ou calcule les distances topologiques."""
+
         key = cls.get_key(mol)
         if key in cls._cache_topo_dist:
             return cls._cache_topo_dist[key]
-        
-        # Calculer et cacher
+
         dist = _compute_topological_distances(mol)
-        
-        # Gérer la taille du cache
+
         if len(cls._cache_topo_dist) >= cls._max_size:
             cls._cache_topo_dist.pop(next(iter(cls._cache_topo_dist)))
-        
+
         cls._cache_topo_dist[key] = dist
         return dist
-    
+
     @classmethod
     def get_aromatic_map(cls, mol: Chem.Mol) -> List[Dict[int, int]]:
-        """Récupère ou calcule la map aromatique."""
+
         key = cls.get_key(mol)
         if key in cls._cache_aromatic_map:
             return cls._cache_aromatic_map[key]
-        
-        # Calculer et cacher
+
         arom_map = _compute_aromatic_distance_map(mol)
-        
+
         if len(cls._cache_aromatic_map) >= cls._max_size:
             cls._cache_aromatic_map.pop(next(iter(cls._cache_aromatic_map)))
-        
+
         cls._cache_aromatic_map[key] = arom_map
         return arom_map
-    
+
     @classmethod
     def get_canonical_ranks(cls, mol_noH: Chem.Mol) -> List[int]:
-        """Récupère ou calcule les rangs canoniques."""
+
         key = cls.get_key(mol_noH)
         if key in cls._cache_ranks:
             return cls._cache_ranks[key]
-        
+
         try:
             ranks = list(Chem.CanonicalRankAtoms(mol_noH, includeChirality=True))
         except Exception:
             ranks = list(Chem.CanonicalRankAtoms(mol_noH))
-        
+
         if len(cls._cache_ranks) >= cls._max_size:
             cls._cache_ranks.pop(next(iter(cls._cache_ranks)))
-        
+
         cls._cache_ranks[key] = ranks
         return ranks
-    
+
     @classmethod
     def clear(cls):
-        """Vide tous les caches."""
+
         cls._cache_topo_dist.clear()
         cls._cache_aromatic_map.clear()
         cls._cache_ranks.clear()
         cls._cache_conformers.clear()
 
-
 def _compute_topological_distances(mol: Chem.Mol) -> np.ndarray:
-    """Calcul brut des distances topologiques (utilisé par le cache)."""
+
     try:
         from rdkit.Chem.rdmolops import GetDistanceMatrix as _RDGetDistanceMatrix
         D = _RDGetDistanceMatrix(mol, useBO=False, useAtomWts=False)
@@ -388,21 +319,19 @@ def _compute_topological_distances(mol: Chem.Mol) -> np.ndarray:
         for bond in mol.GetBonds():
             i, j = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
             D[i, j] = D[j, i] = 1
-        # Floyd-Warshall
+
         for k in range(n):
             D = np.minimum(D, D[:, k:k+1] + D[k:k+1, :])
         return D
 
-
 def _compute_aromatic_distance_map(mol: Chem.Mol) -> List[Dict[int, int]]:
-    """Calcul brut de la distance map aromatique (utilisé par le cache)."""
+
     n = mol.GetNumAtoms()
     dist_maps = [{} for _ in range(n)]
     aro_idx = {a.GetIdx() for a in mol.GetAtoms() if a.GetIsAromatic()}
     if not aro_idx:
         return dist_maps
-    
-    # BFS depuis chaque atome aromatique
+
     for start in aro_idx:
         seen = {start}
         q = deque([(start, 0)])
@@ -410,7 +339,7 @@ def _compute_aromatic_distance_map(mol: Chem.Mol) -> List[Dict[int, int]]:
         while q:
             u, d = q.popleft()
             if d >= 3:
-                continue  # Limiter à ortho/meta/para
+                continue
             atom = mol.GetAtomWithIdx(u)
             for bond in atom.GetBonds():
                 v = bond.GetOtherAtomIdx(u)
@@ -420,9 +349,6 @@ def _compute_aromatic_distance_map(mol: Chem.Mol) -> List[Dict[int, int]]:
                     q.append((v, d + 1))
     return dist_maps
 
-# ---------------------------
-# Canon labels (49)
-# ---------------------------
 H1_CANON_CLASSES = [
     's','d','t','q','quin','sext','sept','oct','non','dec','m',
     'dd','ddd','dddd',
@@ -439,15 +365,9 @@ H1_CANON_CLASSES = [
 ]
 LABEL2IDX = {lbl: i for i, lbl in enumerate(H1_CANON_CLASSES)}
 
-# ---------------------------
-# Instrument defaults
-# ---------------------------
 DEFAULT_SPECTROMETER_FREQ_MHZ = 700.0
 DEFAULT_TEMPERATURE_K = 298.15
 
-# ---------------------------
-# Solvent DB (lightweight)
-# ---------------------------
 SOLVENT_DB = {
     "CDCl3": {
         "name": "CDCl3", "dielectric": 4.8, "viscosity": "low",
@@ -508,22 +428,17 @@ SOLVENT_DB = {
 }
 DEFAULT_SOLVENT = "CDCl3"
 
-# ---------------------------
-# Constants & thresholds
-# ---------------------------
 TOLERANCE_J_HZ = 0.15
 
 FREQ_LINEWIDTH_TABLE = [
-    # (freq_min, freq_max, linewidth_base_hz)
-    # Valeurs ajustées selon les largeurs de raie RÉALISTES (pas théoriques T₂)
-    # Références: Günther NMR Spectroscopy 3rd Ed., Reich organicchemistrydata.org
-    (0,   150, 1.80),  # Bas champ: shimming difficile, inhomogénéités importantes
-    (150, 250, 1.50),  # Intermédiaire bas: 200 MHz standard ancien
-    (250, 350, 1.30),  # 300 MHz: début résolution moderne
-    (350, 450, 1.20),  # 400 MHz: standard industriel actuel
-    (450, 600, 1.00),  # 500-600 MHz: haut champ recherche
-    (600, 800, 0.90),  # 700-800 MHz: très haut champ, meilleur shimming
-    (800, 1e9, 0.80),  # 900+ MHz: ultra haut champ, limite T₂ atteinte
+
+    (0,   150, 1.80),
+    (150, 250, 1.50),
+    (250, 350, 1.30),
+    (350, 450, 1.20),
+    (450, 600, 1.00),
+    (600, 800, 0.90),
+    (800, 1e9, 0.80),
 ]
 
 def _typical_linewidth_from_field(mhz: float, viscosity: str) -> float:
@@ -533,230 +448,150 @@ def _typical_linewidth_from_field(mhz: float, viscosity: str) -> float:
 
 _13C_NATURAL_ABUNDANCE = 0.011
 
-# ¹J(C-H) selon hybridation et environnement (Hz)
-# Références: Kalinowski et al., Carbon-13 NMR Spectroscopy
 _13C_1JCH_TABLE = {
-    'sp3_alkyl': 125.0,       # CH₃, CH₂ aliphatique
-    'sp3_alpha_O': 140.0,     # C-H adjacent à O (sucres, éthers)
-    'sp3_alpha_N': 135.0,     # C-H adjacent à N
-    'sp3_cyclopropane': 160.0, # Tension de cycle
-    'sp2_alkene': 155.0,      # C=C-H
-    'sp2_aldehyde': 175.0,    # CHO
-    'sp_alkyne': 250.0,       # ≡C-H
-    'aromatic': 160.0,        # Ar-H
+    'sp3_alkyl': 125.0,
+    'sp3_alpha_O': 140.0,
+    'sp3_alpha_N': 135.0,
+    'sp3_cyclopropane': 160.0,
+    'sp2_alkene': 155.0,
+    'sp2_aldehyde': 175.0,
+    'sp_alkyne': 250.0,
+    'aromatic': 160.0,
     'default': 140.0,
 }
 
-# ²J(H-H) geminaux selon l'environnement (Hz)
-# Références: Jackman & Sternhell, Applications of NMR Spectroscopy
 _GEMINAL_2J_TABLE = {
-    # =========================================================================
-    # ²J GEMINAL - TABLE COMPLÈTE
-    # Références:
-    #   - Jackman & Sternhell, Applications of NMR Spectroscopy (1969)
-    #   - Breitmaier, Structure Elucidation by NMR (2002)
-    #   - Günther H., NMR Spectroscopy 3rd Ed. (2013)
-    # =========================================================================
 
-    # --- BASE: CH₂ aliphatique standard ---
-    'CH2_alkyl': (-12.5, -14.0),      # CH₂ aliphatique (négatif!)
+    'CH2_alkyl': (-12.5, -14.0),
     'default_sp3': (-12.5, -14.0),
 
-    # --- CH₂ adjacents à hétéroatomes (modifie |²J|) ---
-    'CH2_alpha_O': (-10.0, -11.0),    # CH₂-O (sucres, éthers) ~10 Hz
-    'CH2_alpha_N': (-12.5, -13.5),    # CH₂-N (amines) ~13 Hz
-    'CH2_alpha_S': (-10.5, -11.5),    # CH₂-S (thioéthers, Cys) ~11 Hz
-    'CH2_alpha_P': (-8.5, -9.5),      # CH₂-P (phosphonates) ~9 Hz
-    'CH2_acetal': (-5.0, -7.0),       # O-CH₂-O (acétals, benzodioxole) ~6 Hz
+    'CH2_alpha_O': (-10.0, -11.0),
+    'CH2_alpha_N': (-12.5, -13.5),
+    'CH2_alpha_S': (-10.5, -11.5),
+    'CH2_alpha_P': (-8.5, -9.5),
+    'CH2_acetal': (-5.0, -7.0),
 
-    # --- CH₂ dans cycles tendus (réduit |²J|) ---
-    'CH2_cyclopropane': (-4.0, -5.0), # Cyclopropane ~4.3 Hz
-    'CH2_epoxide': (-5.0, -6.0),      # Époxyde (oxirane) ~5.5 Hz
-    'CH2_aziridine': (-5.5, -6.5),    # Aziridine ~6 Hz
-    'CH2_cyclobutane': (-11.5, -12.5),# Cyclobutane ~12 Hz
-    'CH2_cyclopentane': (-12.5, -13.5),# Cyclopentane ~13 Hz
-    'CH2_cyclohexane': (-12.5, -13.0),# Cyclohexane ~12.5 Hz (standard)
-    'CH2_exocyclic': (-10.0, -13.0),  # CH₂ exocyclique (ex: glucose C6)
+    'CH2_cyclopropane': (-4.0, -5.0),
+    'CH2_epoxide': (-5.0, -6.0),
+    'CH2_aziridine': (-5.5, -6.5),
+    'CH2_cyclobutane': (-11.5, -12.5),
+    'CH2_cyclopentane': (-12.5, -13.5),
+    'CH2_cyclohexane': (-12.5, -13.0),
+    'CH2_exocyclic': (-10.0, -13.0),
 
-    # --- CH₂ adjacents à carbones sp² (AUGMENTE |²J|) ---
-    'CH2_benzyl': (-13.5, -14.5),     # CH₂-Ar (Phe, Tyr) ~14.0 Hz
-    'CH2_indolyl': (-14.0, -15.0),    # CH₂-indole (Trp) ~14.5 Hz
-    'CH2_allyl': (-14.0, -15.0),      # CH₂-CH=C (allylique) ~14.5 Hz
-    'CH2_benzyl_allyl': (-14.5, -15.5),# Benzyl + allyl ~15 Hz
-    'CH2_alpha_C=O': (-15.5, -17.0),  # CH₂-C=O (α-carbonyle) ~16-17 Hz
-    'CH2_di_carbonyl': (-17.0, -18.5),# O=C-CH₂-C=O (malonique) ~17-18 Hz
-    'CH2_alpha_nitro': (-17.5, -18.5),# NO₂-CH₂-R ~18 Hz
+    'CH2_benzyl': (-13.5, -14.5),
+    'CH2_indolyl': (-14.0, -15.0),
+    'CH2_allyl': (-14.0, -15.0),
+    'CH2_benzyl_allyl': (-14.5, -15.5),
+    'CH2_alpha_C=O': (-15.5, -17.0),
+    'CH2_di_carbonyl': (-17.0, -18.5),
+    'CH2_alpha_nitro': (-17.5, -18.5),
 
-    # --- Combinaisons (effets additifs) ---
-    'CH2_Ar_C=O': (-16.0, -17.5),     # Ar-CH₂-C=O ~16-17 Hz
-    'CH2_Ar_C=C': (-15.0, -16.0),     # Ar-CH₂-C=C ~15-16 Hz
-    'CH2_N_C=O': (-16.5, -17.5),      # N-CH₂-C=O (Gly dans DKP) ~17 Hz
-    'CH2_O_C=O': (-13.5, -14.5),      # O-CH₂-C=O ~14 Hz
+    'CH2_Ar_C=O': (-16.0, -17.5),
+    'CH2_Ar_C=C': (-15.0, -16.0),
+    'CH2_N_C=O': (-16.5, -17.5),
+    'CH2_O_C=O': (-13.5, -14.5),
 
-    # --- CH₂ vinylique (signe POSITIF!) ---
-    'CH2_sp2': (1.5, 2.5),            # =CH₂ terminal ~2.0 Hz (positif)
-    'CH2_allene': (7.0, 8.5),         # =CH₂ dans allène ~7-8 Hz (positif)
-    'aldehyde': (2.0, 3.0),           # CHO (positif)
+    'CH2_sp2': (1.5, 2.5),
+    'CH2_allene': (7.0, 8.5),
+    'aldehyde': (2.0, 3.0),
     'default_sp2': (1.5, 2.5),
 }
 
-# =========================================================================
-# INCRÉMENTS ²J POUR CALCUL ADDITIF
-# Base = -12.5 Hz (CH₂ alkyle standard)
-# Chaque substituant ajoute son incrément au ²J
-# Valeur finale = base + Σ(incréments)
-# =========================================================================
 _GEMINAL_2J_INCREMENTS = {
-    # Hétéroatomes adjacents (réduisent généralement |²J|)
-    'alpha_O': +2.5,       # O réduit |²J| → ~-10 Hz
-    'alpha_N': -0.5,       # N augmente légèrement |²J| → ~-13 Hz
-    'alpha_S': +1.5,       # S réduit |²J| → ~-11 Hz
-    'alpha_P': +3.5,       # P réduit |²J| → ~-9 Hz
 
-    # Carbones sp² adjacents - CORRECTED: Distinguish aromatic from carbonyl
-    # =========================================================================
-    # FIX BUG 5: Separate aromatic_sp2 from C=O_adjacent
-    # - Aromatic sp2: π-donation REDUCES |²J| (positive increment)
-    # - Carbonyl C=O: σ-withdrawal INCREASES |²J| (negative increment)
-    # - Previous bug: both treated as increasing |²J|
-    # =========================================================================
-    'aromatic': +1.5,      # Ar REDUCES |²J| via π-donation → ~-11 Hz (Phe, Tyr Hβ ~14 via table)
-    'vinyl': -1.25,        # C=C augmente |²J| → ~-14 Hz (allyl seul)
-    'carbonyl': -1.5,      # C=O adjacent augmente |²J| modérément → ~-14 Hz (was -4.5, too high)
-    'nitro': -5.5,         # NO₂ augmente |²J| → ~-18 Hz
+    'alpha_O': +2.5,
+    'alpha_N': -0.5,
+    'alpha_S': +1.5,
+    'alpha_P': +3.5,
 
-    # Position β d'un carbonyle (2 liaisons, effet atténué)
-    # Ex: CH₂(β)-Cα-COOH dans acides aminés → ~15 Hz
-    'beta_carbonyl': -2.5, # β-C=O augmente |²J| → ~-15 Hz
+    'aromatic': +1.5,
+    'vinyl': -1.25,
+    'carbonyl': -1.5,
+    'nitro': -5.5,
 
-    # Cycles tendus (affectent la base)
-    'ring_3': +8.0,        # Cyclopropane/époxyde → ~-4.5 Hz
-    'ring_4': +0.5,        # Cyclobutane → ~-12 Hz
-    'ring_5': -0.5,        # Cyclopentane → ~-13 Hz
-    'ring_6': 0.0,         # Cyclohexane → ~-12.5 Hz (standard)
+    'beta_carbonyl': -2.5,
+
+    'ring_3': +8.0,
+    'ring_4': +0.5,
+    'ring_5': -0.5,
+    'ring_6': 0.0,
 }
 
-# ==============================================================================
-# ⁴J COUPLAGES LONGUE PORTÉE - TABLES COMPLÈTES
-# ==============================================================================
-# Références:
-# - Barfield M., Grant D.M., Adv. Magn. Reson. 1, 149 (1965)
-# - Jackman L.M., Sternhell S., Applications of NMR Spectroscopy (1969)
-# - Günther H., NMR Spectroscopy 3rd Ed. (2013), Chapter 7.5
-# ==============================================================================
-
 _4J_LONG_RANGE_TABLE = {
-    # Couplages allyliques ⁴J(H-C-C=C-H)
-    # Valeur dépend de l'angle dièdre H-C...C-H
-    'allylic_cis': (1.5, 3.0),        # H et CH₃ même côté du C=C
-    'allylic_trans': (0.8, 2.0),      # H et CH₃ côtés opposés
-    'allylic_general': (0.5, 3.0),    # Gamme générale
-    
-    # Couplages homoallyliques ⁴J(H-C=C-C-H)
-    # Plus petits que allyliques
-    'homoallylic_cis': (1.0, 2.0),    # Géométrie cis
-    'homoallylic_trans': (0.5, 1.5),  # Géométrie trans
+
+    'allylic_cis': (1.5, 3.0),
+    'allylic_trans': (0.8, 2.0),
+    'allylic_general': (0.5, 3.0),
+
+    'homoallylic_cis': (1.0, 2.0),
+    'homoallylic_trans': (0.5, 1.5),
     'homoallylic_general': (0.5, 2.5),
-    
-    # Couplages W-allyliques (configuration planaire en W)
-    # Plus grands car chemin σ/π optimal
-    'W_allylic_rigid': (1.5, 3.5),    # Systèmes rigides (cycles)
-    'W_allylic_flexible': (0.8, 2.0), # Systèmes flexibles
-    
-    # ⁴J à travers cycles aromatiques (méta-aromatique)
-    'meta_aromatic': (2.0, 3.5),      # H-Ar-C-Ar-H (méta)
-    'para_aromatic': (0.3, 0.8),      # H-Ar-C-C-Ar-H (para, très faible)
-    
-    # ⁴J benzoyle/benzyle: H-C-Ar-H
-    'benzylic': (0.5, 1.5),           # CH₃ ou CH₂ adjacent à aromatique
-    
-    # ⁴J aldéhyde-allyle: CHO-C=C-H
-    'aldehyde_vinylic': (1.0, 2.5),   # α,β-insaturé
-    
-    # ⁴J saturé en W (systèmes bicycliques rigides)
-    'W_saturated_rigid': (1.0, 2.5),  # Bicyclo[2.2.1]heptane, stéroïdes
-    'W_saturated_flexible': (0.0, 0.5), # Rarement observable
-    
-    # ⁴J cycliques spéciaux
-    'cyclopropyl': (1.0, 2.0),        # À travers cyclopropane
-    'cyclobutyl': (0.5, 1.5),         # À travers cyclobutane
-    
-    # Défauts
+
+    'W_allylic_rigid': (1.5, 3.5),
+    'W_allylic_flexible': (0.8, 2.0),
+
+    'meta_aromatic': (2.0, 3.5),
+    'para_aromatic': (0.3, 0.8),
+
+    'benzylic': (0.5, 1.5),
+
+    'aldehyde_vinylic': (1.0, 2.5),
+
+    'W_saturated_rigid': (1.0, 2.5),
+    'W_saturated_flexible': (0.0, 0.5),
+
+    'cyclopropyl': (1.0, 2.0),
+    'cyclobutyl': (0.5, 1.5),
+
     'default_rigid': (1.0, 2.0),
     'default_flexible': (0.0, 0.8),
 }
 
-# ==============================================================================
-# ⁵J COUPLAGES TRÈS LONGUE PORTÉE - TABLES COMPLÈTES
-# ==============================================================================
-# Ces couplages sont généralement très petits (<1 Hz) sauf configurations spéciales
-# Références: Barfield M., J. Am. Chem. Soc. 93, 1066 (1971)
-# ==============================================================================
-
 _5J_LONG_RANGE_TABLE = {
-    # Couplages W "étendu" (5 liaisons en zigzag)
-    # Observables seulement dans systèmes rigides planaires
-    'extended_W_rigid': (0.8, 2.0),   # Stéroïdes, systèmes polycycliques
-    'extended_W_flexible': (0.0, 0.3), # Généralement non résolu
-    
-    # ⁵J para-aromatique: H-Ar-C-C-Ar-H
-    'para_substituted': (0.4, 0.8),   # À travers noyau aromatique
-    
-    # ⁵J homoallylique étendu: H-C-C=C-C-H
-    'homoallylic_extended': (0.3, 1.0), # Rare mais mesurable
-    
-    # ⁵J dans systèmes π conjugués
-    'conjugated_diene': (0.5, 1.5),   # À travers diène conjugué
-    'conjugated_enyne': (0.3, 0.8),   # À travers ényne
-    
-    # ⁵J naphthalène (protons péri)
-    'peri_coupling': (0.5, 1.0),      # Positions 1,8 naphthalène
-    
-    # Défauts
+
+    'extended_W_rigid': (0.8, 2.0),
+    'extended_W_flexible': (0.0, 0.3),
+
+    'para_substituted': (0.4, 0.8),
+
+    'homoallylic_extended': (0.3, 1.0),
+
+    'conjugated_diene': (0.5, 1.5),
+    'conjugated_enyne': (0.3, 0.8),
+
+    'peri_coupling': (0.5, 1.0),
+
     'default': (0.0, 0.5),
 }
 
-# ==============================================================================
-# COUPLAGES H-F ET H-P - TABLES COMPLÈTES
-# ==============================================================================
-# Références:
-# - Emsley J.W., Phillips L., Wray V., Prog. NMR Spectrosc. 10, 83 (1976) - H-F
-# - Gorenstein D.G., Prog. NMR Spectrosc. 16, 1 (1983) - H-P (31P)
-# - Günther H., NMR Spectroscopy 3rd Ed. (2013), Chapter 7.6
-# ==============================================================================
-
 _HF_COUPLING_TABLE = {
-    # ²J(H-C-F) geminaux - très grands!
-    '2J_CHF_sp3': (42.0, 52.0),       # H-C(sp³)-F typique ~47 Hz
-    '2J_CHF_sp2': (44.0, 55.0),       # H-C(sp²)=C-F légèrement plus grand
-    '2J_CHF_formyl': (48.0, 56.0),    # FCH=O (formyle fluoré)
-    '2J_CHF_CF2': (50.0, 58.0),       # CHF₂ ou CF₂
-    '2J_CHF_CF3': (44.0, 50.0),       # CHFCF₃
-    
-    # ³J(H-C-C-F) vicinaux
-    '3J_HCCF_anti': (20.0, 35.0),     # Relation antiperiplanaire (Karplus max)
-    '3J_HCCF_gauche': (5.0, 15.0),    # Relation gauche (Karplus min)
-    '3J_HCCF_average': (8.0, 22.0),   # Moyenne rotationnelle
-    '3J_HCCF_cyclic': (10.0, 25.0),   # Dans cycles (angle fixe)
-    '3J_HCCF_aromatic': (6.0, 10.0),  # Ar-F avec H ortho
-    
-    # ⁴J(H-C-C-C-F) longue portée
-    '4J_HCCCF_W': (3.0, 8.0),         # Configuration W (grand!)
-    '4J_HCCCF_general': (0.5, 4.0),   # Géométrie quelconque
-    '4J_HCCCF_aromatic': (2.0, 5.0),  # Ar-F avec H méta
-    '4J_allylic_F': (2.0, 6.0),       # H-C-C=C-F (allylique)
-    
-    # ⁵J(H-C-C-C-C-F) très longue portée
-    '5J_HCCCCF_W': (1.0, 3.0),        # W étendu (rare)
-    '5J_HCCCCF_aromatic': (0.5, 2.0), # Ar-F avec H para
-    '5J_HCCCCF_general': (0.0, 1.5),  # Généralement non résolu
-    
-    # À travers liaisons multiples
-    'vinylic_2J': (75.0, 90.0),       # H-C=C-F geminal (très grand!)
-    'vinylic_3J_cis': (18.0, 28.0),   # H-C=C-F cis
-    'vinylic_3J_trans': (35.0, 45.0), # H-C=C-F trans
-    
-    # Défauts par ordre de couplage
+
+    '2J_CHF_sp3': (42.0, 52.0),
+    '2J_CHF_sp2': (44.0, 55.0),
+    '2J_CHF_formyl': (48.0, 56.0),
+    '2J_CHF_CF2': (50.0, 58.0),
+    '2J_CHF_CF3': (44.0, 50.0),
+
+    '3J_HCCF_anti': (20.0, 35.0),
+    '3J_HCCF_gauche': (5.0, 15.0),
+    '3J_HCCF_average': (8.0, 22.0),
+    '3J_HCCF_cyclic': (10.0, 25.0),
+    '3J_HCCF_aromatic': (6.0, 10.0),
+
+    '4J_HCCCF_W': (3.0, 8.0),
+    '4J_HCCCF_general': (0.5, 4.0),
+    '4J_HCCCF_aromatic': (2.0, 5.0),
+    '4J_allylic_F': (2.0, 6.0),
+
+    '5J_HCCCCF_W': (1.0, 3.0),
+    '5J_HCCCCF_aromatic': (0.5, 2.0),
+    '5J_HCCCCF_general': (0.0, 1.5),
+
+    'vinylic_2J': (75.0, 90.0),
+    'vinylic_3J_cis': (18.0, 28.0),
+    'vinylic_3J_trans': (35.0, 45.0),
+
     'default_2J': (46.0, 50.0),
     'default_3J': (10.0, 20.0),
     'default_4J': (1.0, 4.0),
@@ -764,168 +599,120 @@ _HF_COUPLING_TABLE = {
 }
 
 _HP_COUPLING_TABLE = {
-    # Couplages H-³¹P (phosphore)
-    # Références: Gorenstein D.G., Phosphorus-31 NMR (1984)
-    
-    # ²J(H-C-P) geminaux
-    '2J_HCP_sp3': (8.0, 18.0),        # H-C(sp³)-P
-    '2J_HCP_sp2': (10.0, 22.0),       # H-C(sp²)=C-P
-    '2J_HCP_phosphonate': (18.0, 25.0), # (RO)₂P(=O)CH₂R
-    
-    # ³J(H-C-C-P) vicinaux
-    '3J_HCCP_anti': (12.0, 20.0),     # Antiperiplanaire
-    '3J_HCCP_gauche': (2.0, 8.0),     # Gauche
-    '3J_HCCP_average': (5.0, 12.0),   # Moyenne
-    '3J_HCCP_sugar': (8.0, 12.0),     # Nucléotides, sucres phosphatés
-    
-    # ³J(H-C-O-P) à travers oxygène (phosphates)
-    '3J_HCOP_ester': (6.0, 12.0),     # Esters phosphate
-    '3J_HCOP_nucleotide': (4.0, 10.0), # Nucléotides
-    
-    # ⁴J(H-C-C-C-P) longue portée
-    '4J_HCCCP_W': (2.0, 5.0),         # Configuration W
-    '4J_HCCCP_general': (0.5, 2.0),   # Quelconque
-    
-    # Défauts
+
+    '2J_HCP_sp3': (8.0, 18.0),
+    '2J_HCP_sp2': (10.0, 22.0),
+    '2J_HCP_phosphonate': (18.0, 25.0),
+
+    '3J_HCCP_anti': (12.0, 20.0),
+    '3J_HCCP_gauche': (2.0, 8.0),
+    '3J_HCCP_average': (5.0, 12.0),
+    '3J_HCCP_sugar': (8.0, 12.0),
+
+    '3J_HCOP_ester': (6.0, 12.0),
+    '3J_HCOP_nucleotide': (4.0, 10.0),
+
+    '4J_HCCCP_W': (2.0, 5.0),
+    '4J_HCCCP_general': (0.5, 2.0),
+
     'default_2J': (12.0, 18.0),
     'default_3J': (6.0, 12.0),
     'default_4J': (0.5, 2.0),
 }
 
-# ==============================================================================
-# PARAMÈTRES ALCÈNES ENRICHIS
-# ==============================================================================
-# Références additionnelles:
-# - Pascual C., Meier J., Simon W., Helv. Chim. Acta 49, 164 (1966)
-# - Abraham R.J., Bernstein H.J., Can. J. Chem. 39, 216 (1961)
-# ==============================================================================
-
 _GARBISCH_ALKENE_EXTENDED = {
-    # Format: (A, B, C) pour J = A + B·cos(θ) + C·cos(2θ)
-    # θ = 0° cis, θ = 180° trans
-    
-    # Alcènes simples (Garbisch original)
-    'terminal': (11.0, -3.0, 2.0),         # R-CH=CH₂: cis~10, trans~16
-    'disubstituted_EZ': (11.5, -3.5, 2.0), # R-CH=CH-R: E/Z bien défini
-    'trisubstituted': (10.5, -2.5, 1.5),   # R₂C=CH-R: moins de couplage
-    'tetrasubstituted': (0.0, 0.0, 0.0),   # R₂C=CR₂: pas de H vinylique
-    
-    # Alcènes conjugués (effet électronique)
-    'diene_terminal': (11.5, -4.0, 2.5),   # CH₂=CH-CH=CH₂
-    'diene_internal': (11.0, -3.5, 2.0),   # R-CH=CH-CH=CH-R
-    'enone': (10.5, -3.0, 1.5),            # R-CH=CH-C(=O)-R (α,β-insaturé)
-    'styrene': (11.0, -3.0, 2.0),          # Ar-CH=CH₂
-    'stilbene': (11.5, -4.0, 2.5),         # Ar-CH=CH-Ar
-    
-    # Alcènes cycliques (contrainte angulaire)
-    'cyclopropene': (8.0, -1.5, 1.0),      # Très petit cycle
-    'cyclobutene': (9.0, -2.0, 1.5),       # 4-cycle
-    'cyclopentene': (10.0, -2.5, 1.5),     # 5-cycle: cis~10 Hz
-    'cyclohexene': (10.5, -3.0, 2.0),      # 6-cycle: proche standard
-    'cycloheptene': (11.0, -3.0, 2.0),     # 7-cycle: proche standard
-    'cyclooctene': (10.5, -3.5, 2.5),      # 8-cycle: cis/trans variable
-    
-    # Alcènes exocycliques (méthylène)
-    'exocyclic_3': (8.5, -2.0, 1.5),       # =CH₂ sur cyclopropane
-    'exocyclic_5': (10.0, -2.5, 2.0),      # =CH₂ sur cyclopentane
-    'exocyclic_6': (10.5, -3.0, 2.0),      # =CH₂ sur cyclohexane
-    
-    # Alcènes avec substituants électronégatifs
-    'vinyl_ether': (9.5, -2.5, 1.5),       # CH₂=CH-OR
-    'vinyl_ester': (9.0, -2.0, 1.5),       # CH₂=CH-OC(=O)R
-    'vinyl_halide_F': (8.0, -2.0, 1.0),    # CH₂=CH-F
-    'vinyl_halide_Cl': (9.5, -2.5, 1.5),   # CH₂=CH-Cl
-    'vinyl_halide_Br': (9.5, -2.5, 1.5),   # CH₂=CH-Br
-    'vinyl_amine': (10.0, -3.0, 2.0),      # CH₂=CH-NR₂
-    
-    # Corrections électronégativité (additions à J base)
-    'EN_correction_per_O': -0.8,           # Par oxygène adjacent
-    'EN_correction_per_N': -0.5,           # Par azote adjacent
-    'EN_correction_per_F': -1.2,           # Par fluor adjacent
-    'EN_correction_per_Cl': -0.6,          # Par chlore adjacent
-    
-    # Défaut
+
+    'terminal': (11.0, -3.0, 2.0),
+    'disubstituted_EZ': (11.5, -3.5, 2.0),
+    'trisubstituted': (10.5, -2.5, 1.5),
+    'tetrasubstituted': (0.0, 0.0, 0.0),
+
+    'diene_terminal': (11.5, -4.0, 2.5),
+    'diene_internal': (11.0, -3.5, 2.0),
+    'enone': (10.5, -3.0, 1.5),
+    'styrene': (11.0, -3.0, 2.0),
+    'stilbene': (11.5, -4.0, 2.5),
+
+    'cyclopropene': (8.0, -1.5, 1.0),
+    'cyclobutene': (9.0, -2.0, 1.5),
+    'cyclopentene': (10.0, -2.5, 1.5),
+    'cyclohexene': (10.5, -3.0, 2.0),
+    'cycloheptene': (11.0, -3.0, 2.0),
+    'cyclooctene': (10.5, -3.5, 2.5),
+
+    'exocyclic_3': (8.5, -2.0, 1.5),
+    'exocyclic_5': (10.0, -2.5, 2.0),
+    'exocyclic_6': (10.5, -3.0, 2.0),
+
+    'vinyl_ether': (9.5, -2.5, 1.5),
+    'vinyl_ester': (9.0, -2.0, 1.5),
+    'vinyl_halide_F': (8.0, -2.0, 1.0),
+    'vinyl_halide_Cl': (9.5, -2.5, 1.5),
+    'vinyl_halide_Br': (9.5, -2.5, 1.5),
+    'vinyl_amine': (10.0, -3.0, 2.0),
+
+    'EN_correction_per_O': -0.8,
+    'EN_correction_per_N': -0.5,
+    'EN_correction_per_F': -1.2,
+    'EN_correction_per_Cl': -0.6,
+
     'default': (11.0, -3.0, 2.0),
 }
 
-
-# ==============================================================================
-# ÉQUATION KARPLUS GÉNÉRALISÉE (Altona-Sundaralingam)
-# ==============================================================================
-# Références:
-# - Altona C., Sundaralingam M., JACS 94, 8205 (1972)
-# - Haasnoot C.A.G., de Leeuw F.A.A.M., Altona C., Tetrahedron 36, 2783 (1980)
-# - Demarco A., Llinas M., Wuthrich K., Biopolymers 17, 617 (1978)
-# ==============================================================================
-
-# Paramètres Karplus étendus: J = A*cos²(θ) + B*cos(θ) + C + D*cos(2θ+E)
 _KARPLUS_EXTENDED_PARAMS = {
-    # Standard Karplus (saturated C-C)
+
     'standard_HCCH': {
         'A': 7.76, 'B': -1.10, 'C': 1.40, 'D': 0.0, 'E': 0.0,
         'reference': 'Karplus M., JACS 85, 2870 (1963)'
     },
-    
-    # Haasnoot-Altona avec correction électronégativité
+
     'haasnoot_altona': {
         'P1': 13.70, 'P2': -0.73, 'P3': 0.0, 'P4': 0.56, 'P5': -2.47, 'P6': 16.90, 'P7': 0.14,
-        'lambda_i': [0.0, 0.0, 0.0, 0.0],  # Électronégativité substituants
+        'lambda_i': [0.0, 0.0, 0.0, 0.0],
         'reference': 'Haasnoot-de Leeuw-Altona, Tetrahedron 36, 2783 (1980)'
     },
-    
-    # Alcènes (vinyliques H-C=C-H)
+
     'vinylic': {
         'A': 11.0, 'B': -3.0, 'C': 2.0, 'D': 0.0, 'E': 0.0,
         'cis': 10.5, 'trans': 17.0, 'geminal': 2.0,
         'reference': 'Garbisch E.W., JACS 86, 5561 (1964)'
     },
-    
-    # Sucres/Furanoses (Altona-Sundaralingam pour ribose)
+
     'furanose_altona': {
         'H1H2': {'A': 9.67, 'B': -1.95, 'C': 0.97, 'cos_coeff': 0.462},
         'H2H3': {'A': 9.67, 'B': -1.95, 'C': 0.97, 'cos_coeff': 0.0},
         'H3H4': {'A': 9.67, 'B': -1.95, 'C': 0.97, 'cos_coeff': -0.462},
         'reference': 'Altona-Sundaralingam, JACS 94, 8205 (1972)'
     },
-    
-    # Peptides (φ backbone angle)
+
     'peptide_phi': {
         'A': 6.98, 'B': -1.38, 'C': 1.72, 'D': -0.11, 'E': 0.0,
-        'phase': -60.0,  # θ = φ - 60°
+        'phase': -60.0,
         'reference': 'Vuister-Bax, JACS 115, 7772 (1993)'
     },
-    
-    # Peptides (χ1 sidechain angle)
+
     'peptide_chi1': {
         'A': 9.50, 'B': -1.68, 'C': 1.80, 'D': 0.0, 'E': 0.0,
         'reference': 'DeMarco-Llinas-Wuthrich, Biopolymers 17, 617 (1978)'
     },
-    
-    # Nucléosides (pseudorotation)
+
     'nucleoside_pseudorot': {
         'A': 9.3, 'B': -0.7, 'C': 0.3, 'D': 0.0, 'E': 0.0,
-        'P_north': 18.0,   # C3'-endo (N-type, RNA)
-        'P_south': 162.0,  # C2'-endo (S-type, DNA)
+        'P_north': 18.0,
+        'P_south': 162.0,
         'reference': 'Altona-Sundaralingam, JACS 95, 2333 (1973)'
     },
-    
-    # H-F (électronégatif)
+
     'HCCF': {
         'A': 25.0, 'B': -3.0, 'C': 5.0, 'D': 0.0, 'E': 0.0,
         'reference': 'Abraham-Pachler, Mol Phys 7, 165 (1963)'
     },
-    
-    # H-P (phosphore)
+
     'HCCP': {
         'A': 15.0, 'B': -2.0, 'C': 3.0, 'D': 0.0, 'E': 0.0,
         'reference': 'Gorenstein, Phosphorus-31 NMR (1984)'
     },
 }
-
-
-# ==============================================================================
-# FONCTIONS D'ACCÈS AUX TABLES DE COUPLAGE LONGUE PORTÉE
-# ==============================================================================
 
 def _get_4J_coupling(
     mol: Chem.Mol,
@@ -934,44 +721,24 @@ def _get_4J_coupling(
     coupling_type: str = None,
     mol3d: Chem.Mol = None
 ) -> Optional[float]:
-    """
-    Retourne le couplage ⁴J approprié selon le type de système.
-    
-    Détecte automatiquement le type de couplage si non spécifié:
-    - Allylique: H-C-C=C-H
-    - Homoallylique: H-C=C-C-H  
-    - W-allylique: configuration W rigide
-    - Aromatique méta: à travers cycle aromatique
-    - W-saturé: systèmes bicycliques rigides
-    
-    Args:
-        mol: Molécule RDKit
-        h1_idx, h2_idx: Indices des protons (ou de leurs carbones parents)
-        coupling_type: Type forcé (optionnel)
-        mol3d: Molécule avec coords 3D pour calcul d'angle
-    
-    Returns:
-        ⁴J en Hz ou None si non applicable
-    """
+
     if coupling_type:
-        # Type spécifié explicitement
+
         if coupling_type in _4J_LONG_RANGE_TABLE:
             j_range = _4J_LONG_RANGE_TABLE[coupling_type]
             return (j_range[0] + j_range[1]) / 2.0
-    
-    # Récupérer les atomes
+
     try:
         atom1 = mol.GetAtomWithIdx(h1_idx)
         atom2 = mol.GetAtomWithIdx(h2_idx)
     except Exception:
         return None
-    
-    # Les indices sont-ils des H ou des C?
+
     c1_idx = h1_idx if atom1.GetSymbol() == 'C' else None
     c2_idx = h2_idx if atom2.GetSymbol() == 'C' else None
-    
+
     if c1_idx is None:
-        # Trouver le carbone parent
+
         for nb in atom1.GetNeighbors():
             if nb.GetSymbol() == 'C':
                 c1_idx = nb.GetIdx()
@@ -981,31 +748,27 @@ def _get_4J_coupling(
             if nb.GetSymbol() == 'C':
                 c2_idx = nb.GetIdx()
                 break
-    
+
     if c1_idx is None or c2_idx is None:
         return None
-    
+
     c1 = mol.GetAtomWithIdx(c1_idx)
     c2 = mol.GetAtomWithIdx(c2_idx)
-    
-    # Vérifier le type de couplage
-    # 1. Aromatique méta?
+
     if c1.GetIsAromatic() and c2.GetIsAromatic():
-        # Vérifier si dans le même cycle et en position méta
+
         ring_info = mol.GetRingInfo()
         for ring in ring_info.AtomRings():
             if c1_idx in ring and c2_idx in ring:
-                # Calculer la distance dans le cycle
+
                 idx1 = list(ring).index(c1_idx)
                 idx2 = list(ring).index(c2_idx)
                 dist = min(abs(idx1 - idx2), len(ring) - abs(idx1 - idx2))
-                if dist == 2:  # Position méta (2 liaisons dans le cycle)
-                    return 2.5  # Moyenne de meta_aromatic
-    
-    # 2. Allylique/Homoallylique?
-    # Chemin de 4 liaisons avec C=C
+                if dist == 2:
+                    return 2.5
+
     def find_path_4_bonds(start_idx, end_idx):
-        """BFS pour trouver chemin de 4 liaisons."""
+
         visited = {start_idx}
         queue = [(start_idx, [start_idx], 0)]
         while queue:
@@ -1019,45 +782,40 @@ def _get_4J_coupling(
                     visited.add(nb.GetIdx())
                     queue.append((nb.GetIdx(), path + [nb.GetIdx()], depth + 1))
         return None
-    
+
     path = find_path_4_bonds(c1_idx, c2_idx)
     if path and len(path) >= 4:
-        # Vérifier si double liaison dans le chemin
+
         has_double_bond = False
         for i in range(len(path) - 1):
             bond = mol.GetBondBetweenAtoms(path[i], path[i+1])
             if bond and bond.GetBondTypeAsDouble() >= 1.5:
                 has_double_bond = True
                 break
-        
+
         if has_double_bond:
-            # Allylique ou homoallylique selon la position de la double liaison
+
             is_rigid = all(mol.GetAtomWithIdx(idx).IsInRing() for idx in path)
             if is_rigid:
-                return 2.0  # W_allylic_rigid
+                return 2.0
             else:
-                return 1.5  # allylic_general moyen
-    
-    # 3. W-saturé dans bicyclique?
+                return 1.5
+
     if c1.IsInRing() and c2.IsInRing():
-        # Vérifier configuration W approximative
+
         if mol3d and mol3d.GetNumConformers() > 0:
             try:
                 conf = mol3d.GetConformer()
-                # Le couplage W existe si les H sont coplanaires avec les C intermédiaires
-                # Simplification: vérifier si même cycle et positions 1,3
-                return 1.2  # W_saturated_rigid
+
+                return 1.2
             except Exception:
                 pass
-    
-    # 4. Benzylic?
-    if (c1.GetIsAromatic() != c2.GetIsAromatic()):
-        # Un aromatique, un non
-        return 1.0  # benzylic moyen
-    
-    # Défaut: pas de couplage ⁴J détecté
-    return None
 
+    if (c1.GetIsAromatic() != c2.GetIsAromatic()):
+
+        return 1.0
+
+    return None
 
 def _get_5J_coupling(
     mol: Chem.Mol,
@@ -1066,38 +824,21 @@ def _get_5J_coupling(
     coupling_type: str = None,
     mol3d: Chem.Mol = None
 ) -> Optional[float]:
-    """
-    Retourne le couplage ⁵J approprié selon le type de système.
-    
-    Les couplages ⁵J sont généralement très petits (<1 Hz) sauf:
-    - Configuration W étendu rigide
-    - Position para aromatique
-    - Systèmes π conjugués
-    
-    Args:
-        mol: Molécule RDKit
-        h1_idx, h2_idx: Indices des protons (ou carbones)
-        coupling_type: Type forcé (optionnel)
-        mol3d: Molécule 3D pour calcul géométrique
-    
-    Returns:
-        ⁵J en Hz ou None si non applicable
-    """
+
     if coupling_type:
         if coupling_type in _5J_LONG_RANGE_TABLE:
             j_range = _5J_LONG_RANGE_TABLE[coupling_type]
             return (j_range[0] + j_range[1]) / 2.0
-    
+
     try:
         atom1 = mol.GetAtomWithIdx(h1_idx)
         atom2 = mol.GetAtomWithIdx(h2_idx)
     except Exception:
         return None
-    
-    # Détection para aromatique
+
     c1_idx = h1_idx if atom1.GetSymbol() == 'C' else None
     c2_idx = h2_idx if atom2.GetSymbol() == 'C' else None
-    
+
     if c1_idx is None:
         for nb in atom1.GetNeighbors():
             if nb.GetSymbol() == 'C':
@@ -1108,14 +849,13 @@ def _get_5J_coupling(
             if nb.GetSymbol() == 'C':
                 c2_idx = nb.GetIdx()
                 break
-    
+
     if c1_idx is None or c2_idx is None:
         return None
-    
+
     c1 = mol.GetAtomWithIdx(c1_idx)
     c2 = mol.GetAtomWithIdx(c2_idx)
-    
-    # Para aromatique?
+
     if c1.GetIsAromatic() and c2.GetIsAromatic():
         ring_info = mol.GetRingInfo()
         for ring in ring_info.AtomRings():
@@ -1123,25 +863,21 @@ def _get_5J_coupling(
                 idx1 = list(ring).index(c1_idx)
                 idx2 = list(ring).index(c2_idx)
                 dist = min(abs(idx1 - idx2), len(ring) - abs(idx1 - idx2))
-                if dist == 3:  # Position para
-                    return 0.6  # para_substituted moyen
-    
-    # W étendu rigide?
+                if dist == 3:
+                    return 0.6
+
     if c1.IsInRing() and c2.IsInRing():
-        # Vérifier si même système polycyclique rigide
+
         ring_info = mol.GetRingInfo()
         rings_c1 = [set(r) for r in ring_info.AtomRings() if c1_idx in r]
         rings_c2 = [set(r) for r in ring_info.AtomRings() if c2_idx in r]
-        
-        # Si les deux sont dans des cycles fusionnés
+
         for r1 in rings_c1:
             for r2 in rings_c2:
-                if len(r1 & r2) >= 2:  # Cycles fusionnés
-                    return 1.0  # extended_W_rigid
-    
-    # Défaut: pas de couplage ⁵J significatif
-    return None
+                if len(r1 & r2) >= 2:
+                    return 1.0
 
+    return None
 
 def _get_HF_coupling(
     mol: Chem.Mol,
@@ -1149,72 +885,51 @@ def _get_HF_coupling(
     f_idx: int,
     mol3d: Chem.Mol = None
 ) -> Optional[float]:
-    """
-    Retourne le couplage H-F selon le nombre de liaisons et la géométrie.
-    
-    Les couplages H-F sont caractéristiquement grands:
-    - ²J(H-C-F) ≈ 45-55 Hz
-    - ³J(H-C-C-F) ≈ 5-35 Hz (Karplus-dépendant)
-    - ⁴J(H-C-C-C-F) ≈ 1-8 Hz (configuration W)
-    
-    Args:
-        mol: Molécule RDKit
-        h_idx: Index du H (ou son C parent)
-        f_idx: Index du F
-        mol3d: Molécule 3D pour calcul d'angle dièdre
-    
-    Returns:
-        J(H-F) en Hz
-    """
+
     try:
-        # Trouver le plus court chemin H...F
+
         path = Chem.GetShortestPath(mol, h_idx, f_idx)
         n_bonds = len(path) - 1 if path else 0
     except Exception:
         return None
-    
+
     if n_bonds == 0:
         return None
-    
-    # ²J geminal
+
     if n_bonds == 2:
         j_range = _HF_COUPLING_TABLE.get('default_2J', (46.0, 50.0))
         return (j_range[0] + j_range[1]) / 2.0
-    
-    # ³J vicinal - dépend de l'angle dièdre
+
     if n_bonds == 3:
         if mol3d and mol3d.GetNumConformers() > 0:
             try:
                 conf = mol3d.GetConformer()
                 dihedral = abs(AllChem.GetDihedralDeg(conf, path[0], path[1], path[2], path[3]))
-                # Karplus pour H-F: anti (~30 Hz) > gauche (~10 Hz)
+
                 if dihedral > 150 or dihedral < 30:
-                    return 25.0  # Anti
+                    return 25.0
                 elif dihedral > 60 and dihedral < 120:
-                    return 8.0   # Gauche
+                    return 8.0
                 else:
-                    return 15.0  # Intermédiaire
+                    return 15.0
             except Exception:
                 pass
-        # Moyenne sans 3D
+
         j_range = _HF_COUPLING_TABLE.get('3J_HCCF_average', (8.0, 22.0))
         return (j_range[0] + j_range[1]) / 2.0
-    
-    # ⁴J longue portée
+
     if n_bonds == 4:
-        # Vérifier configuration W
+
         is_aromatic = any(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in path[1:-1])
         if is_aromatic:
-            return 3.5  # Aromatique méta
+            return 3.5
         else:
-            return 2.0  # Général
-    
-    # ⁵J très longue portée
-    if n_bonds == 5:
-        return 1.0  # Faible
-    
-    return None
+            return 2.0
 
+    if n_bonds == 5:
+        return 1.0
+
+    return None
 
 def _get_HP_coupling(
     mol: Chem.Mol,
@@ -1222,59 +937,32 @@ def _get_HP_coupling(
     p_idx: int,
     mol3d: Chem.Mol = None
 ) -> Optional[float]:
-    """
-    Retourne le couplage H-³¹P selon le nombre de liaisons.
-    
-    Les couplages H-P sont importants pour:
-    - Phosphonates, phosphates
-    - Nucléotides
-    - Composés organophosphorés
-    
-    Args:
-        mol: Molécule RDKit
-        h_idx: Index du H
-        p_idx: Index du P
-        mol3d: Molécule 3D
-    
-    Returns:
-        J(H-P) en Hz
-    """
+
     try:
         path = Chem.GetShortestPath(mol, h_idx, p_idx)
         n_bonds = len(path) - 1 if path else 0
     except Exception:
         return None
-    
+
     if n_bonds == 0:
         return None
-    
-    # ²J
+
     if n_bonds == 2:
         j_range = _HP_COUPLING_TABLE.get('default_2J', (12.0, 18.0))
         return (j_range[0] + j_range[1]) / 2.0
-    
-    # ³J - vérifier si via O (phosphate) ou C
+
     if n_bonds == 3:
-        # Chemin via oxygène?
+
         via_oxygen = any(mol.GetAtomWithIdx(idx).GetSymbol() == 'O' for idx in path[1:-1])
         if via_oxygen:
-            return 8.0  # ³J_HCOP_ester
+            return 8.0
         else:
-            return 9.0  # ³J_HCCP_average
-    
-    # ⁴J
+            return 9.0
+
     if n_bonds == 4:
-        return 1.5  # Faible
-    
+        return 1.5
+
     return None
-
-
-# ==============================================================================
-# AMÉLIORATION 6: COUPLAGES VINYLIQUES E/Z DEPUIS STÉRÉOCHIMIE SMILES
-# ==============================================================================
-# Détection automatique de la stéréochimie E/Z pour choisir Jcis (~10 Hz) vs Jtrans (~16 Hz)
-# Références: Jackman & Sternhell, Applications of NMR Spectroscopy
-# ==============================================================================
 
 def _get_vinylic_J_from_stereo(
     mol: Chem.Mol,
@@ -1284,58 +972,38 @@ def _get_vinylic_J_from_stereo(
     default_trans: float = 16.0,
     default_geminal: float = 2.0
 ) -> Optional[Tuple[float, str]]:
-    """
-    Détermine le couplage vinylique ³J(H-C=C-H) depuis la stéréochimie E/Z du SMILES.
-    
-    Utilise la stéréochimie définie dans le SMILES (ex: /C=C\\ pour Z, /C=C/ pour E)
-    pour déterminer si les H sont cis ou trans.
-    
-    Args:
-        mol: Molécule RDKit avec H explicites
-        h1_idx, h2_idx: Indices des deux H vinyliques
-        default_cis: J pour configuration Z (cis) en Hz
-        default_trans: J pour configuration E (trans) en Hz
-        default_geminal: J pour H géminaux (=CH₂)
-    
-    Returns:
-        Tuple (J_hz, stereo_type) où stereo_type = 'cis', 'trans', 'geminal', ou 'unknown'
-        None si pas un couplage vinylique
-    """
+
     try:
         h1 = mol.GetAtomWithIdx(h1_idx)
         h2 = mol.GetAtomWithIdx(h2_idx)
-        
+
         if h1.GetSymbol() != 'H' or h2.GetSymbol() != 'H':
             return None
-        
-        # Trouver les carbones parents
+
         c1_list = [n for n in h1.GetNeighbors() if n.GetSymbol() == 'C']
         c2_list = [n for n in h2.GetNeighbors() if n.GetSymbol() == 'C']
-        
+
         if not c1_list or not c2_list:
             return None
-        
+
         c1 = c1_list[0]
         c2 = c2_list[0]
         c1_idx = c1.GetIdx()
         c2_idx = c2.GetIdx()
-        
-        # Geminal? (même carbone)
+
         if c1_idx == c2_idx:
             return (default_geminal, 'geminal')
-        
-        # Vérifier qu'il y a une double liaison C=C
+
         bond = mol.GetBondBetweenAtoms(c1_idx, c2_idx)
         if not bond:
             return None
         if bond.GetBondTypeAsDouble() < 1.9:
             return None
-        
-        # Récupérer la stéréochimie de la double liaison
+
         stereo = bond.GetStereo()
-        
+
         if stereo == Chem.BondStereo.STEREONONE:
-            # Pas de stéréochimie définie - utiliser la géométrie 3D si disponible
+
             if mol.GetNumConformers() > 0:
                 try:
                     conf = mol.GetConformer()
@@ -1349,49 +1017,35 @@ def _get_vinylic_J_from_stereo(
                         return ((default_cis + default_trans) / 2, 'unknown')
                 except Exception:
                     pass
-            return (default_trans, 'unknown')  # Défaut: trans (plus stable)
-        
-        # Récupérer les atomes de référence pour la stéréochimie
+            return (default_trans, 'unknown')
+
         stereo_atoms = bond.GetStereoAtoms()
         if len(stereo_atoms) < 2:
             return (default_trans, 'unknown')
-        
+
         ref1_idx, ref2_idx = stereo_atoms[0], stereo_atoms[1]
-        
-        # Déterminer si h1 et h2 sont cis ou trans
-        # Pour E (trans): les groupes de haute priorité sont de côtés opposés
-        # Pour Z (cis): les groupes de haute priorité sont du même côté
-        
-        # Vérifier la position des H par rapport aux références
+
         h1_is_ref1 = (h1_idx == ref1_idx)
         h2_is_ref2 = (h2_idx == ref2_idx)
-        
+
         if stereo in (Chem.BondStereo.STEREOE, Chem.BondStereo.STEREOTRANS):
-            # E (trans): refs sont opposés, donc H opposés = cis, H même côté = trans
+
             if h1_is_ref1 == h2_is_ref2:
                 return (default_trans, 'trans')
             else:
                 return (default_cis, 'cis')
-        
+
         elif stereo in (Chem.BondStereo.STEREOZ, Chem.BondStereo.STEREOCIS):
-            # Z (cis): refs sont même côté
+
             if h1_is_ref1 == h2_is_ref2:
                 return (default_cis, 'cis')
             else:
                 return (default_trans, 'trans')
-        
+
         return (default_trans, 'unknown')
-        
+
     except Exception:
         return None
-
-
-# ==============================================================================
-# AMÉLIORATION: DÉTECTION SYSTÈMES AA'BB' AROMATIQUES SYMÉTRIQUES
-# ==============================================================================
-# Para-disubstitués symétriques (p-xylène, etc.) apparaissent comme singulets
-# car le système AA'BB' est fortement couplé avec delta_nu/J proche de 0
-# ==============================================================================
 
 def _is_symmetric_para_disubstituted_benzene(
     mol: Chem.Mol,
@@ -1399,109 +1053,83 @@ def _is_symmetric_para_disubstituted_benzene(
     aromatic_dmap: List[Dict[int, int]],
     ranks: Optional[List[int]] = None,
 ) -> bool:
-    """
-    Détecte si un H aromatique fait partie d'un système AA'BB' symétrique
-    (para-disubstitué avec substituants identiques) qui apparaît comme singulet.
-    
-    Exemples: p-xylène, 1,4-dichlorobenzène, hydroquinone, etc.
-    
-    Le système AA'BB' fortement couplé avec delta_nu = 0 donne un singulet apparent.
-    """
+
     atom = mol.GetAtomWithIdx(heavy_idx)
     if not atom.GetIsAromatic() or atom.GetSymbol() != 'C':
         return False
-    
-    # Trouver le cycle aromatique à 6 membres contenant cet atome
+
     ring_info = mol.GetRingInfo()
     six_rings = [r for r in ring_info.AtomRings() if len(r) == 6 and heavy_idx in r]
-    
+
     if not six_rings:
         return False
-    
+
     ring = six_rings[0]
     ring_set = set(ring)
-    
-    # Vérifier que tous les atomes du cycle sont des C aromatiques
+
     for idx in ring:
         a = mol.GetAtomWithIdx(idx)
         if a.GetSymbol() != 'C' or not a.GetIsAromatic():
             return False
-    
-    # Trouver les positions substituées (atomes sans H) et les positions avec H
+
     substituted_positions = []
     h_positions = []
-    
+
     for idx in ring:
         a = mol.GetAtomWithIdx(idx)
-        # Compter les H attachés (explicites + implicites)
+
         n_H = a.GetTotalNumHs()
-        # Aussi vérifier les H explicites si présents
+
         n_H_explicit = sum(1 for n in a.GetNeighbors() if n.GetSymbol() == 'H' or n.GetAtomicNum() == 1)
         n_H = max(n_H, n_H_explicit)
-        
+
         if n_H == 0:
-            # Pas de H → position substituée
-            # Vérifier qu'il y a un substituant (pas juste dans le cycle)
+
             non_ring_neighbors = [n for n in a.GetNeighbors() if n.GetIdx() not in ring_set]
             if non_ring_neighbors:
                 substituted_positions.append(idx)
         else:
             h_positions.append(idx)
-    
-    # Para-disubstitué: exactement 2 positions substituées
+
     if len(substituted_positions) != 2:
         return False
-    
-    # Vérifier que les 2 substituants sont en position para (distance 3 dans le cycle)
+
     p1, p2 = substituted_positions
-    
-    # Calculer la distance dans le cycle (mod 6)
+
     try:
         idx1 = ring.index(p1)
         idx2 = ring.index(p2)
         dist = min(abs(idx1 - idx2), 6 - abs(idx1 - idx2))
         if dist != 3:
-            return False  # Pas en para
+            return False
     except:
         return False
-    
-    # Vérifier que les substituants sont identiques
+
     a1 = mol.GetAtomWithIdx(p1)
     a2 = mol.GetAtomWithIdx(p2)
-    
-    # Trouver les substituants (atomes non dans le cycle)
+
     sub1 = [n for n in a1.GetNeighbors() if n.GetIdx() not in ring_set]
     sub2 = [n for n in a2.GetNeighbors() if n.GetIdx() not in ring_set]
-    
+
     if len(sub1) != 1 or len(sub2) != 1:
         return False
-    
-    # Comparer les substituants par leur type atomique et nombre de H
-    # (méthode plus robuste que les rangs canoniques)
+
     s1, s2 = sub1[0], sub2[0]
-    
-    # Même symbole atomique ?
+
     if s1.GetSymbol() != s2.GetSymbol():
         return False
-    
-    # Même nombre de H ?
+
     if s1.GetTotalNumHs() != s2.GetTotalNumHs():
         return False
-    
-    # Même degré (nombre de voisins) ?
+
     if s1.GetDegree() != s2.GetDegree():
         return False
-    
-    # Si les substituants sont identiques, vérifier que les H aromatiques 
-    # ont le même déplacement chimique (équivalents)
-    if ranks is not None:
-        # Vérifier que les H positions ont des rangs cohérents
-        # (positions 2,6 équivalentes, positions 3,5 équivalentes)
-        pass  # Les substituants sont identiques → symétrie confirmée
-    
-    # C'est un para-disubstitué symétrique → singulet apparent
-    return True
 
+    if ranks is not None:
+
+        pass
+
+    return True
 
 def _is_ortho_disubstituted_symmetric(
     mol: Chem.Mol,
@@ -1509,23 +1137,20 @@ def _is_ortho_disubstituted_symmetric(
     aromatic_dmap: List[Dict[int, int]],
     ranks: Optional[List[int]] = None,
 ) -> bool:
-    """
-    Détecte les ortho-disubstitués symétriques (o-xylène).
-    Ces systèmes montrent des multiplicités plus complexes.
-    """
+
     atom = mol.GetAtomWithIdx(heavy_idx)
     if not atom.GetIsAromatic() or atom.GetSymbol() != 'C':
         return False
-    
+
     ring_info = mol.GetRingInfo()
     six_rings = [r for r in ring_info.AtomRings() if len(r) == 6 and heavy_idx in r]
-    
+
     if not six_rings:
         return False
-    
+
     ring = six_rings[0]
     ring_set = set(ring)
-    
+
     substituted_positions = []
     for idx in ring:
         a = mol.GetAtomWithIdx(idx)
@@ -1534,48 +1159,35 @@ def _is_ortho_disubstituted_symmetric(
             non_ring_neighbors = [n for n in a.GetNeighbors() if n.GetIdx() not in ring_set]
             if non_ring_neighbors:
                 substituted_positions.append(idx)
-    
+
     if len(substituted_positions) != 2:
         return False
-    
+
     p1, p2 = substituted_positions
     try:
         idx1 = ring.index(p1)
         idx2 = ring.index(p2)
         dist = min(abs(idx1 - idx2), 6 - abs(idx1 - idx2))
-        if dist != 1:  # Ortho
+        if dist != 1:
             return False
     except:
         return False
-    
+
     if ranks is not None and ranks[p1] != ranks[p2]:
         return False
-    
+
     return True
 
-
-# ==============================================================================
-# AMÉLIORATION 7: COUPLAGES AROMATIQUES AUTOMATIQUES
-# ==============================================================================
-# Détection automatique ortho (7-8 Hz), méta (2-3 Hz), para (0.5 Hz)
-# Références: Günther H., NMR Spectroscopy 3rd Ed. (2013), Chapter 7
-# ==============================================================================
-
-# Table des couplages aromatiques par type de cycle
-# AMÉLIORATION: Table enrichie avec positions spécifiques pour tous les hétérocycles
 _AROMATIC_COUPLING_TABLE = {
-    # Benzène et dérivés
+
     'benzene': {'ortho': 7.5, 'meta': 1.5, 'para': 0.5},
-    'phenyl_electron_donor': {'ortho': 7.8, 'meta': 1.8, 'para': 0.4},  # OH, OR, NR2
-    'phenyl_electron_acceptor': {'ortho': 8.2, 'meta': 2.2, 'para': 0.6},  # NO2, CN, C=O
-    
-    # =========================================================================
-    # Hétérocycles 5-membred - ENRICHIS avec toutes les positions
-    # =========================================================================
+    'phenyl_electron_donor': {'ortho': 7.8, 'meta': 1.8, 'para': 0.4},
+    'phenyl_electron_acceptor': {'ortho': 8.2, 'meta': 2.2, 'para': 0.6},
+
     'furan': {
-        'ortho': 1.8, 'meta': 0.9, 'para': 1.5,  # Mapping générique
+        'ortho': 1.8, 'meta': 0.9, 'para': 1.5,
         '2_3': 1.8, '3_4': 3.4, '2_4': 0.9, '2_5': 1.5, '3_5': 0.9,
-        # Couplages long-range faibles mais détectables
+
         'long_range_4J': 0.5,
     },
     'thiophene': {
@@ -1589,11 +1201,10 @@ _AROMATIC_COUPLING_TABLE = {
         'long_range_4J': 0.5,
     },
     'imidazole': {
-        # Position 2: entre les 2 N, H2 souvent singulet (découplé des H4,H5)
-        # J(H4-H5) ≈ 1.5 Hz, mais souvent non résolu -> singulets
+
         'ortho': 1.5, 'meta': 0.0, 'para': 0.0,
-        '4_5': 1.5, '2_4': 0.0, '2_5': 0.0,  # H2 ne couple pas avec H4,H5
-        'special_h2_singlet': True,  # Flag pour H2 singulet
+        '4_5': 1.5, '2_4': 0.0, '2_5': 0.0,
+        'special_h2_singlet': True,
     },
     'pyrazole': {
         'ortho': 2.0, 'meta': 0.5,
@@ -1611,20 +1222,14 @@ _AROMATIC_COUPLING_TABLE = {
         'ortho': 2.0, 'meta': 0.8,
         '3_4': 2.0, '4_5': 1.8, '3_5': 0.8,
     },
-    
-    # =========================================================================
-    # Hétérocycles 6-membred - ENRICHIS
-    # =========================================================================
+
     'pyridine': {
-        # Convention: 'ortho' = distance 1 dans le cycle (voisins adjacents)
-        # Pyridine: J(2,3)=J(5,6)=4.8 Hz (adjacent à N), J(3,4)=J(4,5)=7.8 Hz
-        # Moyenne pour 'ortho' dans le cycle: (4.8 + 7.8) / 2 ≈ 6.3 Hz
-        # On utilise une moyenne pondérée basée sur la position
-        'ortho': 6.3,  # Distance 1: moyenne des J 3J
-        'meta': 1.8,   # Distance 2: couplage 4J (faible)
-        'para': 0.5,   # Distance 3: couplage 5J (très faible)
-        '2_3': 4.8, '3_4': 7.8, '4_5': 7.8, '5_6': 4.8,  # Couplages 3J spécifiques
-        '2_4': 1.8, '2_5': 0.9, '2_6': 0.4,  # Couplages 4J et 5J
+
+        'ortho': 6.3,
+        'meta': 1.8,
+        'para': 0.5,
+        '2_3': 4.8, '3_4': 7.8, '4_5': 7.8, '5_6': 4.8,
+        '2_4': 1.8, '2_5': 0.9, '2_6': 0.4,
         '3_5': 1.5, '3_6': 0.5, '4_6': 1.8,
     },
     'pyrimidine': {
@@ -1633,22 +1238,19 @@ _AROMATIC_COUPLING_TABLE = {
     },
     'pyrazine': {
         'ortho': 2.0, 'meta': 0.5,
-        '2_3': 2.0, '2_5': 0.5,  # Tous les H équivalents par paires
+        '2_3': 2.0, '2_5': 0.5,
     },
     'pyridazine': {
         'ortho': 5.0, 'meta': 2.0,
         '3_4': 5.0, '4_5': 5.0, '5_6': 5.0, '3_5': 2.0, '4_6': 2.0,
     },
     'triazine_1_3_5': {
-        # Tous les H équivalents, pas de couplage entre eux
+
         'ortho': 0.0, 'meta': 0.0,
     },
-    
-    # =========================================================================
-    # Hétérocycles condensés - NOUVEAUX
-    # =========================================================================
+
     'quinoline': {
-        # Cycle pyridine fusionné avec benzène
+
         'ortho': 8.0, 'meta': 1.5, 'para': 0.5,
         '2_3': 4.5, '3_4': 8.0, '5_6': 8.0, '6_7': 7.5, '7_8': 8.0,
         '2_4': 1.8, '5_7': 1.3, '5_8': 0.8, '6_8': 1.3,
@@ -1658,10 +1260,10 @@ _AROMATIC_COUPLING_TABLE = {
         '1_3': 0.9, '1_4': 0.5, '3_4': 6.5, '5_6': 8.0, '6_7': 7.5, '7_8': 8.0,
     },
     'indole': {
-        # Pyrrole fusionné avec benzène
+
         'ortho': 7.8, 'meta': 1.2, 'para': 0.5,
         '2_3': 2.2, '4_5': 8.0, '5_6': 7.5, '6_7': 7.5, '7_4': 0.8,
-        '3_4': 0.0,  # Pas de couplage entre H3 et H4 (séparés par la fusion)
+        '3_4': 0.0,
     },
     'benzofuran': {
         'ortho': 7.8, 'meta': 1.2, 'para': 0.5,
@@ -1674,239 +1276,167 @@ _AROMATIC_COUPLING_TABLE = {
     'benzimidazole': {
         'ortho': 7.8, 'meta': 1.3, 'para': 0.5,
         '4_5': 8.0, '5_6': 7.5, '6_7': 7.5, '2_4': 0.0, '2_7': 0.0,
-        'special_h2_singlet': True,  # H2 est singulet
+        'special_h2_singlet': True,
     },
-    
-    # Naphthalène et polycycliques
+
     'naphthalene': {'1_2': 8.0, '2_3': 7.0, '3_4': 8.0, '1_3': 1.3, '1_4': 0.8, '2_4': 1.3,
                     '5_6': 8.0, '6_7': 7.0, '7_8': 8.0, 'ortho': 8.0, 'meta': 1.3, 'para': 0.8},
-    
-    # Défauts par distance
+
     'default_ortho': 7.5,
     'default_meta': 2.0,
     'default_para': 0.5,
 }
 
-
 def _is_imidazole_H2_carbon(mol: Chem.Mol, heavy_idx: int) -> bool:
-    """
-    Détecte si un carbone aromatique est en position 2 d'un imidazole (entre 2 N).
-    
-    Le H sur ce carbone est un SINGULET car:
-    - Entouré par 2 N (pas de voisins H directs)
-    - Couplages 4J avec H4/H5 sont négligeables (<0.5 Hz, non résolus)
-    
-    Args:
-        mol: Molécule RDKit
-        heavy_idx: Index du carbone portant le H
-        
-    Returns:
-        True si c'est le C2 d'un imidazole → H doit être singulet
-    """
+
     try:
         atom = mol.GetAtomWithIdx(heavy_idx)
         if atom.GetSymbol() != 'C' or not atom.GetIsAromatic():
             return False
-        
-        # Trouver les cycles à 5 membres contenant cet atome
+
         ring_info = mol.GetRingInfo()
         five_rings = [r for r in ring_info.AtomRings() if len(r) == 5 and heavy_idx in r]
-        
+
         if not five_rings:
             return False
-        
+
         for ring in five_rings:
             ring_set = set(ring)
-            
-            # Compter les N dans le cycle
+
             n_in_ring = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetSymbol() == 'N')
-            
-            # Imidazole a 2 N, pyrazole aussi, triazole en a 3
+
             if n_in_ring < 2:
                 continue
-            
-            # Vérifier si ce carbone a 2 voisins N dans le cycle
+
             n_neighbors = 0
             for neighbor in atom.GetNeighbors():
                 if neighbor.GetSymbol() == 'N' and neighbor.GetIdx() in ring_set:
                     n_neighbors += 1
-            
+
             if n_neighbors == 2:
-                return True  # Position 2 de l'imidazole
-        
+                return True
+
         return False
     except Exception:
         return False
 
-
 def _is_isolated_heterocyclic_H(mol: Chem.Mol, heavy_idx: int) -> bool:
-    """
-    Détecte si un H hétérocyclique est isolé (pas de couplages significatifs).
-    
-    Cas typiques:
-    - Imidazole H4 et H5: souvent singulets (J très petit ~1.5 Hz, non résolu)
-    - Pyrazole positions similaires
-    
-    Returns:
-        True si le H devrait apparaître comme singulet
-    """
+
     try:
         atom = mol.GetAtomWithIdx(heavy_idx)
         if atom.GetSymbol() != 'C' or not atom.GetIsAromatic():
             return False
-        
-        # Trouver les cycles à 5 membres
+
         ring_info = mol.GetRingInfo()
         five_rings = [r for r in ring_info.AtomRings() if len(r) == 5 and heavy_idx in r]
-        
+
         if not five_rings:
             return False
-        
+
         for ring in five_rings:
             ring_set = set(ring)
-            
-            # Compter les N dans le cycle
+
             n_count = sum(1 for idx in ring if mol.GetAtomWithIdx(idx).GetSymbol() == 'N')
-            
+
             if n_count < 2:
-                continue  # Pas un hétérocycle avec 2+ N
-            
-            # Compter les C avec H dans le cycle
+                continue
+
             c_with_H = 0
             for idx in ring:
                 a = mol.GetAtomWithIdx(idx)
                 if a.GetSymbol() == 'C':
-                    # Vérifier si ce C a un H
-                    has_H = any(n.GetSymbol() == 'H' or n.GetAtomicNum() == 1 
+
+                    has_H = any(n.GetSymbol() == 'H' or n.GetAtomicNum() == 1
                                for n in a.GetNeighbors())
                     if not has_H and a.GetTotalNumHs() > 0:
                         has_H = True
                     if has_H:
                         c_with_H += 1
-            
-            # Si seulement 1 ou 2 C avec H dans un cycle avec 2+ N,
-            # les couplages sont souvent non résolus
+
             if c_with_H <= 2 and n_count >= 2:
-                # Vérifier si ce carbone n'a pas de voisin C avec H
+
                 for neighbor in atom.GetNeighbors():
                     if neighbor.GetIdx() in ring_set and neighbor.GetSymbol() == 'C':
                         neighbor_has_H = any(n.GetSymbol() == 'H' for n in neighbor.GetNeighbors())
                         if neighbor_has_H:
-                            # Il y a un voisin C-H, couplage possible
-                            # Mais dans imidazole le J est très petit (~1.5 Hz)
-                            # On le considère comme résolu seulement si J > 2 Hz
+
                             return False
                 return True
-        
+
         return False
     except Exception:
         return False
 
-
 def _is_imidazole_h2_position(mol: Chem.Mol, c1_idx: int, c2_idx: int, ring: tuple) -> bool:
-    """
-    Détecte si un carbone est en position 2 de l'imidazole (entre les 2 N).
-    
-    Dans l'imidazole et benzimidazole, le H2 est souvent un singulet car:
-    - Il est entouré par deux N
-    - Les couplages 4J avec H4 et H5 sont négligeables (<0.5 Hz)
-    
-    Returns:
-        True si c1 ou c2 est le carbone en position 2
-    """
+
     try:
         for c_idx in (c1_idx, c2_idx):
             carbon = mol.GetAtomWithIdx(c_idx)
             if carbon.GetSymbol() != 'C':
                 continue
-            
-            # Compter les N voisins dans le cycle
+
             n_neighbors_in_ring = 0
             for neighbor in carbon.GetNeighbors():
                 if neighbor.GetSymbol() == 'N' and neighbor.GetIdx() in ring:
                     n_neighbors_in_ring += 1
-            
-            # Position 2: le carbone a 2 voisins N dans le cycle
+
             if n_neighbors_in_ring == 2:
                 return True
-        
+
         return False
     except Exception:
         return False
-
 
 def _get_aromatic_coupling(
     mol: Chem.Mol,
     h1_idx: int,
     h2_idx: int
 ) -> Optional[Tuple[float, str]]:
-    """
-    Détermine le couplage aromatique depuis la topologie du cycle.
-    
-    Détecte automatiquement:
-    - Position ortho (distance 1 dans le cycle): 7-8 Hz
-    - Position méta (distance 2): 1.5-2.5 Hz
-    - Position para (distance 3): 0.4-0.8 Hz
-    
-    Gère aussi les hétérocycles avec valeurs spécifiques.
-    
-    Args:
-        mol: Molécule RDKit avec H explicites
-        h1_idx, h2_idx: Indices des deux H aromatiques
-    
-    Returns:
-        Tuple (J_hz, position_type) ou None
-    """
+
     try:
         h1 = mol.GetAtomWithIdx(h1_idx)
         h2 = mol.GetAtomWithIdx(h2_idx)
-        
-        # Trouver les carbones aromatiques parents
+
         c1_list = [n for n in h1.GetNeighbors() if n.GetIsAromatic()]
         c2_list = [n for n in h2.GetNeighbors() if n.GetIsAromatic()]
-        
+
         if not c1_list or not c2_list:
             return None
-        
+
         c1 = c1_list[0]
         c2 = c2_list[0]
         c1_idx = c1.GetIdx()
         c2_idx = c2.GetIdx()
-        
+
         if c1_idx == c2_idx:
-            return None  # Même carbone
-        
-        # Trouver le cycle aromatique commun
+            return None
+
         ring_info = mol.GetRingInfo()
         common_rings = []
-        
+
         for ring in ring_info.AtomRings():
             if c1_idx in ring and c2_idx in ring:
-                # Vérifier que c'est un cycle aromatique
+
                 is_aromatic = all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring)
                 if is_aromatic:
                     common_rings.append(ring)
-        
+
         if not common_rings:
             return None
-        
-        # Utiliser le plus petit cycle commun
+
         ring = min(common_rings, key=len)
         ring_size = len(ring)
-        
-        # Calculer la distance dans le cycle
+
         ring_list = list(ring)
         idx1 = ring_list.index(c1_idx)
         idx2 = ring_list.index(c2_idx)
         dist = min(abs(idx1 - idx2), ring_size - abs(idx1 - idx2))
-        
-        # Déterminer le type de cycle pour les valeurs spécifiques
+
         ring_atoms = [mol.GetAtomWithIdx(idx) for idx in ring]
         heteroatoms = [a.GetSymbol() for a in ring_atoms if a.GetSymbol() != 'C']
-        
-        # Identifier le type d'hétérocycle
-        cycle_type = 'benzene'  # Défaut
-        
+
+        cycle_type = 'benzene'
+
         if ring_size == 5:
             if 'O' in heteroatoms and 'N' not in heteroatoms:
                 cycle_type = 'furan'
@@ -1924,8 +1454,7 @@ def _get_aromatic_coupling(
                     cycle_type = 'pyridine'
                 elif n_count == 2:
                     cycle_type = 'pyrimidine'
-        
-        # Récupérer J depuis la table
+
         if dist == 1:
             position = 'ortho'
             J = _AROMATIC_COUPLING_TABLE.get('default_ortho', 7.5)
@@ -1936,71 +1465,54 @@ def _get_aromatic_coupling(
             position = 'para'
             J = _AROMATIC_COUPLING_TABLE.get('default_para', 0.5)
         else:
-            return None  # Distance > 3, pas de couplage significatif
-        
-        # Ajuster selon le type de cycle si disponible
+            return None
+
         if cycle_type in _AROMATIC_COUPLING_TABLE:
             cycle_J = _AROMATIC_COUPLING_TABLE[cycle_type]
             if isinstance(cycle_J, dict):
-                # D'abord essayer la position générique
+
                 if position in cycle_J:
                     J = cycle_J[position]
-                
-                # Vérifier cas spéciaux (H2 singulet dans imidazole/benzimidazole)
+
                 if cycle_J.get('special_h2_singlet'):
-                    # Détecter si un des H est en position 2 (entre les 2 N)
+
                     if _is_imidazole_h2_position(mol, c1_idx, c2_idx, ring):
-                        J = 0.0  # Pas de couplage significatif
-        
+                        J = 0.0
+
         return (J, position)
-        
+
     except Exception:
         return None
 
-
-# ==============================================================================
-# AMÉLIORATION 8: COUPLAGES PEPTIDIQUES BYSTROV ³J(HN-Cα-Hα)
-# ==============================================================================
-# Équation Bystrov pour angles dièdres φ (phi) dans les peptides
-# Références: Bystrov V.F., Prog. NMR Spectrosc. 10, 41-82 (1976)
-# ==============================================================================
-
-# Coefficients Bystrov pour différents types de couplages peptidiques
 _BYSTROV_PEPTIDE_COEFFS = {
-    # ³J(HN-Cα-Hα) - le plus important
-    # J = A·cos²(φ-60°) + B·cos(φ-60°) + C
-    # où φ est l'angle dièdre du backbone
+
     'HNCH_alpha': {
         'A': 6.4, 'B': -1.4, 'C': 1.9,
-        'phase': -60.0,  # Correction de phase pour φ
+        'phase': -60.0,
     },
-    
-    # ³J(Hα-Cα-C'-N) 
+
     'HCCO': {
         'A': 4.0, 'B': -1.0, 'C': 0.5,
         'phase': 0.0,
     },
-    
-    # ³J(Hα-Cα-Cβ-Hβ) chaîne latérale
+
     'HCCH_sidechain': {
         'A': 9.5, 'B': -1.6, 'C': 1.8,
         'phase': 0.0,
     },
 }
 
-# Valeurs typiques pour structures secondaires
 _PEPTIDE_STRUCTURE_J = {
-    # Structure: (J_HNCH typique, angle φ typique)
-    'helix_alpha': (3.9, -57),      # Hélice α: φ ≈ -57°, J ≈ 3.9 Hz
-    'helix_310': (4.5, -49),        # Hélice 3₁₀: φ ≈ -49°
-    'sheet_parallel': (8.9, -119),  # Feuillet β parallèle
-    'sheet_antiparallel': (8.5, -139),  # Feuillet β antiparallèle
-    'polyproline_II': (5.5, -75),   # PPII
-    'turn_I': (6.0, -60),           # Coude type I
-    'turn_II': (4.0, -60),          # Coude type II
-    'random_coil': (7.0, None),     # Pelote aléatoire (moyenne)
-}
 
+    'helix_alpha': (3.9, -57),
+    'helix_310': (4.5, -49),
+    'sheet_parallel': (8.9, -119),
+    'sheet_antiparallel': (8.5, -139),
+    'polyproline_II': (5.5, -75),
+    'turn_I': (6.0, -60),
+    'turn_II': (4.0, -60),
+    'random_coil': (7.0, None),
+}
 
 def _get_peptide_HNCH_coupling(
     mol: Chem.Mol,
@@ -2008,85 +1520,53 @@ def _get_peptide_HNCH_coupling(
     h_alpha_idx: int,
     mol3d: Chem.Mol = None
 ) -> Optional[Tuple[float, str]]:
-    """
-    Calcule ³J(HN-Cα-Hα) pour un peptide en utilisant l'équation Bystrov.
-    
-    Cette constante est cruciale pour déterminer la structure secondaire:
-    - Hélice α: J ≈ 3-5 Hz (φ ≈ -60°)
-    - Feuillet β: J ≈ 8-10 Hz (φ ≈ -120° à -140°)
-    - Pelote: J ≈ 6-7 Hz (moyenne)
-    
-    Args:
-        mol: Molécule RDKit
-        h_amide_idx: Index du H amide (HN)
-        h_alpha_idx: Index du H alpha (Hα)
-        mol3d: Molécule avec coords 3D pour calcul exact
-    
-    Returns:
-        Tuple (J_hz, predicted_structure) ou None
-    """
+
     try:
         h_amide = mol.GetAtomWithIdx(h_amide_idx)
         h_alpha = mol.GetAtomWithIdx(h_alpha_idx)
-        
-        # Vérifier que h_amide est sur un N
+
         n_list = [n for n in h_amide.GetNeighbors() if n.GetSymbol() == 'N']
         if not n_list:
             return None
         n_atom = n_list[0]
         n_idx = n_atom.GetIdx()
-        
-        # Vérifier que h_alpha est sur un C
+
         c_alpha_list = [n for n in h_alpha.GetNeighbors() if n.GetSymbol() == 'C']
         if not c_alpha_list:
             return None
         c_alpha = c_alpha_list[0]
         c_alpha_idx = c_alpha.GetIdx()
-        
-        # Vérifier le chemin N-Cα
+
         if not mol.GetBondBetweenAtoms(n_idx, c_alpha_idx):
             return None
-        
-        # Si 3D disponible, calculer J depuis l'angle dièdre
+
         if mol3d and mol3d.GetNumConformers() > 0:
             try:
                 conf = mol3d.GetConformer()
                 phi = AllChem.GetDihedralDeg(conf, h_amide_idx, n_idx, c_alpha_idx, h_alpha_idx)
-                
-                # Appliquer l'équation Bystrov
+
                 coeffs = _BYSTROV_PEPTIDE_COEFFS['HNCH_alpha']
                 A, B, C = coeffs['A'], coeffs['B'], coeffs['C']
                 phase = coeffs['phase']
-                
+
                 phi_rad = math.radians(phi + phase)
                 J = A * (math.cos(phi_rad) ** 2) + B * math.cos(phi_rad) + C
                 J = max(0.0, J)
-                
-                # Prédire la structure secondaire
+
                 structure = _predict_secondary_structure_from_J(J)
-                
+
                 return (J, structure)
-                
+
             except Exception:
                 pass
-        
-        # Sans 3D, retourner une valeur moyenne (pelote aléatoire)
+
         return (7.0, 'random_coil')
-        
+
     except Exception:
         return None
 
-
 def _predict_secondary_structure_from_J(J_HNCH: float) -> str:
-    """
-    Prédit la structure secondaire à partir de ³J(HN-Cα-Hα).
-    
-    Args:
-        J_HNCH: Constante de couplage en Hz
-    
-    Returns:
-        Nom de la structure secondaire probable
-    """
+
     if J_HNCH < 4.5:
         return 'helix_alpha'
     elif J_HNCH < 6.0:
@@ -2098,176 +1578,112 @@ def _predict_secondary_structure_from_J(J_HNCH: float) -> str:
     else:
         return 'extended'
 
-
-# ==============================================================================
-# AMÉLIORATION 9: DÉTECTION DES PROTONS DIASTÉRÉOTOPIQUES
-# ==============================================================================
-# Les CH₂ proches de centres chiraux ont des protons non-équivalents
-# Références: Eliel E.L., Wilen S.H., Stereochemistry of Organic Compounds (1994)
-# ==============================================================================
-
 def _detect_diastereotopic_protons(
     mol: Chem.Mol,
     ch2_carbon_idx: int,
     chiral_indices: Optional[set] = None
 ) -> Tuple[bool, float]:
-    """
-    Détecte si un CH₂ porte des protons diastéréotopiques.
-    
-    Les protons sont diastéréotopiques si:
-    1. Le carbone est adjacent à un centre chiral, OU
-    2. Le carbone est dans une chaîne qui contient un centre chiral
-    
-    Conséquences RMN:
-    - δH différents (ΔδH = 0.01-0.5 ppm typique)
-    - Couplage geminal ²J visible
-    - Peuvent avoir des J vicinaux différents
-    
-    Args:
-        mol: Molécule RDKit
-        ch2_carbon_idx: Index du carbone du CH₂
-        chiral_indices: (Optionnel) Set des indices de centres chiraux pré-calculés
-                        Si None, sera calculé à partir de la molécule
-    
-    Returns:
-        Tuple (is_diastereotopic, estimated_delta_ppm)
-    """
+
     try:
         c_atom = mol.GetAtomWithIdx(ch2_carbon_idx)
-        
+
         if c_atom.GetSymbol() != 'C':
             return (False, 0.0)
-        
-        # Vérifier que c'est un CH₂
+
         h_count = sum(1 for n in c_atom.GetNeighbors() if n.GetSymbol() == 'H')
         if h_count != 2:
             return (False, 0.0)
-        
-        # ✅ OPTIMISATION: Utiliser les centres chiraux pré-calculés si fournis
-        # Cela évite les appels coûteux répétés à RemoveHs et FindMolChiralCenters
+
         if chiral_indices is None:
             try:
-                # Obtenir la molécule de base (sans H) pour FindMolChiralCenters
+
                 base_mol = Chem.RemoveHs(mol)
                 chiral_centers_list = Chem.FindMolChiralCenters(base_mol, includeUnassigned=True)
                 chiral_indices = {idx for idx, _ in chiral_centers_list}
             except Exception:
                 chiral_indices = set()
-        
-        # Chercher des centres chiraux à proximité
-        # Distance 1: adjacent direct au centre chiral
-        # Distance 2: un carbone de séparation
-        # Distance 3: effet faible mais détectable
-        
+
         chiral_distance = float('inf')
-        
-        # BFS pour trouver le centre chiral le plus proche
+
         visited = {ch2_carbon_idx}
         queue = [(ch2_carbon_idx, 0)]
-        
+
         while queue:
             current_idx, dist = queue.pop(0)
-            
-            if dist > 4:  # Limite de recherche
+
+            if dist > 4:
                 break
-            
+
             current = mol.GetAtomWithIdx(current_idx)
-            
-            # ✅ Vérifier si c'est un centre chiral via ChiralTag OU FindMolChiralCenters
+
             is_chiral = False
             chiral_tag = current.GetChiralTag()
             if chiral_tag != Chem.ChiralType.CHI_UNSPECIFIED:
                 is_chiral = True
-            # Vérifier aussi via la liste des centres chiraux trouvés
+
             if current_idx in chiral_indices:
                 is_chiral = True
-            
+
             if is_chiral and current_idx != ch2_carbon_idx:
                 chiral_distance = min(chiral_distance, dist)
-            
-            # Explorer les voisins
+
             for nb in current.GetNeighbors():
                 if nb.GetIdx() not in visited and nb.GetSymbol() in ('C', 'N', 'O', 'S'):
                     visited.add(nb.GetIdx())
                     queue.append((nb.GetIdx(), dist + 1))
-        
+
         if chiral_distance == float('inf'):
             return (False, 0.0)
-        
-        # ✅ UTILISER LA TABLE CENTRALISÉE diastereotopic_delta_table.py
-        # Source unique de vérité pour les valeurs Δδ
-        # Réf: BMRB, SDBS, littérature (voir diastereotopic_delta_table.py)
+
         if chiral_distance in CH2_CHIRAL_DELTA_BY_DISTANCE:
             delta_ppm = CH2_CHIRAL_DELTA_BY_DISTANCE[chiral_distance][0]
         elif chiral_distance <= 4:
-            # Interpolation pour distance 4+
+
             delta_ppm = DEFAULT_DELTA.get(f"ch2_near_chiral_{min(chiral_distance, 3)}", 0.05)
         else:
-            delta_ppm = 0.02  # Très faible pour distance > 4
-        
+            delta_ppm = 0.02
+
         return (True, delta_ppm)
-        
+
     except Exception:
         return (False, 0.0)
 
-
-# ==============================================================================
-# AMÉLIORATION 11: LARGEURS DE RAIE ADAPTATIVES
-# ==============================================================================
-# OH/NH larges (échange), aromatiques fins, alkyles moyens
-# Références: Levitt M.H., Spin Dynamics, 2nd Ed. (2008)
-# ==============================================================================
-
-# Largeurs de raie typiques par type de proton (FWHM en Hz)
 _LINEWIDTH_BY_PROTON_TYPE = {
-    # Protons échangeables (élargis par échange chimique)
-    'OH_alcohol': (5.0, 20.0),       # Alcool: dépend de la concentration et T
-    'OH_phenol': (3.0, 15.0),        # Phénol: échange plus rapide
-    'OH_carboxylic': (10.0, 50.0),   # Acide carboxylique: très large
-    'NH_amine': (5.0, 30.0),         # Amine: échange modéré
-    'NH_amide': (2.0, 10.0),         # Amide: échange plus lent
-    'NH_indole': (1.0, 5.0),         # Indole NH: assez fin
-    'SH': (3.0, 15.0),               # Thiol
-    
-    # Protons non-échangeables
-    'aromatic': (0.5, 1.5),          # Aromatiques: fins
-    'vinyl': (0.5, 1.5),             # Vinyliques: fins
-    'aldehyde': (0.5, 1.0),          # Aldéhyde: très fin
-    'alkyl_CH3': (0.8, 2.0),         # Méthyle: fins
-    'alkyl_CH2': (1.0, 2.5),         # Méthylène: légèrement plus large
-    'alkyl_CH': (1.0, 2.0),          # Méthine: moyen
-    'alpha_heteroatom': (1.0, 2.5),  # Adjacent à O, N
-    
-    # Défauts
+
+    'OH_alcohol': (5.0, 20.0),
+    'OH_phenol': (3.0, 15.0),
+    'OH_carboxylic': (10.0, 50.0),
+    'NH_amine': (5.0, 30.0),
+    'NH_amide': (2.0, 10.0),
+    'NH_indole': (1.0, 5.0),
+    'SH': (3.0, 15.0),
+
+    'aromatic': (0.5, 1.5),
+    'vinyl': (0.5, 1.5),
+    'aldehyde': (0.5, 1.0),
+    'alkyl_CH3': (0.8, 2.0),
+    'alkyl_CH2': (1.0, 2.5),
+    'alkyl_CH': (1.0, 2.0),
+    'alpha_heteroatom': (1.0, 2.5),
+
     'default': (1.0, 2.0),
     'exchangeable': (5.0, 20.0),
 }
 
-# Facteurs de correction selon les conditions
 _LINEWIDTH_MODIFIERS = {
-    # Solvant
-    'D2O': {'exchangeable': 0.0},     # Pas de signal (échangé avec D)
-    'DMSO': {'exchangeable': 0.3},    # Échange lent → plus fin
-    'CDCl3': {'exchangeable': 0.8},   # Échange modéré
-    'MeOD': {'exchangeable': 0.1},    # Presque pas de signal
-    
-    # Température (facteur multiplicatif)
-    'low_temp': 1.5,    # T < 280K: échange plus lent, raies plus larges
-    'room_temp': 1.0,   # 290-310K: standard
-    'high_temp': 0.7,   # T > 320K: échange plus rapide, moyennage
-    
-    # Viscosité
-    'high_viscosity': 1.5,   # Solvants visqueux → T2 court → large
-    'low_viscosity': 0.8,    # Solvants fluides → T2 long → fin
+
+    'D2O': {'exchangeable': 0.0},
+    'DMSO': {'exchangeable': 0.3},
+    'CDCl3': {'exchangeable': 0.8},
+    'MeOD': {'exchangeable': 0.1},
+
+    'low_temp': 1.5,
+    'room_temp': 1.0,
+    'high_temp': 0.7,
+
+    'high_viscosity': 1.5,
+    'low_viscosity': 0.8,
 }
-
-
-# ==============================================================================
-# AMÉLIORATION PRIORITÉ HAUTE 1: SEUIL ⁴J ADAPTATIF (RIGIDE VS FLEXIBLE)
-# ==============================================================================
-# Les ⁴J sont résolus dans les systèmes rigides (W-coupling, bicycliques) 
-# mais souvent non-résolus dans les chaînes flexibles
-# ==============================================================================
 
 def _get_adaptive_4J_threshold(
     mol: Chem.Mol,
@@ -2275,73 +1691,47 @@ def _get_adaptive_4J_threshold(
     j: int,
     base_threshold: float = 1.0
 ) -> float:
-    """
-    Calcule un seuil adaptatif pour les couplages ⁴J selon la rigidité du système.
-    
-    Systèmes rigides (bicycliques, aromatiques, W-coupling):
-      - Seuil bas (0.8 Hz) car ⁴J peuvent atteindre 3-4 Hz
-      
-    Systèmes flexibles (chaînes acycliques):
-      - Seuil haut (1.5 Hz) car ⁴J sont moyennés par rotation et souvent < 0.5 Hz
-    
-    Args:
-        mol: Molécule RDKit
-        i, j: Indices des deux atomes (H ou C)
-        base_threshold: Seuil de base en Hz
-    
-    Returns:
-        Seuil adapté en Hz
-    """
+
     try:
         atom_i = mol.GetAtomWithIdx(i)
         atom_j = mol.GetAtomWithIdx(j)
-        
-        # Cas 1: Les deux atomes dans des cycles → système rigide
+
         if atom_i.IsInRing() and atom_j.IsInRing():
             ring_info = mol.GetRingInfo()
-            
-            # Vérifier si même système de cycles fusionnés
+
             for ring in ring_info.AtomRings():
                 if i in ring and j in ring:
-                    return 0.7  # Très rigide: même cycle
-            
-            # Cycles fusionnés (bicyclique)?
+                    return 0.7
+
             i_rings = [set(r) for r in ring_info.AtomRings() if i in r]
             j_rings = [set(r) for r in ring_info.AtomRings() if j in r]
-            
+
             for ri in i_rings:
                 for rj in j_rings:
-                    if ri & rj:  # Intersection non-vide → fusionnés
-                        return 0.8  # Rigide: cycles fusionnés
-        
-        # Cas 2: W-coupling potentiel (détection géométrique)
-        # Chemin H-C-C-C-H avec arrangement W
+                    if ri & rj:
+                        return 0.8
+
         path = Chem.GetShortestPath(mol, i, j)
-        if path and len(path) == 5:  # ⁴J = 4 liaisons = 5 atomes
-            # Vérifier si c'est un chemin allylique ou W
+        if path and len(path) == 5:
+
             mid_atoms = [mol.GetAtomWithIdx(idx) for idx in path[1:-1]]
-            
-            # Système allylique (C=C-C): rigide
+
             has_double = False
             for k in range(len(mid_atoms) - 1):
                 bond = mol.GetBondBetweenAtoms(path[k+1], path[k+2])
                 if bond and bond.GetBondTypeAsDouble() >= 2:
                     has_double = True
                     break
-            
+
             if has_double:
-                return 0.8  # Allylique: rigide
-            
-            # Tous dans un cycle?
+                return 0.8
+
             if all(a.IsInRing() for a in mid_atoms):
-                return 0.8  # Chemin rigide
-        
-        # Cas 3: Au moins un atome aromatique
+                return 0.8
+
         if atom_i.GetIsAromatic() or atom_j.GetIsAromatic():
-            return 0.9  # Semi-rigide
-        
-        # Cas 4: Système flexible (défaut)
-        # Vérifier le nombre de liaisons rotables entre i et j
+            return 0.9
+
         if path:
             rotatable_in_path = 0
             for k in range(len(path) - 1):
@@ -2349,66 +1739,51 @@ def _get_adaptive_4J_threshold(
                 if bond:
                     a1 = mol.GetAtomWithIdx(path[k])
                     a2 = mol.GetAtomWithIdx(path[k+1])
-                    # Liaison simple C-C non cyclique = rotable
-                    if (bond.GetBondTypeAsDouble() == 1 and 
+
+                    if (bond.GetBondTypeAsDouble() == 1 and
                         not bond.IsInRing() and
                         a1.GetSymbol() in ('C', 'N', 'O') and
                         a2.GetSymbol() in ('C', 'N', 'O')):
                         rotatable_in_path += 1
-            
+
             if rotatable_in_path >= 2:
-                return 1.5  # Très flexible: seuil strict
+                return 1.5
             elif rotatable_in_path == 1:
-                return 1.2  # Modérément flexible
-        
+                return 1.2
+
         return base_threshold
-        
+
     except Exception:
         return base_threshold
 
-
-# ==============================================================================
-# AMÉLIORATION PRIORITÉ HAUTE 2: CONFORMÈRES DIVERSIFIÉS
-# ==============================================================================
-# ETKDG génère parfois des conformères trop similaires pour chaînes flexibles.
-# Ajout d'échantillonnage systématique des dièdres (gauche+, anti, gauche-).
-# ==============================================================================
-
 def _get_rotatable_bonds(mol: Chem.Mol) -> List[Tuple[int, int, int, int]]:
-    """
-    Identifie les liaisons rotables avec les atomes pour définir le dièdre.
-    
-    Returns:
-        Liste de tuples (a1, a2, a3, a4) définissant chaque dièdre rotable
-    """
+
     rotatable = []
-    
+
     try:
-        # Pattern SMARTS pour liaisons rotables
+
         pattern = Chem.MolFromSmarts('[!$([NH]!@C(=O))&!D1]-&!@[!$([NH]!@C(=O))&!D1]')
         if pattern is None:
             return rotatable
-            
+
         matches = mol.GetSubstructMatches(pattern)
-        
+
         for match in matches:
             a2_idx, a3_idx = match[0], match[1]
             a2 = mol.GetAtomWithIdx(a2_idx)
             a3 = mol.GetAtomWithIdx(a3_idx)
-            
-            # Trouver a1 (voisin de a2, différent de a3)
+
             a1_candidates = [n.GetIdx() for n in a2.GetNeighbors() if n.GetIdx() != a3_idx]
-            # Trouver a4 (voisin de a3, différent de a2)
+
             a4_candidates = [n.GetIdx() for n in a3.GetNeighbors() if n.GetIdx() != a2_idx]
-            
+
             if a1_candidates and a4_candidates:
                 rotatable.append((a1_candidates[0], a2_idx, a3_idx, a4_candidates[0]))
-        
-        return rotatable
-        
-    except Exception:
+
         return rotatable
 
+    except Exception:
+        return rotatable
 
 def _generate_diverse_conformers_systematic(
     mol: Chem.Mol,
@@ -2417,42 +1792,25 @@ def _generate_diverse_conformers_systematic(
     max_rotatable: int = 4,
     energy_cutoff_kcal: float = 10.0
 ) -> List[Tuple[int, float]]:
-    """
-    Génère des conformères avec échantillonnage systématique des dièdres.
-    
-    Pour les molécules avec peu de liaisons rotables (≤4), échantillonne
-    systématiquement gauche+, anti, gauche- pour chaque liaison.
-    
-    Args:
-        mol: Molécule avec H explicites
-        n_conformers: Nombre max de conformères à retourner
-        angles: Angles à échantillonner (défaut: [60, 180, 300] = g+, anti, g-)
-        max_rotatable: Nombre max de liaisons pour échantillonnage systématique
-        energy_cutoff_kcal: Seuil d'énergie pour filtrage
-    
-    Returns:
-        Liste de (conf_id, energy_relative) triée par énergie
-    """
+
     if angles is None:
-        angles = [60.0, 180.0, 300.0]  # gauche+, anti, gauche-
-    
+        angles = [60.0, 180.0, 300.0]
+
     mol_h = Chem.AddHs(mol, addCoords=True)
     rotatable = _get_rotatable_bonds(mol_h)
     n_rot = len(rotatable)
-    
+
     results = []
-    
+
     try:
-        # Cas 1: Peu de liaisons rotables → échantillonnage systématique
+
         if 0 < n_rot <= max_rotatable:
             import itertools
-            
-            # Générer toutes les combinaisons
+
             n_combos = len(angles) ** n_rot
-            
-            # Limiter si trop de combinaisons
+
             if n_combos > n_conformers * 3:
-                # Trop de combinaisons: échantillonnage aléatoire
+
                 combos = []
                 import random
                 for _ in range(n_conformers * 3):
@@ -2460,29 +1818,25 @@ def _generate_diverse_conformers_systematic(
                     combos.append(combo)
             else:
                 combos = list(itertools.product(angles, repeat=n_rot))
-            
-            # Générer un conformère initial
+
             ps = AllChem.ETKDGv3() if hasattr(AllChem, 'ETKDGv3') else AllChem.ETKDG()
             ps.randomSeed = 42
             AllChem.EmbedMolecule(mol_h, ps)
-            
+
             if mol_h.GetNumConformers() == 0:
                 return results
-            
-            # Pour chaque combinaison d'angles
+
             for combo in combos:
-                # Copier la molécule
+
                 mol_copy = Chem.Mol(mol_h)
                 conf = mol_copy.GetConformer()
-                
-                # Appliquer les angles
+
                 for (a1, a2, a3, a4), angle in zip(rotatable, combo):
                     try:
                         AllChem.SetDihedralDeg(conf, a1, a2, a3, a4, angle)
                     except Exception:
                         continue
-                
-                # Optimiser
+
                 try:
                     AllChem.MMFFOptimizeMolecule(mol_copy, maxIters=100)
                     ff = AllChem.MMFFGetMoleculeForceField(mol_copy)
@@ -2494,24 +1848,22 @@ def _generate_diverse_conformers_systematic(
                         energy = ff.CalcEnergy() if ff else 999.0
                     except Exception:
                         energy = 999.0
-                
+
                 if energy < 900:
-                    # Ajouter le conformère à la molécule originale
+
                     new_conf_id = mol_h.AddConformer(conf, assignId=True)
                     results.append((new_conf_id, energy))
-        
-        # Cas 2: Beaucoup de liaisons rotables → ETKDG standard amélioré
+
         if n_rot > max_rotatable or not results:
             ps = AllChem.ETKDGv3() if hasattr(AllChem, 'ETKDGv3') else AllChem.ETKDG()
             ps.randomSeed = 42
             ps.numThreads = 0
             ps.pruneRmsThresh = 0.35
             ps.useRandomCoords = True
-            
+
             n_generate = n_conformers * 3
             conf_ids = AllChem.EmbedMultipleConfs(mol_h, numConfs=n_generate, params=ps)
-            
-            # Optimiser
+
             try:
                 opt_results = AllChem.MMFFOptimizeMoleculeConfs(mol_h, maxIters=200)
             except Exception:
@@ -2524,62 +1876,35 @@ def _generate_diverse_conformers_systematic(
                         opt_results.append((0, energy))
                     except Exception:
                         opt_results.append((1, 999.0))
-            
+
             for cid, (converged, energy) in zip(conf_ids, opt_results):
                 if converged == 0:
                     results.append((cid, energy))
-        
-        # Trier par énergie et filtrer
+
         if results:
             results.sort(key=lambda x: x[1])
             min_e = results[0][1]
             results = [(cid, e - min_e) for cid, e in results if e - min_e <= energy_cutoff_kcal]
             results = results[:n_conformers]
-        
+
         return results
-        
+
     except Exception:
         return results
-
-
-# ==============================================================================
-# AMÉLIORATION PRIORITÉ HAUTE 3: DÉTECTION DIASTÉRÉOTOPIE PROCHIRAUX
-# ==============================================================================
-# Détecte les centres prochiraux (carbonyle asymétrique, C=C asymétrique)
-# qui rendent les CH₂ adjacents diastéréotopiques même sans centre chiral explicite
-# ==============================================================================
 
 def _is_prochiral_center(
     mol: Chem.Mol,
     atom_idx: int
 ) -> bool:
-    """
-    Détecte si un atome est un centre prochiral.
-    
-    Un centre prochiral est un atome sp2 (C=O, C=C, C=N) ou sp3 avec
-    deux substituants identiques qui, s'ils devenaient différents,
-    créeraient un centre chiral.
-    
-    Exemples:
-    - C=O dans R1-CO-CH2-R2 où R1 ≠ R2: prochiral
-    - C=C dans R1R2C=CH2: prochiral si R1 ≠ R2
-    
-    Args:
-        mol: Molécule RDKit
-        atom_idx: Index de l'atome à tester
-    
-    Returns:
-        True si prochiral
-    """
+
     try:
         atom = mol.GetAtomWithIdx(atom_idx)
-        
-        # Cas 1: Carbonyle (C=O) asymétrique
+
         if atom.GetSymbol() == 'C':
             hyb = atom.GetHybridization()
-            
+
             if hyb == Chem.HybridizationType.SP2:
-                # Chercher C=O ou C=N ou C=C
+
                 double_bonded = None
                 for bond in atom.GetBonds():
                     if bond.GetBondTypeAsDouble() >= 2:
@@ -2587,122 +1912,98 @@ def _is_prochiral_center(
                         if other.GetSymbol() in ('O', 'N', 'C', 'S'):
                             double_bonded = other
                             break
-                
+
                 if double_bonded:
-                    # Récupérer les autres substituants
-                    other_neighbors = [n for n in atom.GetNeighbors() 
+
+                    other_neighbors = [n for n in atom.GetNeighbors()
                                        if n.GetIdx() != double_bonded.GetIdx()]
-                    
+
                     if len(other_neighbors) == 2:
-                        # Vérifier si les deux substituants sont différents
-                        # Utiliser les rangs canoniques
+
                         try:
                             ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
                             r1 = ranks[other_neighbors[0].GetIdx()]
                             r2 = ranks[other_neighbors[1].GetIdx()]
                             if r1 != r2:
-                                return True  # Carbonyle asymétrique → prochiral
+                                return True
                         except Exception:
                             pass
-        
-        return False
-        
-    except Exception:
+
         return False
 
+    except Exception:
+        return False
 
 def _is_prochiral_CH2(
     mol: Chem.Mol,
     ch2_idx: int
 ) -> Tuple[bool, str]:
-    """
-    Vérifie si un CH₂ est rendu diastéréotopique par un centre prochiral adjacent.
-    
-    Cas couverts:
-    1. CH₂ adjacent à un carbonyle asymétrique (R1-CO-CH2-R2, R1≠R2)
-    2. CH₂ adjacent à un alcène asymétrique
-    3. CH₂ dans un cycle avec substituants asymétriques
-    
-    Args:
-        mol: Molécule avec H explicites
-        ch2_idx: Index du carbone du CH₂
-    
-    Returns:
-        Tuple (is_prochiral, reason)
-    """
+
     try:
         ch2 = mol.GetAtomWithIdx(ch2_idx)
-        
+
         if ch2.GetSymbol() != 'C':
             return (False, '')
-        
-        # Vérifier que c'est bien un CH₂
+
         h_count = sum(1 for n in ch2.GetNeighbors() if n.GetSymbol() == 'H')
         if h_count != 2:
             return (False, '')
-        
+
         neighbors_heavy = [n for n in ch2.GetNeighbors() if n.GetSymbol() != 'H']
-        
-        # Cas 1: Adjacent à un carbonyle (C=O)
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'C':
-                # Chercher C=O
+
                 for bond in nb.GetBonds():
                     if bond.GetBondTypeAsDouble() >= 2:
                         other = bond.GetOtherAtom(nb)
                         if other.GetSymbol() == 'O':
-                            # C'est un carbonyle - vérifier asymétrie
-                            # Le carbonyle a-t-il des substituants différents?
-                            carbonyl_neighbors = [n for n in nb.GetNeighbors() 
-                                                  if n.GetIdx() != other.GetIdx() 
+
+                            carbonyl_neighbors = [n for n in nb.GetNeighbors()
+                                                  if n.GetIdx() != other.GetIdx()
                                                   and n.GetIdx() != ch2_idx]
-                            
+
                             if len(carbonyl_neighbors) >= 1:
-                                # Comparer les chemins de l'autre côté du carbonyle vs côté CH2
+
                                 try:
                                     ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
-                                    # Les rangs des substituants du carbonyle
+
                                     carbonyl_sub_ranks = [ranks[n.GetIdx()] for n in carbonyl_neighbors]
                                     ch2_rank = ranks[ch2_idx]
-                                    
-                                    # Si les substituants sont différents → prochiral
+
                                     if len(set(carbonyl_sub_ranks)) > 1 or (carbonyl_sub_ranks and carbonyl_sub_ranks[0] != ch2_rank):
                                         return (True, 'adjacent_to_asymmetric_carbonyl')
                                 except Exception:
                                     pass
-        
-        # Cas 2: Adjacent à un alcène asymétrique (C=C avec R1≠R2)
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'C':
                 for bond in nb.GetBonds():
                     if bond.GetBondTypeAsDouble() >= 2:
                         other = bond.GetOtherAtom(nb)
                         if other.GetSymbol() == 'C':
-                            # C'est un alcène
-                            # Vérifier si les substituants de chaque C sont différents
-                            nb_subs = [n for n in nb.GetNeighbors() 
+
+                            nb_subs = [n for n in nb.GetNeighbors()
                                        if n.GetIdx() not in (other.GetIdx(), ch2_idx)]
-                            other_subs = [n for n in other.GetNeighbors() 
+                            other_subs = [n for n in other.GetNeighbors()
                                           if n.GetIdx() != nb.GetIdx()]
-                            
+
                             try:
                                 ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
                                 nb_ranks = set(ranks[n.GetIdx()] for n in nb_subs)
                                 other_ranks = set(ranks[n.GetIdx()] for n in other_subs)
-                                
-                                # Asymétrique si substituants différents
+
                                 if len(nb_ranks) > 1 or len(other_ranks) > 1:
                                     return (True, 'adjacent_to_asymmetric_alkene')
                             except Exception:
                                 pass
-        
-        # Cas 3: CH₂ dans un cycle avec environnement asymétrique
+
         if ch2.IsInRing():
-            # Vérifier si le cycle a des substituants asymétriques
+
             ring_info = mol.GetRingInfo()
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
-                    # Trouver les substituants du cycle
+
                     ring_set = set(ring)
                     substituents = []
                     for r_idx in ring:
@@ -2710,7 +2011,7 @@ def _is_prochiral_CH2(
                         for nb in r_atom.GetNeighbors():
                             if nb.GetIdx() not in ring_set and nb.GetSymbol() != 'H':
                                 substituents.append(nb.GetIdx())
-                    
+
                     if len(substituents) >= 2:
                         try:
                             ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
@@ -2719,58 +2020,49 @@ def _is_prochiral_CH2(
                                 return (True, 'ring_with_asymmetric_substituents')
                         except Exception:
                             pass
-        
-        # Cas 4: CH₂ benzylique (adjacent à un aromatique substitué asymétriquement)
-        # Ex: Ar-CH₂- où Ar a des substituants non-équivalents en ortho
+
         for nb in neighbors_heavy:
             if nb.GetIsAromatic():
-                # Vérifier si l'aromatique a des substituants asymétriques
-                ar_neighbors = [n for n in nb.GetNeighbors() 
+
+                ar_neighbors = [n for n in nb.GetNeighbors()
                                if n.GetIdx() != ch2_idx and n.GetSymbol() != 'H']
                 if len(ar_neighbors) >= 2:
                     try:
                         ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
                         ar_sub_ranks = [ranks[n.GetIdx()] for n in ar_neighbors]
-                        # Si les voisins de l'aromatique ont des rangs différents → prochiral
+
                         if len(set(ar_sub_ranks)) > 1:
                             return (True, 'benzylic_asymmetric_aromatic')
                     except Exception:
                         pass
-                
-                # Vérifier si l'aromatique est dans un cycle fusionné asymétrique (ex: indole)
+
                 if nb.IsInRing():
                     ring_info = mol.GetRingInfo()
                     nb_rings = []
                     for ring in ring_info.AtomRings():
                         if nb.GetIdx() in ring:
                             nb_rings.append(ring)
-                    # Si dans plusieurs cycles (fusionné) → souvent asymétrique
+
                     if len(nb_rings) >= 2:
                         return (True, 'benzylic_fused_ring')
-        
-        # =========================================================================
-        # Cas 5: CH₂ α à un hétéroatome (O, N, S) dans environnement asymétrique
-        # Exemples: CH₂-O-CH(R)-X, CH₂-N(R)-CH(R')-X, CH₂-S-CH(R)-X
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() in ('O', 'N', 'S'):
-                hetero_neighbors = [n for n in nb.GetNeighbors() 
+                hetero_neighbors = [n for n in nb.GetNeighbors()
                                    if n.GetIdx() != ch2_idx and n.GetSymbol() != 'H']
-                
+
                 if hetero_neighbors:
-                    # Vérifier si l'autre côté de l'hétéroatome est asymétrique
+
                     try:
                         ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
                         hetero_sub_ranks = [ranks[n.GetIdx()] for n in hetero_neighbors]
-                        
-                        # Si plus d'un substituant avec rangs différents → asymétrique
+
                         if len(hetero_sub_ranks) >= 2 and len(set(hetero_sub_ranks)) > 1:
                             return (True, f'alpha_to_asymmetric_{nb.GetSymbol()}')
-                        
-                        # Vérifier si le voisin de l'hétéroatome est chiral
+
                         for hetero_nb in hetero_neighbors:
                             if hetero_nb.GetSymbol() == 'C':
-                                # C* adjacent à O/N/S ?
+
                                 base_mol = Chem.RemoveHs(mol)
                                 chiral_list = Chem.FindMolChiralCenters(base_mol, includeUnassigned=True)
                                 chiral_indices = {idx for idx, _ in chiral_list}
@@ -2778,98 +2070,81 @@ def _is_prochiral_CH2(
                                     return (True, f'alpha_to_{nb.GetSymbol()}_chiral')
                     except Exception:
                         pass
-        
-        # =========================================================================
-        # Cas 6: CH₂ dans cycles tendus (3-4 atomes) - TOUJOURS diastéréotopiques
-        # Cyclopropane, cyclobutane, époxyde (oxirane), aziridine, thiirène
-        # =========================================================================
+
         if ch2.IsInRing():
             ring_info = mol.GetRingInfo()
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
                     ring_size = len(ring)
-                    
-                    # Cycles 3 et 4 membres: toujours diastéréotopiques (sauf symétrie parfaite)
+
                     if ring_size in (3, 4):
-                        # Vérifier si monosubstitué ou plus
+
                         ring_set = set(ring)
                         has_substituent = False
                         has_heteroatom = False
-                        
+
                         for r_idx in ring:
                             r_atom = mol.GetAtomWithIdx(r_idx)
-                            # Hétéroatome dans le cycle?
+
                             if r_atom.GetSymbol() in ('O', 'N', 'S'):
                                 has_heteroatom = True
-                            # Substituant externe?
+
                             for nb_atom in r_atom.GetNeighbors():
                                 if nb_atom.GetIdx() not in ring_set and nb_atom.GetSymbol() != 'H':
                                     has_substituent = True
-                        
-                        # Époxyde, aziridine, thiirène: toujours diastéréotopiques
+
                         if has_heteroatom:
                             if ring_size == 3:
-                                return (True, 'strained_ring_3_hetero')  # Oxirane, aziridine
+                                return (True, 'strained_ring_3_hetero')
                             else:
-                                return (True, 'strained_ring_4_hetero')  # Oxétane, azétidine
-                        
-                        # Cyclopropane/cyclobutane substitué
+                                return (True, 'strained_ring_4_hetero')
+
                         if has_substituent:
                             return (True, f'strained_ring_{ring_size}_substituted')
-        
-        # =========================================================================
-        # Cas 7: CH₂ dans systèmes bicycliques (norbornane, décaline, ponts)
-        # =========================================================================
+
         if ch2.IsInRing():
             ring_info = mol.GetRingInfo()
             rings_containing_ch2 = []
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
                     rings_containing_ch2.append(set(ring))
-            
-            # CH₂ dans un système bicyclique (appartient à 2+ cycles ou dans un pont)
+
             if len(rings_containing_ch2) >= 2:
                 return (True, 'bicyclic_bridge')
-            
-            # Vérifier si c'est un pont (atome partagé entre cycles non-fusionnés)
+
             if len(rings_containing_ch2) == 1:
                 my_ring = rings_containing_ch2[0]
-                # Vérifier si d'autres atomes du cycle sont dans d'autres cycles
+
                 for r_idx in my_ring:
                     if r_idx != ch2_idx:
                         for other_ring in ring_info.AtomRings():
                             other_set = set(other_ring)
                             if r_idx in other_set and other_set != my_ring:
-                                # Système fusionné ou ponté → diastéréotopique
+
                                 return (True, 'fused_or_bridged_ring')
-        
-        # =========================================================================
-        # Cas 2 amélioré: CH₂ dans cycle monosubstitué (cyclohexane, etc.)
-        # =========================================================================
+
         if ch2.IsInRing():
             ring_info = mol.GetRingInfo()
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
                     ring_size = len(ring)
                     ring_set = set(ring)
-                    
-                    # Cycles 5-7 membres: vérifier monosubstitution
+
                     if ring_size in (5, 6, 7, 8):
                         substituent_count = 0
                         substituent_positions = []
-                        
+
                         for r_idx in ring:
                             r_atom = mol.GetAtomWithIdx(r_idx)
                             for nb_atom in r_atom.GetNeighbors():
                                 if nb_atom.GetIdx() not in ring_set and nb_atom.GetSymbol() != 'H':
                                     substituent_count += 1
                                     substituent_positions.append(r_idx)
-                        
-                        # Monosubstitué: CH₂ diastéréotopiques (sauf si très loin)
+
                         if substituent_count >= 1:
-                            # Calculer distance au substituant
+
                             if substituent_positions:
-                                # Trouver la distance dans le cycle
+
                                 sub_pos = substituent_positions[0]
                                 ring_list = list(ring)
                                 try:
@@ -2879,32 +2154,27 @@ def _is_prochiral_CH2(
                                         abs(my_pos - sub_idx_in_ring),
                                         ring_size - abs(my_pos - sub_idx_in_ring)
                                     )
-                                    # Si proche du substituant (1-3 positions)
+
                                     if dist_in_ring <= 3:
                                         return (True, f'ring_{ring_size}_monosubstituted')
                                 except ValueError:
                                     pass
-        
-        # =========================================================================
-        # Cas 10: Chiralité axiale (biaryles, paracyclophanes)
-        # =========================================================================
-        # Cas 10: Chiralité axiale (biaryles, paracyclophanes)
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'C' and nb.GetIsAromatic():
-                # Vérifier si biaryle (2 aryles connectés)
-                ar_neighbors = [n for n in nb.GetNeighbors() 
+
+                ar_neighbors = [n for n in nb.GetNeighbors()
                                if n.GetIsAromatic() and n.GetIdx() != ch2_idx]
                 if ar_neighbors:
-                    # Potentiel système biaryle → vérifier rotation restreinte
+
                     for ar_nb in ar_neighbors:
                         ar_ring_count = 0
                         for ring in mol.GetRingInfo().AtomRings():
                             if ar_nb.GetIdx() in ring:
                                 ar_ring_count += 1
-                        # Plusieurs cycles aromatiques connectés → chiralité axiale possible
+
                         if ar_ring_count >= 1:
-                            # Vérifier substituants ortho (rotation restreinte)
+
                             ortho_subs = []
                             for ar_n in nb.GetNeighbors():
                                 if ar_n.GetIsAromatic() and ar_n.GetIdx() != ar_nb.GetIdx():
@@ -2913,57 +2183,46 @@ def _is_prochiral_CH2(
                                             ortho_subs.append(ar_nn.GetIdx())
                             if len(ortho_subs) >= 2:
                                 return (True, 'axial_chirality_biaryl')
-        
-        # =========================================================================
-        # Cas 8: CH₂ α à un phosphore chiral ou phosphate asymétrique
-        # Exemples: CH₂-P(O)(OR1)(OR2), CH₂-P*(R1)(R2)(R3)
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'P':
-                # Phosphore avec 4 substituants différents → chiral
+
                 p_neighbors = [n for n in nb.GetNeighbors() if n.GetIdx() != ch2_idx]
                 if len(p_neighbors) >= 3:
                     try:
                         ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
                         p_sub_ranks = [ranks[n.GetIdx()] for n in p_neighbors]
-                        # Si tous les substituants sont différents → P chiral
+
                         if len(set(p_sub_ranks)) >= 3:
                             return (True, 'alpha_to_chiral_phosphorus')
-                        # Ou si au moins 2 différents → asymétrique
+
                         if len(set(p_sub_ranks)) >= 2:
                             return (True, 'alpha_to_asymmetric_phosphorus')
                     except Exception:
                         pass
-        
-        # =========================================================================
-        # Cas 9: CH₂ dans des systèmes à géométrie E/Z définie
-        # CH₂ allylique où l'alcène a une stéréochimie E ou Z
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'C':
                 for bond in nb.GetBonds():
                     if bond.GetBondTypeAsDouble() >= 2:
                         other = bond.GetOtherAtom(nb)
                         if other.GetSymbol() == 'C':
-                            # Vérifier si l'alcène a une géométrie E/Z définie
+
                             stereo = bond.GetStereo()
                             if stereo in (Chem.BondStereo.STEREOE, Chem.BondStereo.STEREOZ,
                                          Chem.BondStereo.STEREOCIS, Chem.BondStereo.STEREOTRANS):
                                 return (True, 'adjacent_to_EZ_alkene')
-        
-        # =========================================================================
-        # Cas 11: CH₂ dans lactames, lactones (cycles avec C=O intégré)
-        # =========================================================================
+
         if ch2.IsInRing():
             ring_info = mol.GetRingInfo()
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
                     ring_set = set(ring)
-                    # Chercher un C=O dans le cycle
+
                     has_carbonyl_in_ring = False
                     has_N_in_ring = False
                     has_O_in_ring = False
-                    
+
                     for r_idx in ring:
                         r_atom = mol.GetAtomWithIdx(r_idx)
                         if r_atom.GetSymbol() == 'N':
@@ -2978,45 +2237,37 @@ def _is_prochiral_CH2(
                                     other_atom = bond.GetOtherAtom(r_atom)
                                     if other_atom.GetSymbol() == 'O':
                                         has_carbonyl_in_ring = True
-                    
-                    # Lactame (cycle avec N et C=O)
+
                     if has_carbonyl_in_ring and has_N_in_ring:
                         return (True, 'lactam_ring')
-                    # Lactone (cycle avec O et C=O)
+
                     if has_carbonyl_in_ring and has_O_in_ring:
                         return (True, 'lactone_ring')
-        
-        # =========================================================================
-        # Cas 12: CH₂ entre deux centres chiraux ou prochiraux
-        # Ex: C*-CH₂-C* où les deux C* sont chiraux
-        # =========================================================================
+
         chiral_neighbor_count = 0
         try:
             base_mol = Chem.RemoveHs(mol)
             chiral_list = Chem.FindMolChiralCenters(base_mol, includeUnassigned=True)
             chiral_indices = {idx for idx, _ in chiral_list}
-            
+
             for nb in neighbors_heavy:
                 if nb.GetIdx() in chiral_indices:
                     chiral_neighbor_count += 1
-            
+
             if chiral_neighbor_count >= 2:
                 return (True, 'between_two_chiral_centers')
         except Exception:
             pass
-        
-        # =========================================================================
-        # Cas 13: CH₂ dans des macrocycles (paracyclophanes, cryptands)
-        # =========================================================================
+
         if ch2.IsInRing():
             ring_info = mol.GetRingInfo()
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
                     ring_size = len(ring)
-                    # Macrocycle (≥ 12 atomes) → souvent asymétrique
+
                     if ring_size >= 12:
                         return (True, 'macrocycle')
-                    # Cycle moyen (8-11 atomes) avec hétéroatome
+
                     if 8 <= ring_size <= 11:
                         ring_set = set(ring)
                         has_hetero = any(
@@ -3025,29 +2276,22 @@ def _is_prochiral_CH2(
                         )
                         if has_hetero:
                             return (True, 'medium_ring_hetero')
-        
-        # =========================================================================
-        # Cas 14: CH₂ α à un soufre chiral (sulfoxydes, sulfoniums)
-        # Ex: CH₂-S*(=O)(R)-R', CH₂-S+(R1)(R2)(R3)
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'S':
-                # Vérifier si le soufre a des substituants asymétriques
+
                 s_neighbors = [n for n in nb.GetNeighbors() if n.GetIdx() != ch2_idx]
-                
-                # Sulfoxyde (S=O): presque toujours chiral
+
                 has_sulfoxide = any(
                     bond.GetBondTypeAsDouble() >= 2 and bond.GetOtherAtom(nb).GetSymbol() == 'O'
                     for bond in nb.GetBonds()
                 )
                 if has_sulfoxide:
                     return (True, 'alpha_to_chiral_sulfoxide')
-                
-                # Sulfonium (S+ avec 3 substituants)
+
                 if nb.GetFormalCharge() > 0:
                     return (True, 'alpha_to_sulfonium')
-                
-                # Sulfure asymétrique
+
                 if len(s_neighbors) >= 2:
                     try:
                         ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
@@ -3056,11 +2300,7 @@ def _is_prochiral_CH2(
                             return (True, 'alpha_to_asymmetric_sulfur')
                     except Exception:
                         pass
-        
-        # =========================================================================
-        # Cas 15: CH₂ α à un silicium chiral
-        # Ex: CH₂-Si*(R1)(R2)(R3)
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'Si':
                 si_neighbors = [n for n in nb.GetNeighbors() if n.GetIdx() != ch2_idx]
@@ -3072,49 +2312,35 @@ def _is_prochiral_CH2(
                             return (True, 'alpha_to_chiral_silicon')
                     except Exception:
                         pass
-        
-        # =========================================================================
-        # Cas 16: CH₂ dans des spiro-cycles
-        # Le carbone spiro crée toujours une asymétrie
-        # =========================================================================
+
         if ch2.IsInRing():
             ring_info = mol.GetRingInfo()
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
                     ring_set = set(ring)
-                    # Chercher un carbone spiro (dans 2 cycles mais pas fusionné)
+
                     for r_idx in ring:
                         r_atom = mol.GetAtomWithIdx(r_idx)
                         if r_atom.GetSymbol() == 'C':
                             rings_for_atom = sum(1 for r in ring_info.AtomRings() if r_idx in r)
                             if rings_for_atom >= 2:
-                                # Vérifier si c'est un vrai spiro (pas fusionné)
-                                # Spiro = un seul atome commun entre les cycles
+
                                 for other_ring in ring_info.AtomRings():
                                     if r_idx in other_ring and set(other_ring) != ring_set:
                                         common = ring_set & set(other_ring)
-                                        if len(common) == 1:  # Vrai spiro
+                                        if len(common) == 1:
                                             return (True, 'spiro_ring')
-        
-        # =========================================================================
-        # Cas 17: CH₂ dans des systèmes cumuléniques (allènes)
-        # Ex: CH₂=C=CH-R ou R-CH=C=CH₂
-        # Les allènes avec substituants différents sont chiraux
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'C':
-                # Chercher un allène (C=C=C)
+
                 double_bond_count = sum(
                     1 for bond in nb.GetBonds() if bond.GetBondTypeAsDouble() >= 2
                 )
                 if double_bond_count >= 2:
-                    # C'est un carbone central d'allène
+
                     return (True, 'adjacent_to_allene')
-        
-        # =========================================================================
-        # Cas 18: CH₂ adjacent à un azote quaternaire asymétrique
-        # Ex: CH₂-N+(R1)(R2)(R3) où R1≠R2≠R3
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'N' and nb.GetFormalCharge() > 0:
                 n_neighbors = [n for n in nb.GetNeighbors() if n.GetIdx() != ch2_idx]
@@ -3128,11 +2354,7 @@ def _is_prochiral_CH2(
                             return (True, 'alpha_to_asymmetric_quaternary_N')
                     except Exception:
                         pass
-        
-        # =========================================================================
-        # Cas 19: CH₂ adjacent à un bore asymétrique
-        # Ex: CH₂-B(R1)(R2) où R1≠R2
-        # =========================================================================
+
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'B':
                 b_neighbors = [n for n in nb.GetNeighbors() if n.GetIdx() != ch2_idx]
@@ -3144,23 +2366,18 @@ def _is_prochiral_CH2(
                             return (True, 'alpha_to_asymmetric_boron')
                     except Exception:
                         pass
-        
-        # =========================================================================
-        # Cas 20: CH₂ dans des ponts éther/thioéther cycliques
-        # Ex: -O-CH₂-O- dans dioxolanes, -S-CH₂-S- dans dithiolanes
-        # =========================================================================
+
         o_or_s_neighbors = [nb for nb in neighbors_heavy if nb.GetSymbol() in ('O', 'S')]
         if len(o_or_s_neighbors) >= 2:
-            # CH₂ entre deux O ou S (acétal, thioacétal)
-            # Si le reste du système est asymétrique → diastéréotopique
+
             try:
                 ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
                 o_s_ranks = [ranks[nb.GetIdx()] for nb in o_or_s_neighbors]
                 if len(set(o_s_ranks)) >= 2:
                     return (True, 'acetal_asymmetric')
-                # Même si les O/S sont équivalents, vérifier leurs substituants
+
                 for o_s_atom in o_or_s_neighbors:
-                    o_s_other_neighbors = [n for n in o_s_atom.GetNeighbors() 
+                    o_s_other_neighbors = [n for n in o_s_atom.GetNeighbors()
                                           if n.GetIdx() != ch2_idx]
                     if o_s_other_neighbors:
                         other_ranks = [ranks[n.GetIdx()] for n in o_s_other_neighbors]
@@ -3168,17 +2385,13 @@ def _is_prochiral_CH2(
                             return (True, 'acetal_asymmetric_substituents')
             except Exception:
                 pass
-        
-        # =========================================================================
-        # Cas 21: CH₂ dans des cycles aromatiques non-benzoïques
-        # Furanne, thiophène, pyrrole, imidazole, etc.
-        # =========================================================================
+
         if ch2.IsInRing():
             ring_info = mol.GetRingInfo()
             for ring in ring_info.AtomRings():
                 if ch2_idx in ring:
                     ring_size = len(ring)
-                    # Cycle 5 avec hétéroatome (furanne hydrogéné, etc.)
+
                     if ring_size == 5:
                         ring_set = set(ring)
                         hetero_in_ring = [
@@ -3186,56 +2399,44 @@ def _is_prochiral_CH2(
                             if mol.GetAtomWithIdx(r).GetSymbol() in ('O', 'N', 'S')
                         ]
                         if hetero_in_ring:
-                            # Cycle 5 saturé avec hétéroatome (THF, pyrrolidine, etc.)
+
                             return (True, 'saturated_5_ring_hetero')
 
-        # =========================================================================
-        # Cas 22: CH₂ adjacent à un carbone quaternaire sp3 prochiral
-        # Ex: CH₂-C(OH)(COOH)(R) comme dans le citrate
-        # Le carbone quaternaire a 4 substituants avec au moins 3 types différents
-        # =========================================================================
         for nb in neighbors_heavy:
             if nb.GetSymbol() == 'C':
-                # Vérifier si c'est un carbone quaternaire sp3 (4 liaisons simples)
+
                 nb_heavy_neighbors = [n for n in nb.GetNeighbors() if n.GetSymbol() != 'H']
 
-                # Doit avoir exactement 4 voisins lourds (quaternaire)
                 if len(nb_heavy_neighbors) == 4:
-                    # Vérifier que c'est bien sp3 (pas de double liaison)
+
                     has_double_bond = any(
                         bond.GetBondTypeAsDouble() >= 2
                         for bond in nb.GetBonds()
                     )
 
                     if not has_double_bond:
-                        # C'est un carbone quaternaire sp3
-                        # Vérifier si les substituants sont asymétriques
+
                         try:
                             ranks = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
                             quat_sub_ranks = [ranks[n.GetIdx()] for n in nb_heavy_neighbors]
                             unique_ranks = set(quat_sub_ranks)
 
-                            # Si au moins 3 types de substituants différents → prochiral
-                            # Ex: citrate a OH, COOH, CH2COOH, CH2COOH (3 types uniques)
                             if len(unique_ranks) >= 3:
                                 return (True, 'adjacent_to_prochiral_quaternary_C')
 
-                            # Même avec 2 types uniques, si l'un n'est pas le CH2 lui-même
-                            # Ex: C(R)(R)(X)(Y) où R=CH2, X≠Y → aussi prochiral
                             if len(unique_ranks) == 2:
                                 ch2_rank = ranks[ch2_idx]
                                 other_ranks = [r for r in quat_sub_ranks if r != ch2_rank]
-                                # Si les autres substituants ne sont pas tous identiques au CH2
+
                                 if len(set(other_ranks)) >= 2 or (other_ranks and other_ranks[0] != ch2_rank):
                                     return (True, 'adjacent_to_prochiral_quaternary_C')
                         except Exception:
                             pass
 
         return (False, '')
-        
+
     except Exception:
         return (False, '')
-
 
 def _is_diastereotopic_by_prochirality(
     mol: Chem.Mol,
@@ -3243,122 +2444,73 @@ def _is_diastereotopic_by_prochirality(
     h_a: int,
     h_b: int
 ) -> bool:
-    """
-    Complète la détection de diastéréotopie par analyse des centres prochiraux.
-    
-    À appeler après les tests standards de diastéréotopie pour détecter
-    les cas manqués par le test isotopique classique.
-    
-    Args:
-        mol: Molécule avec H explicites
-        heavy_idx: Index du carbone portant les H
-        h_a, h_b: Indices des deux protons
-    
-    Returns:
-        True si diastéréotopiques par prochirauté
-    """
-    # Vérifier si le CH2 est adjacent à un centre prochiral
+
     is_prochiral, reason = _is_prochiral_CH2(mol, heavy_idx)
-    
+
     if is_prochiral:
         return True
-    
-    # Vérifier les voisins directs pour des centres prochiraux
+
     heavy_atom = mol.GetAtomWithIdx(heavy_idx)
     for nb in heavy_atom.GetNeighbors():
         if nb.GetSymbol() != 'H':
             if _is_prochiral_center(mol, nb.GetIdx()):
                 return True
-    
+
     return False
 
-
 def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
-    """
-    Retourne ²J(H,H) geminal approprié selon l'environnement chimique.
 
-    Utilise une approche ADDITIVE: base + Σ(incréments des substituants)
-    Les effets des substituants sont approximativement additifs.
-
-    Note: ²J geminaux sont souvent NÉGATIFS, mais on retourne |²J|
-    car le signe n'affecte pas le pattern de multiplicité.
-
-    Références:
-        - Jackman & Sternhell, Applications of NMR Spectroscopy (1969)
-        - Breitmaier, Structure Elucidation by NMR (2002)
-        - Günther H., NMR Spectroscopy 3rd Ed. (2013)
-
-    Returns:
-        |²J| en Hz (toujours positif)
-    """
     sym = heavy_atom.GetSymbol()
 
     if sym != 'C':
-        return 12.5  # Défaut
+        return 12.5
 
-    # Vérifier hybridation
     hyb = str(heavy_atom.GetHybridization())
     is_sp2 = 'SP2' in hyb or heavy_atom.GetIsAromatic()
 
     if is_sp2:
-        # Aldéhyde?
+
         for bond in heavy_atom.GetBonds():
             if bond.GetBondTypeAsDouble() >= 2:
                 other = bond.GetOtherAtom(heavy_atom)
                 if other.GetSymbol() == 'O':
-                    return 2.5  # CHO (~2.5 Hz positif)
-        # Allène?
+                    return 2.5
+
         n_double_bonds = sum(1 for b in heavy_atom.GetBonds() if b.GetBondTypeAsDouble() >= 2)
         if n_double_bonds >= 2:
-            return 7.5  # Allène (~7-8 Hz positif)
-        return 2.0  # =CH₂ standard (~2 Hz positif)
-
-    # =========================================================================
-    # sp³: TABLE DIRECTE pour types spécifiques de CH₂
-    # =========================================================================
-    # Utiliser les valeurs expérimentales de la littérature quand le type est connu
-    # Évite les erreurs d'accumulation du calcul additif
-    #
-    # Table basée sur: Jackman & Sternhell, Pretsch, données BMRB
-    # =========================================================================
+            return 7.5
+        return 2.0
 
     _GEMINAL_2J_DIRECT_TABLE = {
-        # CH₂ aromatiques (Phe, Tyr, Trp, benzylique)
-        'CH2_indolyl':     14.5,   # Trp Hβ (CH₂-indole)
-        'CH2_benzyl':      14.0,   # Phe, Tyr Hβ (CH₂-Ar)
-        'CH2_imidazolyl':  14.5,   # His Hβ (CH₂-imidazole)
 
-        # CH₂ allyliques
-        'CH2_allyl':       14.5,   # CH₂-CH=C simple
-        'CH2_allyl_aryl':  15.0,   # Ar-CH₂-CH=C (prényles sur aromatiques)
+        'CH2_indolyl':     14.5,
+        'CH2_benzyl':      14.0,
+        'CH2_imidazolyl':  14.5,
 
-        # CH₂ carbonyles
-        'CH2_alpha_CO':    16.5,   # α-carbonyle (Asp, Glu, malonates)
-        'CH2_di_carbonyl': 17.5,   # O=C-CH₂-C=O (malonique)
+        'CH2_allyl':       14.5,
+        'CH2_allyl_aryl':  15.0,
 
-        # CH₂ hétéroatomes
-        'CH2_alpha_N':     13.0,   # α-amine
-        'CH2_alpha_O':     10.0,   # α-éther, sucres
-        'CH2_alpha_S':     11.0,   # α-thioéther (Cys, Met)
-        'CH2_acetal':       6.0,   # O-CH₂-O
+        'CH2_alpha_CO':    16.5,
+        'CH2_di_carbonyl': 17.5,
 
-        # Cycles tendus
-        'CH2_cyclopropane': 4.5,   # Cyclopropane
-        'CH2_epoxide':      5.5,   # Époxyde
-        'CH2_aziridine':    6.0,   # Aziridine
+        'CH2_alpha_N':     13.0,
+        'CH2_alpha_O':     10.0,
+        'CH2_alpha_S':     11.0,
+        'CH2_acetal':       6.0,
+
+        'CH2_cyclopropane': 4.5,
+        'CH2_epoxide':      5.5,
+        'CH2_aziridine':    6.0,
     }
 
     neighbors = [n for n in heavy_atom.GetNeighbors() if n.GetSymbol() != 'H']
     neighbor_symbols = [n.GetSymbol() for n in neighbors]
 
-    # Détecter le type spécifique de CH₂
     ch2_type = None
 
-    # 1. Acétal O-CH₂-O (priorité haute)
     if neighbor_symbols.count('O') >= 2:
         ch2_type = 'CH2_acetal'
 
-    # 2. Cycles tendus à 3 membres
     elif heavy_atom.IsInRingSize(3):
         ring_atoms = []
         for ring in mol.GetRingInfo().AtomRings():
@@ -3372,7 +2524,6 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
         else:
             ch2_type = 'CH2_cyclopropane'
 
-    # 3. Vérifier les voisins C pour type spécifique
     else:
         has_aromatic = False
         has_indole = False
@@ -3386,27 +2537,24 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
             if nb.GetSymbol() != 'C':
                 continue
 
-            # Aromatique?
             if nb.GetIsAromatic():
                 has_aromatic = True
-                # Vérifier si c'est un indole/pyrrole fusionné (N aromatique dans le système)
-                # Chercher dans tous les cycles aromatiques contenant ce carbone
+
                 ri = mol.GetRingInfo()
                 for ring in ri.AtomRings():
                     if nb.GetIdx() in ring:
-                        # Compter les N aromatiques dans ce cycle
+
                         ring_N_count = sum(1 for i in ring
                                            if mol.GetAtomWithIdx(i).GetSymbol() == 'N'
                                            and mol.GetAtomWithIdx(i).GetIsAromatic())
                         if ring_N_count >= 1:
-                            # Indole/pyrrole si cycle à 5 avec 1 N
+
                             if len(ring) == 5 and ring_N_count == 1:
                                 has_indole = True
-                            # Imidazole si cycle à 5 avec 2 N
+
                             elif len(ring) == 5 and ring_N_count >= 2:
                                 has_imidazole = True
 
-            # sp² non aromatique?
             elif 'SP2' in str(nb.GetHybridization()):
                 for b in nb.GetBonds():
                     if b.GetBondTypeAsDouble() >= 2:
@@ -3416,13 +2564,12 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
                             n_carbonyl += 1
                         elif other.GetSymbol() == 'C':
                             has_vinyl = True
-                            # Vérifier si allyl sur aromatique
+
                             for nb3 in other.GetNeighbors():
                                 if nb3.GetIsAromatic():
                                     has_allyl_on_aryl = True
                         break
 
-        # Assigner le type
         if has_indole:
             ch2_type = 'CH2_indolyl'
         elif has_imidazole:
@@ -3444,27 +2591,17 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
         elif 'S' in neighbor_symbols:
             ch2_type = 'CH2_alpha_S'
 
-    # Utiliser la table si type trouvé
     if ch2_type and ch2_type in _GEMINAL_2J_DIRECT_TABLE:
         return _GEMINAL_2J_DIRECT_TABLE[ch2_type]
 
-    # =========================================================================
-    # sp³: APPROCHE ADDITIVE (fallback)
-    # Base = -12.5 Hz (CH₂ alkyle standard)
-    # On accumule les incréments de chaque substituant
-    # =========================================================================
     base_2J = -12.5
     increment = 0.0
 
     neighbors = [n for n in heavy_atom.GetNeighbors() if n.GetSymbol() != 'H']
     neighbor_symbols = [n.GetSymbol() for n in neighbors]
 
-    # -------------------------------------------------------------------------
-    # 1. CYCLES TENDUS (modifie la base directement)
-    # -------------------------------------------------------------------------
-    # Cyclopropane ou époxyde (3 membres)
     if heavy_atom.IsInRingSize(3):
-        # Vérifier si époxyde (O dans le cycle)
+
         ring_atoms = []
         for ring in mol.GetRingInfo().AtomRings():
             if len(ring) == 3 and heavy_atom.GetIdx() in ring:
@@ -3474,33 +2611,26 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
         has_N_in_ring = any(a.GetSymbol() == 'N' for a in ring_atoms)
 
         if has_O_in_ring:
-            return 5.5  # Époxyde ~5.5 Hz
+            return 5.5
         elif has_N_in_ring:
-            return 6.0  # Aziridine ~6 Hz
+            return 6.0
         else:
-            return 4.5  # Cyclopropane ~4.3 Hz
+            return 4.5
 
-    # Cyclobutane (4 membres)
     if heavy_atom.IsInRingSize(4) and not heavy_atom.IsInRingSize(5):
-        base_2J = -12.0  # Cyclobutane légèrement réduit
+        base_2J = -12.0
 
-    # Cyclopentane (5 membres)
     if heavy_atom.IsInRingSize(5) and not heavy_atom.IsInRingSize(6):
-        base_2J = -13.0  # Cyclopentane légèrement augmenté
+        base_2J = -13.0
 
-    # -------------------------------------------------------------------------
-    # 2. HÉTÉROATOMES ADJACENTS
-    # -------------------------------------------------------------------------
     n_O_neighbors = neighbor_symbols.count('O')
     n_N_neighbors = neighbor_symbols.count('N')
     n_S_neighbors = neighbor_symbols.count('S')
     n_P_neighbors = neighbor_symbols.count('P')
 
-    # Acétal O-CH₂-O (effet spécial - très réduit)
     if n_O_neighbors >= 2:
-        return 6.0  # Acétal ~6 Hz
+        return 6.0
 
-    # Appliquer les incréments hétéroatomes
     if n_O_neighbors > 0:
         increment += _GEMINAL_2J_INCREMENTS.get('alpha_O', +2.5) * n_O_neighbors
     if n_N_neighbors > 0:
@@ -3510,9 +2640,6 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
     if n_P_neighbors > 0:
         increment += _GEMINAL_2J_INCREMENTS.get('alpha_P', +3.5) * n_P_neighbors
 
-    # -------------------------------------------------------------------------
-    # 3. CARBONES sp² ADJACENTS (aromatique, vinyle, carbonyle, nitro)
-    # -------------------------------------------------------------------------
     n_aromatic = 0
     n_vinyl = 0
     n_carbonyl = 0
@@ -3520,7 +2647,7 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
 
     for nb in neighbors:
         if nb.GetSymbol() == 'N':
-            # Vérifier si c'est un groupe nitro (N avec 2 O)
+
             n_O_on_N = sum(1 for nn in nb.GetNeighbors() if nn.GetSymbol() == 'O')
             if n_O_on_N >= 2:
                 n_nitro += 1
@@ -3535,7 +2662,7 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
         if nb.GetIsAromatic():
             n_aromatic += 1
         elif nb_is_sp2:
-            # Distinguer carbonyle (C=O) et vinyle (C=C)
+
             for b in nb.GetBonds():
                 if b.GetBondTypeAsDouble() >= 2:
                     other = b.GetOtherAtom(nb)
@@ -3546,35 +2673,29 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
                         n_vinyl += 1
                         break
 
-    # Appliquer les incréments sp² - CORRECTED defaults to match table
     if n_aromatic > 0:
-        increment += _GEMINAL_2J_INCREMENTS.get('aromatic', +1.5) * n_aromatic  # ✅ +1.5 (reduces |²J|)
+        increment += _GEMINAL_2J_INCREMENTS.get('aromatic', +1.5) * n_aromatic
     if n_vinyl > 0:
         increment += _GEMINAL_2J_INCREMENTS.get('vinyl', -1.25) * n_vinyl
     if n_carbonyl > 0:
-        increment += _GEMINAL_2J_INCREMENTS.get('carbonyl', -1.5) * n_carbonyl  # ✅ -1.5 (was -4.0)
+        increment += _GEMINAL_2J_INCREMENTS.get('carbonyl', -1.5) * n_carbonyl
     if n_nitro > 0:
         increment += _GEMINAL_2J_INCREMENTS.get('nitro', -5.5) * n_nitro
 
-    # -------------------------------------------------------------------------
-    # 3b. POSITION β D'UN CARBONYLE (2 liaisons du C=O)
-    # Ex: CH₂(β)-Cα-COOH dans acides aminés
-    # L'effet électroattracteur se propage et augmente |²J| de ~2-3 Hz
-    # -------------------------------------------------------------------------
-    if n_carbonyl == 0:  # Pas déjà α-carbonyle
+    if n_carbonyl == 0:
         n_beta_carbonyl = 0
         for nb in neighbors:
             if nb.GetSymbol() != 'C':
                 continue
-            # Vérifier si ce voisin (sp³) est lui-même adjacent à un carbonyle
+
             for nb2 in nb.GetNeighbors():
                 if nb2.GetIdx() == heavy_atom.GetIdx():
-                    continue  # Ignorer le retour vers nous
+                    continue
                 if nb2.GetSymbol() != 'C':
                     continue
                 nb2_hyb = str(nb2.GetHybridization())
                 if 'SP2' in nb2_hyb:
-                    # Vérifier si c'est un carbonyle (C=O)
+
                     for b in nb2.GetBonds():
                         if b.GetBondTypeAsDouble() >= 2:
                             other = b.GetOtherAtom(nb2)
@@ -3587,98 +2708,68 @@ def _get_geminal_2J(heavy_atom, mol: Chem.Mol) -> float:
                 break
 
         if n_beta_carbonyl > 0:
-            # ✅ CORRECTION: L'effet β-carbonyle ne s'applique PAS quand il y a déjà
-            # un effet aromatique direct (CH₂-Ar comme Trp, Phe). L'effet à 2 liaisons
-            # est complètement masqué par l'effet aromatique direct plus fort.
-            # Pour les autres effets sp² (vinyle, carbonyle), on applique l'effet réduit.
+
             if n_aromatic > 0:
-                # CH₂-Ar: l'effet β-carbonyle est négligeable (Trp Hβ ~14.5 Hz)
-                pass  # Ne pas ajouter d'incrément
+
+                pass
             elif n_vinyl > 0 or n_carbonyl > 0:
-                # Effet β-carbonyle réduit (~40% de la valeur normale)
+
                 increment += _GEMINAL_2J_INCREMENTS.get('beta_carbonyl', -2.5) * 0.4
             else:
-                # Pas d'effet sp² direct: appliquer pleinement l'effet β-carbonyle
+
                 increment += _GEMINAL_2J_INCREMENTS.get('beta_carbonyl', -2.5)
 
     final_2J = base_2J + increment
 
-    # Limites raisonnables: |²J| entre 4 et 19 Hz pour sp³
     final_2J = max(-19.0, min(-4.0, final_2J))
 
-    # Retourner valeur absolue
     return abs(round(final_2J, 1))
 
-
 def _get_1JCH(heavy_atom, mol: Chem.Mol) -> float:
-    """
-    Retourne ¹J(C-H) selon l'hybridation et l'environnement du carbone.
-    
-    Références:
-        - Kalinowski et al., Carbon-13 NMR Spectroscopy
-        - Berger & Braun, 200 and More NMR Experiments
-    
-    Returns:
-        ¹J(C-H) en Hz
-    """
+
     sym = heavy_atom.GetSymbol()
-    
+
     if sym != 'C':
-        return 140.0  # Défaut non-C
-    
+        return 140.0
+
     hyb = str(heavy_atom.GetHybridization())
-    
-    # sp (alcyne terminal)
+
     if 'SP' in hyb and 'SP2' not in hyb and 'SP3' not in hyb:
         return _13C_1JCH_TABLE.get('sp_alkyne', 250.0)
-    
-    # sp² (aromatique, alcène, aldéhyde)
+
     if 'SP2' in hyb or heavy_atom.GetIsAromatic():
-        # Aldéhyde?
+
         for bond in heavy_atom.GetBonds():
             if bond.GetBondTypeAsDouble() >= 2:
                 other = bond.GetOtherAtom(heavy_atom)
                 if other.GetSymbol() == 'O':
                     return _13C_1JCH_TABLE.get('sp2_aldehyde', 175.0)
-        
-        # Aromatique?
+
         if heavy_atom.GetIsAromatic():
             return _13C_1JCH_TABLE.get('aromatic', 160.0)
-        
-        # Alcène
+
         return _13C_1JCH_TABLE.get('sp2_alkene', 155.0)
-    
-    # sp³
+
     neighbors = [n.GetSymbol() for n in heavy_atom.GetNeighbors() if n.GetSymbol() != 'H']
-    
-    # Cyclopropane (tension de cycle → J élevé)
+
     if heavy_atom.IsInRingSize(3):
         return _13C_1JCH_TABLE.get('sp3_cyclopropane', 160.0)
-    
-    # Adjacent à O?
+
     if 'O' in neighbors:
         return _13C_1JCH_TABLE.get('sp3_alpha_O', 140.0)
-    
-    # Adjacent à N?
+
     if 'N' in neighbors:
         return _13C_1JCH_TABLE.get('sp3_alpha_N', 135.0)
-    
-    # Alkyle standard
+
     return _13C_1JCH_TABLE.get('sp3_alkyl', 125.0)
 
-
-# ---------------------------
-# Second-order detection (raffinée)
-# ---------------------------
 def _refined_second_order_detection(
     J_vals: List[float],
     ppm_vals: List[float],
     spectrometer_mhz: float,
     config: "SimConfig"
 ) -> Tuple[bool, str]:
-    """
-    Détection Δν/J avec seuils gradués (Keeler, Günther, Reich).
-    """
+
     if not J_vals:
         return False, "insufficient_data"
     if len(ppm_vals) < 2:
@@ -3686,17 +2777,9 @@ def _refined_second_order_detection(
 
     Jmax = max(J_vals)
 
-    # ✅ CORRECTION: Calculer delta_ppm entre le proton observé et ses partenaires
-    # ppm_vals[0] = shift du proton observé
-    # ppm_vals[1:] = shifts des partenaires
-    #
-    # L'ancien calcul prenait min(toutes les différences) ce qui incluait
-    # les différences entre partenaires équivalents (→ 0 si même shift)
-    #
-    # Le bon calcul: différence entre observé et partenaire le plus proche
     if len(ppm_vals) >= 2:
         obs_shift = ppm_vals[0]
-        partner_shifts = set(round(p, 4) for p in ppm_vals[1:])  # Uniques
+        partner_shifts = set(round(p, 4) for p in ppm_vals[1:])
         if partner_shifts:
             delta_ppm = min(abs(obs_shift - ps) for ps in partner_shifts)
         else:
@@ -3706,45 +2789,35 @@ def _refined_second_order_detection(
 
     delta_nu_hz = delta_ppm * spectrometer_mhz
 
-    # Si delta_ppm ≈ 0 (proton observé et partenaire ont même shift → AB system)
-    # c'est un couplage fort potentiel
     if delta_ppm < 0.001:
-        # Vérifier si c'est vraiment le même groupe (CH2 équivalent) ou un système AB
+
         if len(set(round(p, 3) for p in ppm_vals)) == 1:
-            # Tous les mêmes → protons équivalents, pas de second ordre
+
             return False, "first_order"
         else:
-            # Shifts très proches mais pas identiques → système AB fort
+
             return True, "strong_coupling"
 
     if delta_nu_hz < 0.5:
         return True, "strong_coupling"
 
-    ratio = Jmax / delta_nu_hz  # = J/Δν
+    ratio = Jmax / delta_nu_hz
 
-    # Seuils révisés basés sur la littérature (Pople, Reich, Silverstein)
-    # Ces seuils servent UNIQUEMENT au LABEL, pas au choix du moteur de calcul
-    # Le Hamiltonien est toujours utilisé pour le calcul spectral
-    if ratio > 1.0:       # Δν/J < 1 → couplage fort, label "m"
+    if ratio > 1.0:
         return True, "strong_coupling"
-    elif ratio > 0.25:    # Δν/J < 4 → roofing visible (Pople ~5, Reich ~4)
+    elif ratio > 0.25:
         return True, "moderate_second_order"
-    elif ratio > 0.1:     # Δν/J < 10 → roofing faible (Silverstein)
+    elif ratio > 0.1:
         return True, "weak_second_order"
-    else:                 # Δν/J ≥ 10 → premier ordre pur
+    else:
         return False, "first_order"
 
-# ---------------------------
-# Effet de toit (roof effect) – systèmes AB simples
-# ---------------------------
 def _calculate_roof_effect_intensities(
     J_hz: float,
     delta_nu_hz: float,
     base_multiplicity: str
 ) -> List[Tuple[float, float]]:
-    """
-    Calcule les positions et intensités avec effet de toit pour un système AB simple.
-    """
+
     if J_hz <= 0.0:
         return [(0.0, 1.0)]
 
@@ -3770,84 +2843,48 @@ def _calculate_roof_effect_intensities(
 
     return [(0.0, 1.0)]
 
-
-# ==============================================================================
-# MODULE HAMILTONIEN DE SPIN — Résolution exacte pour systèmes couplés
-# ==============================================================================
-# Références:
-# - Pople J.A., Schneider W.G., Bernstein H.J., High-Resolution NMR (1959)
-# - Günther H., NMR Spectroscopy, 3rd Ed. (2013), Chapter 4-5
-# - Keeler J., Understanding NMR Spectroscopy, 2nd Ed. (2010)
-# ==============================================================================
-
 @dataclass
 class SpinSystemPeaks:
-    """Résultat d'une simulation de système de spin."""
-    frequencies_hz: np.ndarray  # Positions des raies (Hz, relatives au centre)
-    intensities: np.ndarray      # Intensités relatives (normalisées)
-    system_type: str             # "AB", "ABX", "AA'BB'", etc.
-    coupling_constants: Dict[str, float]  # J utilisés
-    chemical_shifts_hz: Dict[str, float]  # δ utilisés (Hz)
 
+    frequencies_hz: np.ndarray
+    intensities: np.ndarray
+    system_type: str
+    coupling_constants: Dict[str, float]
+    chemical_shifts_hz: Dict[str, float]
 
 def _solve_AB_system(
     delta_nu_hz: float,
     J_ab_hz: float,
     center_hz: float = 0.0
 ) -> SpinSystemPeaks:
-    """
-    Résolution exacte du système AB (2 spins I=1/2 couplés).
-    
-    Hamiltonien (base |αα⟩, |αβ⟩, |βα⟩, |ββ⟩):
-        H = -νA·IzA - νB·IzB + JAB·(IA·IB)
-    
-    Transitions permises: ΔM = ±1, avec intensités calculées.
-    
-    Args:
-        delta_nu_hz: νA - νB en Hz (peut être négatif)
-        J_ab_hz: Constante de couplage JAB en Hz
-        center_hz: Centre du système (νA + νB)/2 en Hz
-    
-    Returns:
-        SpinSystemPeaks avec 4 raies (2 pour A, 2 pour B)
-    """
-    # Paramètres
+
     dv = abs(delta_nu_hz)
     J = J_ab_hz
-    
-    # C = sqrt((Δν)² + J²) — paramètre fondamental
+
     C = np.sqrt(dv**2 + J**2)
-    
-    # Angle de mélange θ: tan(2θ) = J / Δν
+
     if dv > 1e-6:
         theta = 0.5 * np.arctan2(J, dv)
     else:
-        theta = np.pi / 4  # Limite Δν → 0: mélange maximal
-    
+        theta = np.pi / 4
+
     cos_theta = np.cos(theta)
     sin_theta = np.sin(theta)
-    
-    # Fréquences des 4 transitions (relatives au centre)
-    # A: transitions 1→2 et 3→4 dans la base propre
-    # B: transitions 1→3 et 2→4
-    
-    f1 = -0.5 * (C + J)   # Raie externe gauche (A ou B selon signe Δν)
-    f2 = -0.5 * (C - J)   # Raie interne gauche
-    f3 = +0.5 * (C - J)   # Raie interne droite
-    f4 = +0.5 * (C + J)   # Raie externe droite
-    
-    # Intensités (effet de toit)
-    # I_inner ∝ 1 + sin(2θ), I_outer ∝ 1 - sin(2θ)
+
+    f1 = -0.5 * (C + J)
+    f2 = -0.5 * (C - J)
+    f3 = +0.5 * (C - J)
+    f4 = +0.5 * (C + J)
+
     sin_2theta = 2 * sin_theta * cos_theta
     I_inner = 1.0 + sin_2theta
     I_outer = 1.0 - sin_2theta
-    
+
     frequencies = np.array([f1, f2, f3, f4]) + center_hz
     intensities = np.array([I_outer, I_inner, I_inner, I_outer])
-    
-    # Normaliser
+
     intensities = intensities / intensities.sum()
-    
+
     return SpinSystemPeaks(
         frequencies_hz=frequencies,
         intensities=intensities,
@@ -3855,7 +2892,6 @@ def _solve_AB_system(
         coupling_constants={"J_AB": J_ab_hz},
         chemical_shifts_hz={"delta_nu": delta_nu_hz, "center": center_hz}
     )
-
 
 def _solve_ABX_system(
     nu_A_hz: float,
@@ -3865,67 +2901,46 @@ def _solve_ABX_system(
     J_AX_hz: float,
     J_BX_hz: float
 ) -> SpinSystemPeaks:
-    """
-    Résolution du système ABX (3 spins, X faiblement couplé à AB).
-    
-    Approche: X est traité comme perturbation → 2 sous-systèmes AB
-    (un pour X = α, un pour X = β), chacun avec shifts effectifs.
-    
-    Total: 12 raies (8 pour AB, 4 pour X).
-    
-    Args:
-        nu_A_hz, nu_B_hz, nu_X_hz: Shifts en Hz
-        J_AB_hz, J_AX_hz, J_BX_hz: Constantes de couplage en Hz
-    
-    Returns:
-        SpinSystemPeaks avec toutes les raies
-    """
+
     frequencies = []
     intensities = []
-    
-    # Sous-système AB avec X = α (spin up)
-    # Shifts effectifs: νA' = νA + JAX/2, νB' = νB + JBX/2
+
     nu_A_eff_alpha = nu_A_hz + J_AX_hz / 2
     nu_B_eff_alpha = nu_B_hz + J_BX_hz / 2
     delta_nu_alpha = nu_A_eff_alpha - nu_B_eff_alpha
     center_alpha = (nu_A_eff_alpha + nu_B_eff_alpha) / 2
-    
+
     ab_alpha = _solve_AB_system(delta_nu_alpha, J_AB_hz, center_alpha)
     frequencies.extend(ab_alpha.frequencies_hz)
-    intensities.extend(ab_alpha.intensities * 0.5)  # Population 50%
-    
-    # Sous-système AB avec X = β (spin down)
+    intensities.extend(ab_alpha.intensities * 0.5)
+
     nu_A_eff_beta = nu_A_hz - J_AX_hz / 2
     nu_B_eff_beta = nu_B_hz - J_BX_hz / 2
     delta_nu_beta = nu_A_eff_beta - nu_B_eff_beta
     center_beta = (nu_A_eff_beta + nu_B_eff_beta) / 2
-    
+
     ab_beta = _solve_AB_system(delta_nu_beta, J_AB_hz, center_beta)
     frequencies.extend(ab_beta.frequencies_hz)
     intensities.extend(ab_beta.intensities * 0.5)
-    
-    # Raies de X (doublet de doublets en première approximation)
-    # Positions: νX ± (JAX + JBX)/2 et νX ± (JAX - JBX)/2
-    # Mais pour ABX, les intensités sont modulées par le mélange AB
-    # Approximation premier ordre pour X:
+
     delta_J = (J_AX_hz + J_BX_hz) / 2
     diff_J = (J_AX_hz - J_BX_hz) / 2
-    
+
     x_freqs = [
         nu_X_hz + delta_J,
         nu_X_hz + diff_J,
         nu_X_hz - diff_J,
         nu_X_hz - delta_J,
     ]
-    x_intensities = [0.25, 0.25, 0.25, 0.25]  # Simplifié
-    
+    x_intensities = [0.25, 0.25, 0.25, 0.25]
+
     frequencies.extend(x_freqs)
     intensities.extend(x_intensities)
-    
+
     frequencies = np.array(frequencies)
     intensities = np.array(intensities)
     intensities = intensities / intensities.sum()
-    
+
     return SpinSystemPeaks(
         frequencies_hz=frequencies,
         intensities=intensities,
@@ -3933,7 +2948,6 @@ def _solve_ABX_system(
         coupling_constants={"J_AB": J_AB_hz, "J_AX": J_AX_hz, "J_BX": J_BX_hz},
         chemical_shifts_hz={"nu_A": nu_A_hz, "nu_B": nu_B_hz, "nu_X": nu_X_hz}
     )
-
 
 def _solve_AABB_system(
     delta_nu_hz: float,
@@ -3943,120 +2957,87 @@ def _solve_AABB_system(
     J_AB_prime_hz: float,
     center_hz: float = 0.0
 ) -> SpinSystemPeaks:
-    """
-    Résolution du système AA'BB' (4 spins équivalents par paires).
-    
-    Exemple typique: -CH₂-CH₂- avec Δν petit.
-    
-    Hamiltonien 16×16, mais la symétrie réduit à des blocs plus petits.
-    Ici: résolution numérique complète par diagonalisation.
-    
-    Args:
-        delta_nu_hz: νA - νB (Hz)
-        J_AA_hz: Couplage entre les deux A (geminal ou long-range)
-        J_BB_hz: Couplage entre les deux B
-        J_AB_hz: Couplage A-B (vicinal cis ou trans)
-        J_AB_prime_hz: Couplage A-B' (vicinal autre)
-        center_hz: (νA + νB)/2
-    
-    Returns:
-        SpinSystemPeaks avec jusqu'à 24 raies
-    """
-    # Construction du Hamiltonien dans la base produit (16 états)
-    # |αααα⟩, |αααβ⟩, ..., |ββββ⟩
-    
-    # États: (A, A', B, B') chacun = 0 (α) ou 1 (β)
+
     n_states = 16
-    
-    # Opérateurs Iz pour chaque spin (diagonaux)
+
     def Iz(state, spin_idx):
-        """Valeur propre de Iz: +1/2 si α, -1/2 si β"""
+
         bit = (state >> (3 - spin_idx)) & 1
         return 0.5 if bit == 0 else -0.5
-    
-    # Opérateurs I+I- pour couplages (hors-diagonaux)
+
     def flip(state, i, j):
-        """Flip les spins i et j (si un α et un β)"""
+
         bi = (state >> (3 - i)) & 1
         bj = (state >> (3 - j)) & 1
-        if bi != bj:  # Un up, un down
+        if bi != bj:
             new_state = state ^ (1 << (3 - i)) ^ (1 << (3 - j))
             return new_state
         return None
-    
-    # Construire H
+
     H = np.zeros((n_states, n_states), dtype=np.float64)
-    
-    # Termes Zeeman (diagonaux)
+
     nu_A = center_hz + delta_nu_hz / 2
     nu_B = center_hz - delta_nu_hz / 2
-    
+
     for s in range(n_states):
-        # Spins: 0=A, 1=A', 2=B, 3=B'
-        H[s, s] -= nu_A * Iz(s, 0)  # A
-        H[s, s] -= nu_A * Iz(s, 1)  # A'
-        H[s, s] -= nu_B * Iz(s, 2)  # B
-        H[s, s] -= nu_B * Iz(s, 3)  # B'
-    
-    # Termes de couplage
+
+        H[s, s] -= nu_A * Iz(s, 0)
+        H[s, s] -= nu_A * Iz(s, 1)
+        H[s, s] -= nu_B * Iz(s, 2)
+        H[s, s] -= nu_B * Iz(s, 3)
+
     couplings = [
-        (0, 1, J_AA_hz),      # A-A'
-        (2, 3, J_BB_hz),      # B-B'
-        (0, 2, J_AB_hz),      # A-B
-        (1, 3, J_AB_hz),      # A'-B'
-        (0, 3, J_AB_prime_hz),  # A-B'
-        (1, 2, J_AB_prime_hz),  # A'-B
+        (0, 1, J_AA_hz),
+        (2, 3, J_BB_hz),
+        (0, 2, J_AB_hz),
+        (1, 3, J_AB_hz),
+        (0, 3, J_AB_prime_hz),
+        (1, 2, J_AB_prime_hz),
     ]
-    
+
     for i, j, J in couplings:
         for s in range(n_states):
-            # Terme diagonal: J * Iz_i * Iz_j
+
             H[s, s] += J * Iz(s, i) * Iz(s, j)
-            
-            # Termes hors-diagonaux: J/2 * (I+_i I-_j + I-_i I+_j)
+
             s_flip = flip(s, i, j)
             if s_flip is not None:
                 H[s, s_flip] += J / 2
                 H[s_flip, s] += J / 2
-    
-    # Diagonaliser
+
     eigenvalues, eigenvectors = np.linalg.eigh(H)
-    
-    # Calculer les transitions permises (ΔM = ±1)
-    # Opérateur I+ total = I+_A + I+_A' + I+_B + I+_B'
+
     def total_Mz(state):
         return sum(Iz(state, i) for i in range(4))
-    
+
     frequencies = []
     intensities = []
-    
+
     for i in range(n_states):
         for j in range(n_states):
-            # Transition j → i (absorption si Ei > Ej)
+
             dE = eigenvalues[i] - eigenvalues[j]
             if dE <= 0:
                 continue
-            
-            # Vérifier ΔM = -1 (pour I+)
-            # En fait on calcule l'élément de matrice ⟨i|I+|j⟩
+
             intensity = 0.0
             for s in range(n_states):
                 for spin in range(4):
-                    # I+ sur spin: α→rien, β→α
+
                     bit = (s >> (3 - spin)) & 1
-                    if bit == 1:  # β
-                        s_new = s ^ (1 << (3 - spin))  # Flip to α
-                        # ⟨i|s_new⟩ * ⟨s|j⟩
+                    if bit == 1:
+                        s_new = s ^ (1 << (3 - spin))
+
                         intensity += eigenvectors[s_new, i] * eigenvectors[s, j]
-            
+
             intensity = abs(intensity) ** 2
-            
+
             if intensity > 1e-6:
                 frequencies.append(dE)
                 intensities.append(intensity)
-    
+
     if not frequencies:
-        # Fallback: 4 raies centrées
+
         return SpinSystemPeaks(
             frequencies_hz=np.array([center_hz]),
             intensities=np.array([1.0]),
@@ -4064,11 +3045,11 @@ def _solve_AABB_system(
             coupling_constants={},
             chemical_shifts_hz={}
         )
-    
+
     frequencies = np.array(frequencies)
     intensities = np.array(intensities)
     intensities = intensities / intensities.sum()
-    
+
     return SpinSystemPeaks(
         frequencies_hz=frequencies,
         intensities=intensities,
@@ -4080,121 +3061,65 @@ def _solve_AABB_system(
         chemical_shifts_hz={"delta_nu": delta_nu_hz, "center": center_hz}
     )
 
-
-# ==============================================================================
-# MODULE SIMULATION DE SPECTRE (LINESHAPE) — FID → FFT
-# ==============================================================================
-# Génère un spectre NMR 1D réaliste avec largeur de raie Lorentzienne.
-# ==============================================================================
-
 @dataclass
 class SimulatedSpectrum:
-    """Spectre NMR simulé complet."""
-    ppm_axis: np.ndarray          # Axe en ppm
-    freq_axis_hz: np.ndarray      # Axe en Hz
-    intensity: np.ndarray          # Intensités (normalisées)
-    peaks_ppm: List[float]         # Positions des pics (ppm)
-    peaks_intensity: List[float]   # Intensités des pics
+
+    ppm_axis: np.ndarray
+    freq_axis_hz: np.ndarray
+    intensity: np.ndarray
+    peaks_ppm: List[float]
+    peaks_intensity: List[float]
     spectrometer_mhz: float
     line_width_hz: float
-    
+
     @property
     def spectrum(self) -> np.ndarray:
-        """Alias pour 'intensity' - compatibilité avec simulate_spectrum_api.py."""
+
         return self.intensity
-    
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "ppm_axis": self.ppm_axis.tolist(),
             "freq_axis_hz": self.freq_axis_hz.tolist(),
             "intensity": self.intensity.tolist(),
-            "spectrum": self.intensity.tolist(),  # Alias pour compatibilité
+            "spectrum": self.intensity.tolist(),
             "peaks_ppm": self.peaks_ppm,
             "peaks_intensity": self.peaks_intensity,
             "spectrometer_mhz": self.spectrometer_mhz,
             "line_width_hz": self.line_width_hz,
         }
 
-
 def _lorentzian(x: np.ndarray, x0: float, gamma: float, amplitude: float = 1.0) -> np.ndarray:
-    """
-    Fonction Lorentzienne (forme de raie NMR idéale).
-    
-    L(x) = A * γ² / ((x - x0)² + γ²)
-    
-    Args:
-        x: Axe de fréquences
-        x0: Position du centre
-        gamma: Demi-largeur à mi-hauteur (HWHM)
-        amplitude: Amplitude au pic
-    
-    Returns:
-        Profil Lorentzien normalisé
-    """
+
     return amplitude * (gamma ** 2) / ((x - x0) ** 2 + gamma ** 2)
 
-
 def _gaussian(x: np.ndarray, x0: float, sigma: float, amplitude: float = 1.0) -> np.ndarray:
-    """
-    Fonction Gaussienne (pour convolution inhomogène).
-    """
+
     return amplitude * np.exp(-0.5 * ((x - x0) / sigma) ** 2)
 
-
 def _voigt_approx(x: np.ndarray, x0: float, gamma: float, sigma: float, amplitude: float = 1.0) -> np.ndarray:
-    """
-    Pseudo-Voigt (approximation rapide du profil Voigt).
-    
-    Combinaison linéaire Lorentzienne + Gaussienne.
-    """
-    # Fraction Lorentzienne basée sur les largeurs relatives
+
     f_L = gamma / (gamma + sigma) if (gamma + sigma) > 0 else 0.5
     L = _lorentzian(x, x0, gamma, 1.0)
     G = _gaussian(x, x0, sigma, 1.0)
     return amplitude * (f_L * L + (1 - f_L) * G)
 
-
-# ==============================================================================
-# SIMULATION PAR DIAGONALISATION DU HAMILTONIEN DE SPIN
-# ==============================================================================
-# Référence: Castillo, Patiny & Wist, J. Magn. Reson. 209, 123-130 (2011)
-# "Fast and Accurate Algorithm for the Simulation of NMR spectra of Large Spin Systems"
-# ==============================================================================
-
 @dataclass
 class SpinSystem:
-    """
-    Système de spins pour simulation quantique.
-    
-    Attributes:
-        n_spins: Nombre de spins 1/2
-        shifts_hz: Déplacements chimiques en Hz (relatif à référence)
-        couplings_hz: Matrice de couplages J (Hz), symétrique
-        equivalences: Groupes d'équivalence magnétique [(idx1, idx2, ...)]
-    """
+
     n_spins: int
-    shifts_hz: np.ndarray  # (n_spins,)
-    couplings_hz: np.ndarray  # (n_spins, n_spins) symétrique
+    shifts_hz: np.ndarray
+    couplings_hz: np.ndarray
     equivalences: List[Tuple[int, ...]] = field(default_factory=list)
-    labels: List[str] = field(default_factory=list)  # Étiquettes atomiques
-    
+    labels: List[str] = field(default_factory=list)
+
     @classmethod
     def from_groups(
         cls,
         groups: List[Dict[str, Any]],
         spectrometer_mhz: float = 400.0
     ) -> 'SpinSystem':
-        """
-        Crée un SpinSystem depuis la sortie de simulate_multiplicity.
-        
-        Args:
-            groups: Liste de groupes de protons avec shifts et couplages
-            spectrometer_mhz: Fréquence du spectromètre
-        
-        Returns:
-            SpinSystem configuré
-        """
-        # Collecter tous les protons individuels
+
         all_protons = []
         for g in groups:
             shift_ppm = g.get('H_shifts_ppm', [0.0])[0]
@@ -4208,18 +3133,16 @@ class SpinSystem:
                     'j_couplings': g.get('J_couplings', []),
                     'partners': g.get('partners', [])
                 })
-        
+
         n = len(all_protons)
         if n == 0:
             return cls(n_spins=0, shifts_hz=np.array([]), couplings_hz=np.array([[]]))
-        
-        # Construire les shifts
+
         shifts = np.array([p['shift_hz'] for p in all_protons])
-        
-        # Construire la matrice de couplages
+
         couplings = np.zeros((n, n))
         h_idx_to_spin = {p['h_idx']: i for i, p in enumerate(all_protons)}
-        
+
         for i, p in enumerate(all_protons):
             for partner in p.get('partners', []):
                 partner_h = partner.get('partner_h_index')
@@ -4227,9 +3150,8 @@ class SpinSystem:
                 if partner_h in h_idx_to_spin:
                     j = h_idx_to_spin[partner_h]
                     couplings[i, j] = j_hz
-                    couplings[j, i] = j_hz  # Symétrique
-        
-        # Groupes d'équivalence
+                    couplings[j, i] = j_hz
+
         equivalences = []
         group_to_spins = defaultdict(list)
         for i, p in enumerate(all_protons):
@@ -4237,9 +3159,9 @@ class SpinSystem:
         for gid, spins in group_to_spins.items():
             if len(spins) > 1:
                 equivalences.append(tuple(spins))
-        
+
         labels = [f"H{p['h_idx']}" for p in all_protons]
-        
+
         return cls(
             n_spins=n,
             shifts_hz=shifts,
@@ -4248,35 +3170,25 @@ class SpinSystem:
             labels=labels
         )
 
-
 def _build_spin_operators(n_spins: int) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-    """
-    Construit les opérateurs de spin Ix, Iy, Iz pour n spins 1/2.
-    
-    Utilise le produit tensoriel (Kronecker) pour construire les opérateurs
-    dans l'espace de Hilbert complet (dimension 2^n).
-    
-    Returns:
-        (Ix_list, Iy_list, Iz_list) - Listes d'opérateurs pour chaque spin
-    """
+
     dim = 2 ** n_spins
-    
-    # Matrices de Pauli / 2
+
     sx = np.array([[0, 1], [1, 0]], dtype=np.complex128) / 2
     sy = np.array([[0, -1j], [1j, 0]], dtype=np.complex128) / 2
     sz = np.array([[1, 0], [0, -1]], dtype=np.complex128) / 2
     I2 = np.eye(2, dtype=np.complex128)
-    
+
     Ix_list = []
     Iy_list = []
     Iz_list = []
-    
+
     for k in range(n_spins):
-        # Produit tensoriel: I ⊗ ... ⊗ Sx ⊗ ... ⊗ I
+
         op_x = np.array([[1]], dtype=np.complex128)
         op_y = np.array([[1]], dtype=np.complex128)
         op_z = np.array([[1]], dtype=np.complex128)
-        
+
         for j in range(n_spins):
             if j == k:
                 op_x = np.kron(op_x, sx)
@@ -4286,49 +3198,33 @@ def _build_spin_operators(n_spins: int) -> Tuple[List[np.ndarray], List[np.ndarr
                 op_x = np.kron(op_x, I2)
                 op_y = np.kron(op_y, I2)
                 op_z = np.kron(op_z, I2)
-        
+
         Ix_list.append(op_x)
         Iy_list.append(op_y)
         Iz_list.append(op_z)
-    
-    return Ix_list, Iy_list, Iz_list
 
+    return Ix_list, Iy_list, Iz_list
 
 def _build_hamiltonian(
     spin_system: SpinSystem,
     Iz_list: List[np.ndarray]
 ) -> np.ndarray:
-    """
-    Construit le Hamiltonien de spin en représentation tournante.
-    
-    H = Σᵢ νᵢ Izᵢ + Σᵢ<ⱼ Jᵢⱼ (Ixᵢ Ixⱼ + Iyᵢ Iyⱼ + Izᵢ Izⱼ)
-    
-    En pratique, pour les liquides isotropes (secular approximation):
-    H = Σᵢ νᵢ Izᵢ + Σᵢ<ⱼ Jᵢⱼ Izᵢ Izⱼ  (couplage faible)
-    
-    Ou Hamiltonien complet pour systèmes fortement couplés.
-    """
+
     n = spin_system.n_spins
     dim = 2 ** n
     H = np.zeros((dim, dim), dtype=np.complex128)
-    
-    # Termes Zeeman (déplacements chimiques)
+
     for i in range(n):
         H += spin_system.shifts_hz[i] * Iz_list[i]
-    
-    # Termes de couplage J (forme scalaire complète pour second ordre)
-    # Ici on utilise seulement Iz·Iz pour l'approximation séculaire
-    # Pour un traitement exact, il faudrait inclure les termes transverses
+
     for i in range(n):
         for j in range(i + 1, n):
             Jij = spin_system.couplings_hz[i, j]
-            if abs(Jij) > 0.01:  # Seuil de couplage significatif
-                # Couplage scalaire: J * I⃗ᵢ · I⃗ⱼ = J * (Ixi*Ixj + Iyi*Iyj + Izi*Izj)
-                # Pour simulation exacte des systèmes AB
-                H += Jij * (Iz_list[i] @ Iz_list[j])
-    
-    return H
+            if abs(Jij) > 0.01:
 
+                H += Jij * (Iz_list[i] @ Iz_list[j])
+
+    return H
 
 def _compute_transitions(
     H: np.ndarray,
@@ -4337,39 +3233,21 @@ def _compute_transitions(
     temperature_k: float = 298.15,
     threshold: float = 1e-6
 ) -> List[Tuple[float, float]]:
-    """
-    Calcule les fréquences et intensités des transitions par diagonalisation.
 
-    VERSION OPTIMISÉE (Version2): Calcul direct des éléments de matrice
-    au lieu de transformer I+ complet dans la base propre.
-
-    Gain de performance: O(dim²) au lieu de O(dim³)
-    Pour 13 spins (dim=8192): 512× plus rapide !
-
-    Returns:
-        Liste de (fréquence_hz, intensité) pour chaque transition
-    """
     from scipy import linalg
 
-    # Diagonalisation
     eigenvalues, eigenvectors = linalg.eigh(H)
     dim = len(eigenvalues)
 
-    # Utilise seulement Ix pour les transitions (simplification valide en RMN)
-    # Au lieu de I+ = Ix + i*Iy, on utilise juste Ix
-    # Les intensités relatives sont correctes
-
     transitions = []
 
-    # OPTIMISATION CLÉ: Calcul direct des éléments de matrice
-    # Au lieu de transformer toute la matrice I+
     for i in range(dim):
         for j in range(i + 1, dim):
-            # Fréquence de transition
+
             freq = eigenvalues[j] - eigenvalues[i]
 
-            if freq > 0:  # Seulement transitions positives
-                # Élément de matrice <j|Ix|i> calculé directement
+            if freq > 0:
+
                 matrix_element = eigenvectors[:, j].conj().T @ Ix_total @ eigenvectors[:, i]
                 intensity = float(abs(matrix_element) ** 2)
 
@@ -4378,11 +3256,6 @@ def _compute_transitions(
 
     return transitions
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FONCTIONS VERSION2 (OPTIMISÉES ET RAPIDES)
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def _build_spin_hamiltonian(
     frequencies_hz: List[float],
     J_matrix: np.ndarray,
@@ -4390,74 +3263,45 @@ def _build_spin_hamiltonian(
     Iy_list: List[np.ndarray],
     Iz_list: List[np.ndarray]
 ) -> np.ndarray:
-    """
-    Construit l'Hamiltonien de spin complet (VERSION2).
 
-    H = -Σᵢ νᵢ Izᵢ + Σᵢ<ⱼ Jᵢⱼ (Ixᵢ·Ixⱼ + Iyᵢ·Iyⱼ + Izᵢ·Izⱼ)
-
-    Args:
-        frequencies_hz: Liste des fréquences de Larmor (νᵢ) en Hz
-        J_matrix: Matrice des couplages J[i,j] en Hz
-        Ix_list, Iy_list, Iz_list: Opérateurs de spin
-
-    Returns:
-        Hamiltonien (matrice hermitienne)
-    """
     n_spins = len(frequencies_hz)
     dim = 2 ** n_spins
     H = np.zeros((dim, dim), dtype=complex)
 
-    # Termes Zeeman: -Σ νᵢ Izᵢ
     for i in range(n_spins):
         H -= frequencies_hz[i] * Iz_list[i]
 
-    # Termes de couplage: Σᵢ<ⱼ Jᵢⱼ Iᵢ·Iⱼ
     for i in range(n_spins):
         for j in range(i + 1, n_spins):
             Jij = J_matrix[i, j]
             if abs(Jij) > 1e-10:
-                # Iᵢ·Iⱼ = Ixᵢ·Ixⱼ + Iyᵢ·Iyⱼ + Izᵢ·Izⱼ
+
                 H += Jij * (Ix_list[i] @ Ix_list[j] +
                            Iy_list[i] @ Iy_list[j] +
                            Iz_list[i] @ Iz_list[j])
 
     return H
 
-
 def _calculate_nmr_transitions(
     H: np.ndarray,
     Ix_list: List[np.ndarray],
     intensity_threshold: float = 0.001
 ) -> List[Tuple[float, float, int, int]]:
-    """
-    Calcule les transitions RMN permises par diagonalisation (VERSION2).
 
-    Args:
-        H: Hamiltonien de spin
-        Ix_list: Opérateurs Ix pour chaque spin
-        intensity_threshold: Seuil minimum d'intensité
-
-    Returns:
-        Liste de (fréquence_hz, intensité, état_initial, état_final)
-    """
     from scipy import linalg
 
-    # Diagonalisation
     eigenvalues, eigenvectors = linalg.eigh(H)
 
-    # Opérateur de détection: Ix_total = Σ Ixᵢ
     Ix_total = sum(Ix_list)
 
-    # Calculer toutes les transitions
     dim = len(eigenvalues)
     transitions = []
 
     for i in range(dim):
         for j in range(i + 1, dim):
-            # Fréquence de transition
+
             freq = eigenvalues[j] - eigenvalues[i]
 
-            # Élément de matrice <j|Ix|i>
             matrix_element = eigenvectors[:, j].conj().T @ Ix_total @ eigenvectors[:, i]
             intensity = float(abs(matrix_element) ** 2)
 
@@ -4466,7 +3310,6 @@ def _calculate_nmr_transitions(
 
     return transitions
 
-
 def _simulate_spin_system_exact(
     frequencies_hz: List[float],
     J_matrix: np.ndarray,
@@ -4474,31 +3317,16 @@ def _simulate_spin_system_exact(
     use_fragmentation: bool = True,
     fragmentation_threshold: float = 0.05
 ) -> List[Tuple[float, float]]:
-    """
-    Simule un système de spin par diagonalisation exacte du Hamiltonien (VERSION2).
 
-    LIMITE: 10 spins maximum (1024×1024 matrices) sans fragmentation.
-    Avec fragmentation: peut gérer des systèmes plus grands si fragmentables.
-
-    Args:
-        frequencies_hz: Fréquences de Larmor pour chaque spin (en Hz)
-        J_matrix: Matrice des couplages J[i,j] en Hz (symétrique)
-        intensity_threshold: Seuil d'intensité minimum
-        use_fragmentation: Si True, tenter la fragmentation pour systèmes > 10 spins
-        fragmentation_threshold: Seuil |J/Δν| pour la fragmentation (défaut 0.05)
-
-    Returns:
-        Liste de (position_hz, intensité) pour chaque raie, ou None si trop grand
-    """
     n_spins = len(frequencies_hz)
 
     if n_spins == 0:
         return []
 
     if n_spins > 10:
-        # Système trop grand pour simulation directe
+
         if use_fragmentation:
-            # Tenter la fragmentation automatique
+
             import sys
             print(f"[INFO] Système de {n_spins} spins > 10, tentative de fragmentation", file=sys.stderr)
             result = _simulate_large_spin_system(
@@ -4511,48 +3339,27 @@ def _simulate_spin_system_exact(
             else:
                 print(f"[WARN] Fragmentation échouée, fallback approximation premier ordre", file=sys.stderr)
 
-        # Fragmentation désactivée ou échouée → retourner None pour fallback
         return None
 
-    # ≤ 10 spins: simulation directe par diagonalisation
-    # Construire les opérateurs
     Ix_list, Iy_list, Iz_list = _build_spin_operators(n_spins)
 
-    # Construire l'Hamiltonien
     H = _build_spin_hamiltonian(frequencies_hz, J_matrix, Ix_list, Iy_list, Iz_list)
 
-    # Calculer les transitions
     transitions = _calculate_nmr_transitions(H, Ix_list, intensity_threshold)
 
-    # Retourner (freq, intensity)
     return [(freq, intensity) for freq, intensity, _, _ in transitions]
 
-
 def _first_order_multiplet(center_hz: float, j_couplings: List[float]) -> Tuple[List[float], List[float]]:
-    """
-    Generate first-order multiplet pattern for a spin with given J-couplings.
 
-    Uses recursive splitting: each coupling J splits each line into a doublet
-    separated by J Hz with intensity ratio 1:1.
-
-    Args:
-        center_hz: Center frequency in Hz
-        j_couplings: List of J-coupling constants in Hz
-
-    Returns:
-        (positions, intensities) - Lists of peak positions and relative intensities
-    """
-    # Start with a single line at center
     positions = [center_hz]
     intensities = [1.0]
 
-    # Apply each coupling
     for J in j_couplings:
         new_positions = []
         new_intensities = []
 
         for pos, intensity in zip(positions, intensities):
-            # Each line splits into two
+
             new_positions.append(pos - J / 2.0)
             new_intensities.append(intensity / 2.0)
             new_positions.append(pos + J / 2.0)
@@ -4563,40 +3370,16 @@ def _first_order_multiplet(center_hz: float, j_couplings: List[float]) -> Tuple[
 
     return positions, intensities
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# FRAGMENTATION DE SYSTÈMES DE SPINS (Castillo et al. 2011)
-# ═══════════════════════════════════════════════════════════════════════════════
-# Permet de simuler des systèmes > 10 spins en les décomposant en fragments
-# faiblement couplés, chacun simulé exactement puis combinés.
-#
-# Référence: Castillo, Patiny & Wist, J. Magn. Reson. 209, 123-130 (2011)
-# "Fast and Accurate Algorithm for the Simulation of NMR spectra of Large Spin Systems"
-# ═══════════════════════════════════════════════════════════════════════════════
-
 def _build_coupling_graph(
     frequencies_hz: List[float],
     J_matrix: np.ndarray,
     threshold_ratio: float = 0.05
 ):
-    """
-    Construit le graphe de connectivité des spins selon le critère de fragmentation.
 
-    Une arête existe entre deux spins i et j si |J_ij / Δν_ij| > threshold_ratio,
-    indiquant un couplage fort nécessitant une simulation couplée.
-
-    Args:
-        frequencies_hz: Fréquences de Larmor pour chaque spin (Hz)
-        J_matrix: Matrice des couplages J[i,j] (Hz)
-        threshold_ratio: Seuil |J/Δν| pour considérer deux spins couplés (défaut 0.05)
-
-    Returns:
-        Graphe networkx où les nœuds sont les indices de spins
-    """
     try:
         import networkx as nx
     except ImportError:
-        # Si networkx n'est pas disponible, retourner None pour désactiver la fragmentation
+
         return None
 
     n = len(frequencies_hz)
@@ -4606,48 +3389,31 @@ def _build_coupling_graph(
     for i in range(n):
         for j in range(i + 1, n):
             Jij = abs(J_matrix[i, j])
-            if Jij < 0.01:  # Pas de couplage significatif
+            if Jij < 0.01:
                 continue
 
             delta_nu = abs(frequencies_hz[i] - frequencies_hz[j])
 
-            # Spins dégénérés ou quasi-dégénérés → fortement couplés
             if delta_nu < 0.001:
                 G.add_edge(i, j, weight=Jij)
                 continue
 
-            # Vérifier le critère |J/Δν|
             ratio = Jij / delta_nu
             if ratio > threshold_ratio:
                 G.add_edge(i, j, weight=Jij)
 
     return G
 
-
 def _find_spin_fragments(
     frequencies_hz: List[float],
     J_matrix: np.ndarray,
     threshold_ratio: float = 0.05
 ) -> List[List[int]]:
-    """
-    Détecte les fragments de spins faiblement couplés.
 
-    Retourne les composantes connexes du graphe de couplage = fragments
-    qui peuvent être simulés indépendamment.
-
-    Args:
-        frequencies_hz: Fréquences de Larmor pour chaque spin (Hz)
-        J_matrix: Matrice des couplages J[i,j] (Hz)
-        threshold_ratio: Seuil |J/Δν| pour la fragmentation
-
-    Returns:
-        Liste de fragments, chaque fragment est une liste d'indices de spins
-        Ex: [[0,1,2], [3,4,5,6], [7]] signifie 3 fragments
-    """
     G = _build_coupling_graph(frequencies_hz, J_matrix, threshold_ratio)
 
     if G is None:
-        # networkx non disponible, retourner un seul fragment avec tous les spins
+
         return [list(range(len(frequencies_hz)))]
 
     try:
@@ -4656,9 +3422,8 @@ def _find_spin_fragments(
         fragments = [sorted(list(f)) for f in fragments]
         return fragments
     except Exception:
-        # En cas d'erreur, retourner un seul fragment
-        return [list(range(len(frequencies_hz)))]
 
+        return [list(range(len(frequencies_hz)))]
 
 def _simulate_fragment(
     fragment_indices: List[int],
@@ -4666,42 +3431,26 @@ def _simulate_fragment(
     J_matrix: np.ndarray,
     intensity_threshold: float = 0.001
 ) -> List[Tuple[float, float]]:
-    """
-    Simule un fragment de spins isolé par diagonalisation exacte.
 
-    Args:
-        fragment_indices: Indices des spins dans ce fragment
-        frequencies_hz: Fréquences complètes (on extrait celles du fragment)
-        J_matrix: Matrice de couplage complète (on extrait la sous-matrice)
-        intensity_threshold: Seuil d'intensité minimum
-
-    Returns:
-        Liste de (fréquence_hz, intensité) pour les transitions du fragment
-    """
     n = len(fragment_indices)
 
     if n == 0:
         return []
 
     if n > 10:
-        # Fragment encore trop grand, retourner None pour fallback
-        # Limite à 10 spins (2^10=1024) pour équilibre qualité/performance
+
         import sys
         print(f"[WARN] Fragment de {n} spins trop grand pour simulation exacte", file=sys.stderr)
         return None
 
-    # Extraire les fréquences du fragment
     freqs_fragment = [frequencies_hz[i] for i in fragment_indices]
 
-    # Extraire la sous-matrice J correspondant au fragment
     J_fragment = np.zeros((n, n))
     for local_i, global_i in enumerate(fragment_indices):
         for local_j, global_j in enumerate(fragment_indices):
             J_fragment[local_i, local_j] = J_matrix[global_i, global_j]
 
-    # Simuler ce fragment exactement
     return _simulate_spin_system_exact(freqs_fragment, J_fragment, intensity_threshold)
-
 
 def _simulate_large_spin_system(
     frequencies_hz: List[float],
@@ -4709,58 +3458,37 @@ def _simulate_large_spin_system(
     threshold_ratio: float = 0.05,
     intensity_threshold: float = 0.001
 ) -> List[Tuple[float, float]]:
-    """
-    Simule un grand système de spins par fragmentation automatique.
 
-    Pipeline:
-        1. Détecter les fragments faiblement couplés via analyse de graphe
-        2. Simuler chaque fragment exactement par diagonalisation
-        3. Combiner tous les spectres partiels
-
-    Args:
-        frequencies_hz: Fréquences de Larmor (Hz)
-        J_matrix: Matrice des couplages J (Hz)
-        threshold_ratio: Seuil |J/Δν| pour couper une arête (défaut 0.05)
-        intensity_threshold: Seuil d'intensité minimum
-
-    Returns:
-        Liste de (freq_hz, intensité) — spectre complet combiné
-        ou None si la fragmentation échoue
-    """
     n = len(frequencies_hz)
 
     if n == 0:
         return []
 
-    # Cas simple: assez petit pour simulation directe
     if n <= 10:
         return _simulate_spin_system_exact(frequencies_hz, J_matrix, intensity_threshold)
 
     import sys
     print(f"[INFO] Fragmentation: {n} spins, seuil J/Δν = {threshold_ratio}", file=sys.stderr)
 
-    # Détecter les fragments
     fragments = _find_spin_fragments(frequencies_hz, J_matrix, threshold_ratio)
 
     print(f"[INFO] → {len(fragments)} fragments détectés", file=sys.stderr)
     for i, frag in enumerate(fragments):
         print(f"[INFO]   Fragment {i+1}: {len(frag)} spins {frag}", file=sys.stderr)
 
-    # Vérifier que tous les fragments sont simulables
     max_fragment_size = max(len(f) for f in fragments)
     if max_fragment_size > 10:
         print(f"[WARN] Fragment maximum de {max_fragment_size} spins > 10, fragmentation insuffisante", file=sys.stderr)
         print(f"[WARN] → Augmenter threshold_ratio ou utiliser approximation premier ordre", file=sys.stderr)
         return None
 
-    # Simuler chaque fragment
     all_transitions = []
 
     for i, frag in enumerate(fragments):
         transitions = _simulate_fragment(frag, frequencies_hz, J_matrix, intensity_threshold)
 
         if transitions is None:
-            # Fragment trop grand ou erreur
+
             print(f"[ERROR] Fragment {i+1} échec de simulation", file=sys.stderr)
             return None
 
@@ -4768,12 +3496,10 @@ def _simulate_large_spin_system(
             all_transitions.extend(transitions)
             print(f"[INFO]   Fragment {i+1}: {len(transitions)} transitions", file=sys.stderr)
 
-    # Trier par fréquence
     all_transitions.sort(key=lambda x: x[0])
 
     print(f"[INFO] Total: {len(all_transitions)} transitions combinées", file=sys.stderr)
     return all_transitions
-
 
 def simulate_with_fragmentation(
     shifts_hz: np.ndarray,
@@ -4785,23 +3511,7 @@ def simulate_with_fragmentation(
     enable_dynamics: bool = False,
     ph: float = 7.4,
 ) -> 'SimulatedSpectrum':
-    """
-    Wrapper pour simulate_spin_system_hamiltonian compatible avec simulate_spectrum_api.py.
 
-    Cette fonction prend des paramètres au format attendu par simulate_spectrum_api.py
-    et construit un SpinSystem pour appeler la simulation Hamiltonienne.
-
-    Args:
-        shifts_hz: Chemical shifts en Hz (array)
-        j_matrix: Matrice de couplage J (Hz) - symétrique n×n
-        freq_mhz: Fréquence spectromètre (MHz)
-        linewidth_hz: Largeur de raie (Hz)
-        ppm_axis: Axe ppm (pour compatibilité, optionnel)
-        line_shape: Forme de raie ("lorentzian", "gaussian", "voigt")
-
-    Returns:
-        SimulatedSpectrum avec attribut .spectrum (intensités)
-    """
     n_spins = len(shifts_hz)
 
     if n_spins == 0:
@@ -4810,64 +3520,57 @@ def simulate_with_fragmentation(
     import sys
     print(f"[INFO] SpinSystem HAMILTONIAN: {n_spins} spins, line_shape={line_shape}, linewidth={linewidth_hz} Hz", file=sys.stderr)
 
-    # Construire le SpinSystem (utilise couplings_hz, pas j_matrix)
     spin_system = SpinSystem(
         shifts_hz=shifts_hz,
-        couplings_hz=j_matrix,  # Renommé pour correspondre à l'interface SpinSystem
+        couplings_hz=j_matrix,
         n_spins=n_spins
     )
 
-    # Déterminer ppm_range depuis ppm_axis si fourni
     if ppm_axis is not None:
         ppm_max = float(np.max(ppm_axis))
         ppm_min = float(np.min(ppm_axis))
         n_points = len(ppm_axis)
     else:
-        # Calculer automatiquement
+
         shifts_ppm = shifts_hz / freq_mhz
         ppm_min = max(-1.0, np.min(shifts_ppm) - 1.0)
         ppm_max = min(15.0, np.max(shifts_ppm) + 1.0)
         n_points = 32768
 
-    # VERSION2 APPROACH: Try exact simulation (with fragmentation for > 10 spins if enabled)
     try:
-        # Note: use_fragmentation permet de gérer > 10 spins automatiquement
+
         print(f"[INFO] Using Version2 exact Hamiltonian for {n_spins} spins", file=sys.stderr)
 
-        # Convert Hz shifts to array for _simulate_spin_system_exact
         frequencies_hz = list(shifts_hz)
 
-        # Use Version2's optimized exact simulation (with auto fragmentation)
         transitions = _simulate_spin_system_exact(
             frequencies_hz=frequencies_hz,
             J_matrix=j_matrix,
-            intensity_threshold=0.001,  # Seuil standard
-            use_fragmentation=True,  # ✅ ACTIVÉ: utilise fragmentation Castillo pour > 10 spins
+            intensity_threshold=0.001,
+            use_fragmentation=True,
             fragmentation_threshold=0.05
         )
 
         if transitions is None:
-            # Fragmentation échouée ou système non fragmentable
-            # Fallback: approximation premier ordre (rapide)
+
             print(f"[WARN] Exact simulation returned None, using first-order approximation", file=sys.stderr)
 
             all_peaks_hz = []
             all_intensities = []
 
             for i in range(n_spins):
-                # Get couplings for this spin
+
                 couplings_i = []
                 for j in range(n_spins):
-                    if i != j and abs(j_matrix[i, j]) > 0.1:  # Only significant couplings
+                    if i != j and abs(j_matrix[i, j]) > 0.1:
                         couplings_i.append(j_matrix[i, j])
 
-                # Generate first-order multiplet
                 if len(couplings_i) == 0:
-                    # Singlet
+
                     all_peaks_hz.append(float(shifts_hz[i]))
                     all_intensities.append(1.0)
                 else:
-                    # Multiplet pattern (first-order)
+
                     positions, intensities = _first_order_multiplet(float(shifts_hz[i]), couplings_i)
                     all_peaks_hz.extend(positions)
                     all_intensities.extend(intensities)
@@ -4882,7 +3585,7 @@ def simulate_with_fragmentation(
                 line_shape=line_shape
             )
         else:
-            # Convert transitions to spectrum using lineshapes
+
             peak_positions_hz = [freq for freq, intensity in transitions]
             peak_intensities = [intensity for freq, intensity in transitions]
 
@@ -4896,9 +3599,6 @@ def simulate_with_fragmentation(
                 line_shape=line_shape
             )
 
-        # L'attribut .spectrum est maintenant une propriété qui retourne .intensity
-        # Pas besoin d'assignation
-
         return result
     except Exception as e:
         import sys
@@ -4906,7 +3606,6 @@ def simulate_with_fragmentation(
         import traceback
         traceback.print_exc(file=sys.stderr)
         return None
-
 
 def simulate_spectrum_lineshape(
     peak_positions_hz: List[float],
@@ -4918,37 +3617,16 @@ def simulate_spectrum_lineshape(
     line_shape: str = "lorentzian",
     apodization_lb_hz: float = 0.0,
 ) -> SimulatedSpectrum:
-    """
-    Génère un spectre NMR complet à partir des positions et intensités de pics.
-    
-    Approche directe (sans FID): somme de fonctions de forme de raie.
-    Plus rapide que FID→FFT pour la plupart des applications.
-    
-    Args:
-        peak_positions_hz: Positions des pics en Hz (relatif à 0 = TMS)
-        peak_intensities: Intensités relatives des pics
-        spectrometer_mhz: Fréquence du spectromètre
-        line_width_hz: Largeur de raie (FWHM) en Hz
-        ppm_range: (min_ppm, max_ppm) du spectre
-        n_points: Nombre de points du spectre
-        line_shape: "lorentzian", "gaussian", ou "voigt"
-        apodization_lb_hz: Line broadening additionnel (apodisation)
-    
-    Returns:
-        SimulatedSpectrum avec axes ppm/Hz et intensités
-    """
-    # Construire les axes
+
     ppm_min, ppm_max = ppm_range
-    ppm_axis = np.linspace(ppm_max, ppm_min, n_points)  # Ordre décroissant (convention NMR)
-    freq_axis_hz = ppm_axis * spectrometer_mhz  # Hz
-    
-    # Largeur effective
-    gamma = (line_width_hz + apodization_lb_hz) / 2  # HWHM
-    sigma = gamma * 0.8  # Pour Voigt
-    
-    # Accumuler le spectre
+    ppm_axis = np.linspace(ppm_max, ppm_min, n_points)
+    freq_axis_hz = ppm_axis * spectrometer_mhz
+
+    gamma = (line_width_hz + apodization_lb_hz) / 2
+    sigma = gamma * 0.8
+
     spectrum = np.zeros(n_points, dtype=np.float64)
-    
+
     for pos_hz, intensity in zip(peak_positions_hz, peak_intensities):
         if line_shape == "lorentzian":
             spectrum += _lorentzian(freq_axis_hz, pos_hz, gamma, intensity)
@@ -4958,14 +3636,12 @@ def simulate_spectrum_lineshape(
             spectrum += _voigt_approx(freq_axis_hz, pos_hz, gamma, sigma, intensity)
         else:
             spectrum += _lorentzian(freq_axis_hz, pos_hz, gamma, intensity)
-    
-    # Normaliser
+
     if spectrum.max() > 0:
         spectrum = spectrum / spectrum.max()
-    
-    # Extraire les peaks pour référence
+
     peaks_ppm = [pos / spectrometer_mhz for pos in peak_positions_hz]
-    
+
     return SimulatedSpectrum(
         ppm_axis=ppm_axis,
         freq_axis_hz=freq_axis_hz,
@@ -4975,7 +3651,6 @@ def simulate_spectrum_lineshape(
         spectrometer_mhz=spectrometer_mhz,
         line_width_hz=line_width_hz,
     )
-
 
 def simulate_spectrum_from_fid(
     peak_positions_hz: List[float],
@@ -4989,95 +3664,58 @@ def simulate_spectrum_from_fid(
     apodization: str = "exponential",
     lb_hz: float = 0.3,
 ) -> SimulatedSpectrum:
-    """
-    Simule un spectre NMR via génération FID puis FFT.
-    
-    Plus réaliste que la somme directe de Lorentziennes:
-    - Gère naturellement le bruit de troncature
-    - Permet différentes apodisations
-    - Simule l'acquisition réelle
-    
-    FID: s(t) = Σ Aₖ · exp(i·2π·νₖ·t) · exp(-t/T₂*)
-    
-    Args:
-        peak_positions_hz: Positions des résonances (Hz)
-        peak_intensities: Amplitudes relatives
-        spectrometer_mhz: Fréquence Larmor ¹H
-        T2_star_s: T₂* apparent (détermine la largeur de raie)
-        acquisition_time_s: Durée d'acquisition
-        n_points: Nombre de points FID avant zero-fill
-        ppm_range: Plage spectrale (ppm)
-        zero_fill_factor: Facteur de zero-filling (1, 2, 4...)
-        apodization: "exponential", "gaussian", "sine-bell", "none"
-        lb_hz: Line broadening pour apodisation exponentielle
-    
-    Returns:
-        SimulatedSpectrum
-    """
-    # Paramètres temporels
-    dt = acquisition_time_s / n_points  # Dwell time
+
+    dt = acquisition_time_s / n_points
     t = np.arange(n_points) * dt
-    
-    # Générer le FID complexe
+
     fid = np.zeros(n_points, dtype=np.complex128)
-    
+
     for freq_hz, amplitude in zip(peak_positions_hz, peak_intensities):
-        # Chaque résonance contribue une sinusoïde amortie
+
         phase = 2 * np.pi * freq_hz * t
         decay = np.exp(-t / T2_star_s)
         fid += amplitude * np.exp(1j * phase) * decay
-    
-    # Apodisation
+
     if apodization == "exponential":
-        # Lorentzien → Lorentzien plus large
+
         fid *= np.exp(-np.pi * lb_hz * t)
     elif apodization == "gaussian":
-        # Gaussien → meilleure résolution, artefacts réduits
+
         sigma_t = acquisition_time_s / 3
         fid *= np.exp(-(t / sigma_t) ** 2)
     elif apodization == "sine-bell":
-        # Résolution-enhancement
+
         fid *= np.sin(np.pi * t / acquisition_time_s)
-    # "none": pas d'apodisation
-    
-    # Zero-filling
+
     n_fft = n_points * zero_fill_factor
     fid_zf = np.zeros(n_fft, dtype=np.complex128)
     fid_zf[:n_points] = fid
-    
-    # FFT
+
     spectrum_complex = np.fft.fft(fid_zf)
     spectrum_complex = np.fft.fftshift(spectrum_complex)
-    
-    # Partie réelle (absorption) après correction de phase automatique
-    # Simplification: on prend le module pour éviter les problèmes de phase
+
     spectrum = np.abs(spectrum_complex)
-    
-    # Construire l'axe de fréquence
+
     freq_axis_hz = np.fft.fftshift(np.fft.fftfreq(n_fft, dt))
-    
-    # Filtrer pour la plage ppm désirée
+
     ppm_min, ppm_max = ppm_range
     freq_min = ppm_min * spectrometer_mhz
     freq_max = ppm_max * spectrometer_mhz
-    
+
     mask = (freq_axis_hz >= freq_min) & (freq_axis_hz <= freq_max)
     freq_axis_hz = freq_axis_hz[mask]
     spectrum = spectrum[mask]
-    
-    # Inverser pour convention NMR (ppm décroissant de gauche à droite)
+
     freq_axis_hz = freq_axis_hz[::-1]
     spectrum = spectrum[::-1]
-    
+
     ppm_axis = freq_axis_hz / spectrometer_mhz
-    
-    # Normaliser
+
     if spectrum.max() > 0:
         spectrum = spectrum / spectrum.max()
-    
-    # Largeur de raie effective
+
     line_width_hz = 1.0 / (np.pi * T2_star_s) + lb_hz
-    
+
     return SimulatedSpectrum(
         ppm_axis=ppm_axis,
         freq_axis_hz=freq_axis_hz,
@@ -5088,56 +3726,20 @@ def simulate_spectrum_from_fid(
         line_width_hz=line_width_hz,
     )
 
-
-# ---------------------------
-# Détection type d'acide aminé et moyennage rotamérique
-# ---------------------------
-
 def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
-    """
-    Détecte le type d'acide aminé à partir d'un carbone Cβ (CH₂ diastéréotopique).
 
-    Utilise des patterns SMARTS simplifiés pour identifier les chaînes latérales.
-
-    RESTRICTIF: Ne retourne un type AA que si le contexte est vraiment peptidique.
-
-    Args:
-        mol: Molécule RDKit (avec ou sans H explicites)
-        ch2_heavy_idx: Index du carbone CH₂ (typiquement Cβ)
-
-    Returns:
-        Code 3 lettres de l'acide aminé ou None si non détecté
-
-    Acides aminés avec CH₂ diastéréotopique en Cβ:
-        PHE, TYR, TRP, HIS - Aromatiques
-        SER, CYS - Petits polaires
-        ASP, ASN - Acides/amides courts
-        LEU, MET - Aliphatiques
-        LYS, ARG, GLU, GLN - Chaînes longues
-    """
     try:
         atom = mol.GetAtomWithIdx(ch2_heavy_idx)
         if atom.GetSymbol() != 'C':
             return None
 
-        # =====================================================================
-        # FILTRES RESTRICTIFS: Vérifier le contexte peptidique AVANT détection
-        # =====================================================================
-
-        # Filtre 1: Le CH₂ ne doit PAS être sp2 (vinyl, aromatique)
         hyb = str(atom.GetHybridization())
         if 'SP2' in hyb or atom.GetIsAromatic():
-            return None  # Vinyl ou aromatique → pas un Cβ peptidique
+            return None
 
-        # Filtre 2: Le CH₂ ne doit PAS être dans un cycle
-        # (proline, DKP, lactames → modules spécialisés)
         if atom.IsInRing():
             return None
 
-        # Filtre 3: Le CH₂ doit être attaché à un VRAI Cα
-        # (Cα = sp3, attaché à N (amine ou amide) ET COOH/amide, pas dans cycle)
-        # ✅ CORRECTION: Accepter aussi les acides aminés LIBRES (NH2 + COOH)
-        # ✅ RESTRICTIF: Le C=O doit être un carboxyle (COOH/COO⁻) ou amide, pas cétone/aldéhyde
         has_true_ca_neighbor = False
         for nb in atom.GetNeighbors():
             if nb.GetSymbol() != 'C':
@@ -5147,15 +3749,14 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
             if 'SP3' not in str(nb.GetHybridization()):
                 continue
 
-            # Vérifier que ce voisin C est un vrai Cα
-            has_amine = False      # Amine libre (NH2/NH3+)
-            has_amide_N = False    # Amide (N-C=O)
-            has_carboxyl = False   # Carboxyle (COOH/COO⁻)
-            has_amide_CO = False   # Amide C=O
+            has_amine = False
+            has_amide_N = False
+            has_carboxyl = False
+            has_amide_CO = False
 
             for nn in nb.GetNeighbors():
                 if nn.GetSymbol() == 'N' and not nn.GetIsAromatic():
-                    # Distinguer amine libre vs amide
+
                     is_amide = False
                     for nnn in nn.GetNeighbors():
                         if nnn.GetSymbol() == 'C' and nnn.GetIdx() != nb.GetIdx():
@@ -5171,7 +3772,7 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
                         has_amine = True
 
                 elif nn.GetSymbol() == 'C' and nn.GetIdx() != ch2_heavy_idx:
-                    # Vérifier si c'est un carboxyle ou amide
+
                     has_double_O = False
                     has_single_O = False
                     has_N_on_CO = False
@@ -5187,15 +3788,12 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
                         elif nnn.GetSymbol() == 'N':
                             has_N_on_CO = True
 
-                    # Carboxyle = C(=O)O ou C(=O)[O-]
                     if has_double_O and has_single_O:
                         has_carboxyl = True
-                    # Amide = C(=O)N
+
                     elif has_double_O and has_N_on_CO:
                         has_amide_CO = True
 
-            # ✅ Cα valide pour ACIDE AMINÉ LIBRE: amine NH2 + carboxyle COOH
-            # ✅ Cα valide pour PEPTIDE: amide N + amide C=O
             is_free_amino_acid = has_amine and has_carboxyl
             is_peptide_context = has_amide_N and has_amide_CO
 
@@ -5204,52 +3802,40 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
                 break
 
         if not has_true_ca_neighbor:
-            return None  # Pas de Cα vrai → pas un contexte peptidique
+            return None
 
-        # Collecter les voisins du CH₂
         neighbors = list(atom.GetNeighbors())
         neighbor_symbols = [n.GetSymbol() for n in neighbors]
 
-        # =====================================================================
-        # Pattern 1: CH₂ aromatique (PHE, TYR, TRP, HIS)
-        # CH₂ connecté à un carbone aromatique
-        # =====================================================================
         for nb in neighbors:
             if nb.GetSymbol() == 'C' and nb.GetIsAromatic():
-                # Détecter le type d'aromatique
+
                 ring_info = mol.GetRingInfo()
                 for ring in ring_info.AtomRings():
                     if nb.GetIdx() in ring:
                         ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
                         ring_symbols = [a.GetSymbol() for a in ring_atoms]
 
-                        # Indole (TRP): cycle à 5 avec 1 N fusionné à benzène
                         if len(ring) == 5 and ring_symbols.count('N') == 1:
                             return 'TRP'
-                        # Imidazole (HIS): cycle à 5 avec 2 N
+
                         if len(ring) == 5 and ring_symbols.count('N') == 2:
                             return 'HIS'
-                        # Phénol (TYR): benzène avec O
+
                         if len(ring) == 6 and all(a.GetIsAromatic() for a in ring_atoms):
                             for ring_idx in ring:
                                 ra = mol.GetAtomWithIdx(ring_idx)
                                 for rn in ra.GetNeighbors():
                                     if rn.GetSymbol() == 'O' and not rn.IsInRing():
                                         return 'TYR'
-                            return 'PHE'  # Benzène sans O = PHE
+                            return 'PHE'
 
-                # Fallback aromatique
                 return 'PHE'
 
-        # =====================================================================
-        # Pattern 2: CH₂-OH (SER) ou CH₂-SH (CYS)
-        # =====================================================================
         if 'O' in neighbor_symbols:
             for nb in neighbors:
                 if nb.GetSymbol() == 'O':
-                    # Vérifier si c'est un OH (alcool) vs C=O ou éther
-                    # Pour molécule avec H explicites: compter les H voisins
-                    # Pour molécule sans H: utiliser GetTotalNumHs()
+
                     h_count = sum(1 for n in nb.GetNeighbors() if n.GetSymbol() == 'H')
                     if h_count == 0:
                         h_count = nb.GetTotalNumHs()
@@ -5261,43 +3847,34 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
                 if nb.GetSymbol() == 'S':
                     return 'CYS'
 
-        # =====================================================================
-        # Pattern 3: CH₂-COOH/CONH₂ (ASP, ASN)
-        # =====================================================================
         for nb in neighbors:
             if nb.GetSymbol() == 'C':
-                # Chercher C=O sur ce voisin
+
                 for nn in nb.GetNeighbors():
                     if nn.GetSymbol() == 'O':
                         bond = mol.GetBondBetweenAtoms(nb.GetIdx(), nn.GetIdx())
                         if bond and bond.GetBondType() == Chem.BondType.DOUBLE:
-                            # C=O trouvé, vérifier si COOH ou CONH₂
+
                             for nnn in nb.GetNeighbors():
                                 if nnn.GetSymbol() == 'N':
                                     return 'ASN'
                                 if nnn.GetSymbol() == 'O' and nnn.GetIdx() != nn.GetIdx():
                                     return 'ASP'
 
-        # =====================================================================
-        # Pattern 4: Chaînes aliphatiques longues
-        # =====================================================================
-        # Fonction helper pour compter les H (explicites ou implicites)
         def count_hydrogens(atom):
-            """Compte les H d'un atome (explicites ou implicites)."""
+
             h_explicit = sum(1 for n in atom.GetNeighbors() if n.GetSymbol() == 'H')
             return h_explicit if h_explicit > 0 else atom.GetTotalNumHs()
 
-        # Compter la longueur de chaîne vers NH₂ ou autre fonctionnalité
         for nb in neighbors:
             if nb.GetSymbol() == 'C' and not nb.GetIsAromatic():
-                # Vérifier directement si le voisin est CH(CH₃)₂ (leucine)
+
                 ch3_count = sum(1 for nnn in nb.GetNeighbors()
                               if nnn.GetSymbol() == 'C'
                               and count_hydrogens(nnn) == 3)
                 if ch3_count >= 2:
                     return 'LEU'
 
-                # Parcourir la chaîne
                 chain_length = 0
                 current = nb
                 visited = {ch2_heavy_idx, nb.GetIdx()}
@@ -5309,20 +3886,16 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
                         if nn.GetIdx() in visited:
                             continue
                         if nn.GetSymbol() == 'N':
-                            # NH₂ terminale - chain_length compte depuis nb (voisin du CH2)
-                            # Donc distance totale = chain_length + 1 (CH2 → nb → ... → N)
-                            # LYS: CH2-Cγ-Cδ-Cε-NH2 = 4 liaisons → chain_length = 3
-                            # ARG: CH2-Cγ-Cδ-NE-guanidinium = structure différente
+
                             if chain_length >= 3:
-                                # Vérifier si c'est un guanidinium (ARG) vs NH2/NH3+ (LYS)
-                                # Guanidinium: N connecté à C(=NH)(NH2)
+
                                 is_guanidinium = False
                                 for n_neighbor in nn.GetNeighbors():
                                     if n_neighbor.GetSymbol() == 'C':
-                                        # Compter les N connectés à ce C
+
                                         n_count = sum(1 for x in n_neighbor.GetNeighbors()
                                                      if x.GetSymbol() == 'N')
-                                        if n_count >= 3:  # C(=NH)(NH2)(NHR) = 3 N
+                                        if n_count >= 3:
                                             is_guanidinium = True
                                             break
                                 if is_guanidinium:
@@ -5332,7 +3905,7 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
                         if nn.GetSymbol() == 'S':
                             return 'MET'
                         if nn.GetSymbol() == 'C':
-                            # Vérifier si c'est un CH(CH₃)₂ (leucine)
+
                             ch3_count = sum(1 for nnn in nn.GetNeighbors()
                                           if nnn.GetSymbol() == 'C'
                                           and count_hydrogens(nnn) == 3)
@@ -5350,22 +3923,8 @@ def _detect_amino_acid_type(mol: Chem.Mol, ch2_heavy_idx: int) -> Optional[str]:
     except Exception:
         return None
 
-
 def _is_free_amino_acid(mol: Chem.Mol, ca_idx: int) -> bool:
-    """
-    Détecte si l'acide aminé est LIBRE (pas dans un peptide).
 
-    Critères:
-    - N-terminus libre: N lié au Cα avec ≥2 H (NH2 ou NH3+), pas d'amide C=O
-    - C-terminus libre: C(=O)O lié au Cα (COOH ou COO-)
-
-    Args:
-        mol: Molécule RDKit
-        ca_idx: Index du carbone alpha (Cα)
-
-    Returns:
-        True si acide aminé libre, False si dans un peptide
-    """
     try:
         ca = mol.GetAtomWithIdx(ca_idx)
 
@@ -5373,18 +3932,17 @@ def _is_free_amino_acid(mol: Chem.Mol, ca_idx: int) -> bool:
         has_free_c_terminus = False
 
         for neighbor in ca.GetNeighbors():
-            # Check N-terminus
+
             if neighbor.GetSymbol() == 'N':
-                # Count H on nitrogen
+
                 n_h_count = sum(1 for n in neighbor.GetNeighbors() if n.GetSymbol() == 'H')
-                # Also count implicit H
+
                 n_h_count += neighbor.GetTotalNumHs()
 
-                # Check if NOT an amide (no C=O neighbor)
                 is_amide_n = False
                 for nn in neighbor.GetNeighbors():
                     if nn.GetSymbol() == 'C' and nn.GetIdx() != ca_idx:
-                        # Check if this C has a double bond to O
+
                         for nnn in nn.GetNeighbors():
                             if nnn.GetSymbol() == 'O':
                                 bond = mol.GetBondBetweenAtoms(nn.GetIdx(), nnn.GetIdx())
@@ -5395,7 +3953,6 @@ def _is_free_amino_acid(mol: Chem.Mol, ca_idx: int) -> bool:
                 if n_h_count >= 2 and not is_amide_n:
                     has_free_n_terminus = True
 
-            # Check C-terminus
             if neighbor.GetSymbol() == 'C':
                 c_idx = neighbor.GetIdx()
                 has_carbonyl_o = False
@@ -5411,10 +3968,9 @@ def _is_free_amino_acid(mol: Chem.Mol, ca_idx: int) -> bool:
                             else:
                                 has_hydroxyl_o = True
                     elif cn.GetSymbol() == 'N' and cn.GetIdx() != ca_idx:
-                        # This C is connected to another N → amide bond
+
                         is_amide_c = True
 
-                # COOH or COO- : carbonyl + (hydroxyl or negative O)
                 if has_carbonyl_o and not is_amide_c:
                     has_free_c_terminus = True
 
@@ -5423,7 +3979,6 @@ def _is_free_amino_acid(mol: Chem.Mol, ca_idx: int) -> bool:
     except Exception:
         return False
 
-
 def _get_rotamer_averaged_J_for_peptide(
     mol: Chem.Mol,
     h_alpha_idx: int,
@@ -5431,40 +3986,22 @@ def _get_rotamer_averaged_J_for_peptide(
     ch2_heavy_idx: int,
     is_hb2: bool = True
 ) -> Optional[Tuple[float, str]]:
-    """
-    Calcule le J(Hα-Hβ) moyenné par populations rotamériques pour peptides.
 
-    Cette fonction utilise les populations expérimentales de rotamères pour
-    calculer une moyenne pondérée des J, plus précise que Karplus multi-conformères
-    pour les chaînes latérales flexibles d'acides aminés.
-
-    Args:
-        mol: Molécule RDKit
-        h_alpha_idx: Index du proton Hα
-        h_beta_idx: Index du proton Hβ
-        ch2_heavy_idx: Index du carbone Cβ (CH₂)
-        is_hb2: True si c'est Hβ₂ (pro-R), False si Hβ₃ (pro-S)
-
-    Returns:
-        Tuple (J_hz, source) ou None si moyennage non applicable
-    """
     if not ROTAMER_AVERAGING_AVAILABLE:
         return None
 
     try:
-        # Détecter le type d'acide aminé
+
         aa_type = _detect_amino_acid_type(mol, ch2_heavy_idx)
 
         if aa_type is None:
             return None
 
-        # ✅ Détecter si c'est un acide aminé LIBRE ou dans un peptide
-        # Trouver le Cα (voisin du Cβ avec un N attaché)
         ca_idx = None
         cb_atom = mol.GetAtomWithIdx(ch2_heavy_idx)
         for neighbor in cb_atom.GetNeighbors():
             if neighbor.GetSymbol() == 'C':
-                # Check if this C has N neighbor (potential Cα)
+
                 for nn in neighbor.GetNeighbors():
                     if nn.GetSymbol() == 'N':
                         ca_idx = neighbor.GetIdx()
@@ -5472,13 +4009,11 @@ def _get_rotamer_averaged_J_for_peptide(
             if ca_idx is not None:
                 break
 
-        # Déterminer la structure secondaire
         if ca_idx is not None and _is_free_amino_acid(mol, ca_idx):
             secondary_structure = 'free_amino_acid'
         else:
             secondary_structure = 'random_coil'
 
-        # Utiliser le moyennage rotamérique
         proton = 'HB2' if is_hb2 else 'HB3'
         J_avg, source = rotamer_averaged_J(
             amino_acid=aa_type,
@@ -5487,7 +4022,6 @@ def _get_rotamer_averaged_J_for_peptide(
             proton=proton
         )
 
-        # Vérifier que le résultat est valide
         if J_avg > 0 and 'fallback' not in source:
             return (J_avg, source)
 
@@ -5495,11 +4029,6 @@ def _get_rotamer_averaged_J_for_peptide(
 
     except Exception:
         return None
-
-
-# ---------------------------
-# Détection AA'BB' / AA'XX' et autres systèmes de spin
-# ---------------------------
 
 def _detect_spin_system(
     mol: Chem.Mol,
@@ -5509,36 +4038,22 @@ def _detect_spin_system(
     proton_shifts_ppm: Optional[Dict[int, float]] = None,
     spectrometer_mhz: float = 400.0
 ) -> Tuple[Optional[str], Dict[str, Any]]:
-    """
-    Détection avancée des systèmes de spin second ordre.
-    
-    Systèmes détectés:
-    - AB: 2 protons couplés avec Δν/J < 10
-    - AB₂: 1 proton couplé à 2 équivalents (ex: CHCl₂-CHCl₂)
-    - A₂B₂: 2 paires équivalentes couplées (ex: -CH₂-CH₂-)
-    - ABX: 2 protons AB couplés à un X distinct
-    - A₂X₃: 2 protons couplés à 3 équivalents (ex: éthanol CH₂-CH₃)
-    - AMX: 3 protons tous distincts
-    
-    Returns:
-        (system_type, info_dict) où info_dict contient les détails du système
-    """
+
     atom = mol.GetAtomWithIdx(heavy_idx)
     if atom.GetSymbol() != "C":
         return None, {}
-    
+
     n_h_this = len(x_h_connectivity.get(heavy_idx, []))
     if n_h_this == 0:
         return None, {}
-    
+
     info: Dict[str, Any] = {
         "heavy_idx": heavy_idx,
         "n_H": n_h_this,
         "partners": [],
         "delta_nu_J_ratios": [],
     }
-    
-    # Analyser les voisins carbone portant des H
+
     carbon_neighbors = []
     for neighbor in atom.GetNeighbors():
         if neighbor.GetSymbol() != "C":
@@ -5549,14 +4064,13 @@ def _detect_spin_system(
             bond = mol.GetBondBetweenAtoms(heavy_idx, nb_idx)
             if bond and bond.GetBondTypeAsDouble() == 1.0:
                 carbon_neighbors.append((nb_idx, n_h_nb))
-    
+
     if not carbon_neighbors:
         return None, info
-    
-    # Calculer Δν/J pour chaque paire
+
     for nb_idx, n_h_nb in carbon_neighbors:
-        delta_nu_J = 100.0  # Valeur par défaut (first order)
-        
+        delta_nu_J = 100.0
+
         if proton_shifts_ppm:
             h_this = x_h_connectivity.get(heavy_idx, [])
             h_nb = x_h_connectivity.get(nb_idx, [])
@@ -5565,57 +4079,49 @@ def _detect_spin_system(
                 delta_nb = proton_shifts_ppm.get(h_nb[0], None)
                 if delta_this is not None and delta_nb is not None:
                     delta_ppm = abs(delta_this - delta_nb)
-                    delta_nu = delta_ppm * spectrometer_mhz  # Hz
-                    J_typical = 7.0  # 3J typique
+                    delta_nu = delta_ppm * spectrometer_mhz
+                    J_typical = 7.0
                     if J_typical > 0:
                         delta_nu_J = delta_nu / J_typical
-        
+
         info["partners"].append({
             "heavy_idx": nb_idx,
             "n_H": n_h_nb,
             "delta_nu_J": delta_nu_J
         })
         info["delta_nu_J_ratios"].append(delta_nu_J)
-    
-    # Classification du système de spin
+
     min_ratio = min(info["delta_nu_J_ratios"]) if info["delta_nu_J_ratios"] else 100.0
-    
-    # Système fortement couplé si Δν/J < 10
+
     is_strongly_coupled = min_ratio < 10.0
-    
+
     if not is_strongly_coupled:
-        return None, info  # First order
-    
-    # Déterminer le type de système
+        return None, info
+
     total_partners = len(carbon_neighbors)
     partner_h_counts = [p["n_H"] for p in info["partners"]]
-    
-    # A₂B₂ (AA'BB'): -CH₂-CH₂-
+
     if n_h_this == 2 and total_partners == 1 and partner_h_counts[0] == 2:
         if min_ratio < 5.0:
             return "AA'BB'", info
         else:
             return "A₂X₂", info
-    
-    # AB₂: CH couplé à CH₂
+
     if n_h_this == 1 and total_partners == 1 and partner_h_counts[0] == 2:
         if min_ratio < 8.0:
             return "AB₂", info
         else:
             return "AX₂", info
-    
-    # A₂X₃: CH₂ couplé à CH₃
+
     if n_h_this == 2 and total_partners == 1 and partner_h_counts[0] == 3:
         if min_ratio < 8.0:
             return "A₂B₃", info
         else:
             return "A₂X₃", info
-    
-    # ABX: CH couplé à CH et un autre groupe
+
     if n_h_this == 1 and total_partners >= 2:
         return "ABX", info
-    
-    # AB simple: CH couplé à CH
+
     if n_h_this == 1 and total_partners == 1 and partner_h_counts[0] == 1:
         if min_ratio < 5.0:
             return "AB", info
@@ -5623,13 +4129,11 @@ def _detect_spin_system(
             return "AB_weak", info
         else:
             return "AX", info
-    
-    # AMX: 3 groupes différents
+
     if total_partners >= 2 and all(p["delta_nu_J"] > 10 for p in info["partners"]):
         return "AMX", info
-    
-    return "complex_second_order", info
 
+    return "complex_second_order", info
 
 def _detect_AABB_system(
     mol: Chem.Mol,
@@ -5640,25 +4144,7 @@ def _detect_AABB_system(
     spectrometer_mhz: float = 700.0,
     J_typical_hz: float = 7.0
 ) -> Optional[str]:
-    """
-    Détecte les systèmes AA'BB' / AA'XX' (fragments -CH₂-CH₂-)
 
-    IMPORTANT: Vérifie le ratio Δν/J pour distinguer:
-    - AA'BB' (second ordre): Δν/J < 10 → multiplet complexe
-    - A₂X₂ (premier ordre): Δν/J > 10 → triplet simple
-
-    Args:
-        mol: Molécule RDKit
-        heavy_idx: Index du carbone analysé
-        x_h_connectivity: Mapping carbone → H attachés
-        aromatic_dmap: Map des distances aromatiques
-        proton_shifts_ppm: Shifts des protons (pour calculer Δν)
-        spectrometer_mhz: Fréquence du spectromètre
-        J_typical_hz: J typique pour CH₂-CH₂ (~7 Hz)
-
-    Returns:
-        "AA'BB'" si second ordre, None si premier ordre ou pas de système CH₂-CH₂
-    """
     atom = mol.GetAtomWithIdx(heavy_idx)
     if atom.GetSymbol() != "C":
         return None
@@ -5681,10 +4167,8 @@ def _detect_AABB_system(
         if not bond or bond.GetBondTypeAsDouble() != 1.0:
             continue
 
-        # ✅ NOUVEAU: Vérifier le ratio Δν/J pour décider si c'est vraiment AA'BB'
-        # Si Δν/J > 10, c'est A₂X₂ (premier ordre, triplet), pas AA'BB' (second ordre)
         if proton_shifts_ppm is not None:
-            # Calculer le shift moyen pour chaque CH₂
+
             shifts_this = [proton_shifts_ppm.get(h, None) for h in h_list_this]
             shifts_neighbor = [proton_shifts_ppm.get(h, None) for h in h_list_neighbor]
 
@@ -5695,131 +4179,93 @@ def _detect_AABB_system(
                 delta_ppm = abs(avg_shift_this - avg_shift_neighbor)
                 delta_nu_hz = delta_ppm * spectrometer_mhz
 
-                # Ratio Δν/J : si > 10, c'est premier ordre (A₂X₂ → triplet)
                 ratio = delta_nu_hz / J_typical_hz if J_typical_hz > 0 else float('inf')
 
                 if ratio > 10.0:
-                    # Premier ordre: pas besoin de traitement AA'BB'
-                    # Le CH₂ observé verra un triplet simple (n+1 règle)
+
                     return None
 
         return "AA'BB'"
 
     return None
 
-
-# ---------------------------
-# SMART CONFORMER MODE: Détection intelligente du besoin de conformères
-# ---------------------------
-
 def _check_tables_coverage(mol: Chem.Mol) -> Dict[str, Any]:
-    """
-    Vérifie si les tables de J-couplings couvrent toutes les sous-structures de la molécule.
-    
-    Analyse:
-    1. Doubles liaisons (alcènes) → table alkene_trans/cis ✅
-    2. Diènes conjugués → table diene_conjugated ✅
-    3. Hétérocycles saturés → tables saturated_heterocycle ✅
-    4. Esters/lactones → tables ester/lactone ✅
-    5. Alcools/éthers → tables alcohol/ether ✅
-    6. Aromatiques → pas besoin de conformères (Karplus) ✅
-    7. Chaînes alkyles sp3-sp3 → BESOIN de conformères ❌
-    
-    Returns:
-        Dict avec 'all_covered' (bool) et 'covered_types' (list) et 'uncovered_types' (list)
-    """
+
     covered_types = []
     uncovered_types = []
-    
-    # Compteurs
+
     n_alkene = 0
     n_aromatic = 0
     n_saturated_ring = 0
     n_ester_lactone = 0
     n_alcohol_ether = 0
-    n_flexible_sp3_sp3 = 0  # Chaînes flexibles non couvertes
-    
+    n_flexible_sp3_sp3 = 0
+
     ring_info = mol.GetRingInfo()
-    
-    # 1. Compter les doubles liaisons (couvertes par tables)
+
     for bond in mol.GetBonds():
         if bond.GetBondType() == Chem.BondType.DOUBLE:
             a1 = bond.GetBeginAtom()
             a2 = bond.GetEndAtom()
-            # C=C (alcène) ou C=O (carbonyle)
+
             if a1.GetSymbol() == 'C' and a2.GetSymbol() == 'C':
                 n_alkene += 1
             elif (a1.GetSymbol() == 'C' and a2.GetSymbol() == 'O') or \
                  (a1.GetSymbol() == 'O' and a2.GetSymbol() == 'C'):
-                n_ester_lactone += 1  # Partie du groupe ester/lactone
-    
-    # 2. Compter les aromatiques
+                n_ester_lactone += 1
+
     for atom in mol.GetAtoms():
         if atom.GetIsAromatic():
             n_aromatic += 1
-    
-    # 3. Compter les cycles saturés
+
     for ring in ring_info.AtomRings():
         is_aromatic = any(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring)
         if not is_aromatic:
             n_saturated_ring += 1
-    
-    # 4. Compter esters, lactones, alcools, éthers
-    # Ester: OC(=O)C
+
     ester_pattern = Chem.MolFromSmarts('[OX2][CX3](=[OX1])')
     if mol.HasSubstructMatch(ester_pattern):
         n_ester_lactone += len(mol.GetSubstructMatches(ester_pattern))
-    
-    # Alcool: C-OH
+
     alcohol_pattern = Chem.MolFromSmarts('[CX4][OX2H]')
     if mol.HasSubstructMatch(alcohol_pattern):
         n_alcohol_ether += len(mol.GetSubstructMatches(alcohol_pattern))
-    
-    # Éther: C-O-C
+
     ether_pattern = Chem.MolFromSmarts('[CX4][OX2][CX4]')
     if mol.HasSubstructMatch(ether_pattern):
         n_alcohol_ether += len(mol.GetSubstructMatches(ether_pattern))
-    
-    # 5. Compter les liaisons sp3-sp3 flexibles (NON couvertes par tables)
+
     for bond in mol.GetBonds():
         if bond.GetBondType() != Chem.BondType.SINGLE:
             continue
         if bond.IsInRing():
-            continue  # Liaisons dans cycles → géré par tables cycles
-            
+            continue
+
         a1 = bond.GetBeginAtom()
         a2 = bond.GetEndAtom()
-        
-        # Exclure les liaisons impliquant O, N (couvertes par tables alcool/éther/amine)
+
         if a1.GetSymbol() in ('O', 'N') or a2.GetSymbol() in ('O', 'N'):
             continue
-        
-        # C(sp3)-C(sp3) acyclique = flexible, peut nécessiter conformères
+
         if a1.GetSymbol() == 'C' and a2.GetSymbol() == 'C':
             hyb1 = a1.GetHybridization()
             hyb2 = a2.GetHybridization()
-            
-            # C(sp3)-C(sp2) = rotation libre, J=7 Hz fixe → couvert
+
             if hyb1 == Chem.HybridizationType.SP3 and hyb2 == Chem.HybridizationType.SP2:
                 continue
             if hyb1 == Chem.HybridizationType.SP2 and hyb2 == Chem.HybridizationType.SP3:
                 continue
-            
-            # C(sp3)-C(sp3) = peut être flexible
+
             if hyb1 == Chem.HybridizationType.SP3 and hyb2 == Chem.HybridizationType.SP3:
-                # Vérifier si c'est une chaîne longue (3+ liaisons consécutives)
-                # ou juste une liaison isolée (ex: CH3-CH)
+
                 n_h1 = a1.GetTotalNumHs()
                 n_h2 = a2.GetTotalNumHs()
-                
-                # CH3-CH ou CH3-CH2 = tables couvrent (J=7 Hz moyen)
+
                 if n_h1 == 3 or n_h2 == 3:
-                    continue  # Méthyle terminal → couvert
-                
-                # CH2-CH2 ou CH-CH = peut nécessiter conformères
+                    continue
+
                 n_flexible_sp3_sp3 += 1
-    
-    # Construire le résultat
+
     if n_alkene > 0:
         covered_types.append(f"alkènes ({n_alkene})")
     if n_aromatic > 0:
@@ -5832,28 +4278,11 @@ def _check_tables_coverage(mol: Chem.Mol) -> Dict[str, Any]:
         covered_types.append(f"alcools/éthers ({n_alcohol_ether})")
 
     if n_flexible_sp3_sp3 > 0:
-        # ✅ CHANGEMENT MAJEUR: Les chaînes sp3-sp3 flexibles sont AUSSI couvertes
-        # par le fallback J ≈ 7.0 Hz (moyenne statistique correcte pour rotation libre).
-        # Les conformères MMFF sont BIAISÉS (favorisent gauche⁻) et donnent des J incorrects.
-        # Réf: Karplus moyenne pondérée g+/g-/trans ≈ 7.0 Hz
+
         covered_types.append(f"chaînes sp3-sp3 flexibles ({n_flexible_sp3_sp3}) → J=7.0 Hz fallback")
 
-    # =========================================================================
-    # DÉCISION FINALE - PHILOSOPHIE CHANGÉE:
-    # =========================================================================
-    # AVANT: conformères si > 2 liaisons sp3-sp3 flexibles
-    # APRÈS: JAMAIS de conformères pour les cas courants
-    #
-    # Raison: Les conformères MMFF/ETKDG sont BIAISÉS et donnent des J incorrects
-    # pour les chaînes flexibles. Le fallback J=7.0 Hz est plus précis !
-    #
-    # Seuls cas nécessitant conformères 3D (gérés ailleurs):
-    # - Macrocycles 8-12 membres (géométrie non prévisible)
-    # - Cycloheptane (plusieurs conformères proches)
-    # - Systèmes fusionnés inhabituels sans table
-    # =========================================================================
-    all_covered = True  # ✅ TOUJOURS couvert - tables + fallback suffisent
-    
+    all_covered = True
+
     return {
         'all_covered': all_covered,
         'covered_types': covered_types,
@@ -5862,80 +4291,47 @@ def _check_tables_coverage(mol: Chem.Mol) -> Dict[str, Any]:
     }
 
 def _molecule_needs_conformers(mol: Chem.Mol) -> Tuple[bool, str]:
-    """
-    Analyse intelligente pour déterminer si la molécule a besoin de conformères.
-    
-    Retourne (needs_conformers, reason) où:
-    - needs_conformers: True si conformères nécessaires, False sinon
-    - reason: Explication du résultat
-    
-    Cas où les conformères NE sont PAS nécessaires:
-    1. Molécule entièrement aromatique/rigide
-    2. Seules liaisons flexibles sont C(sp3)-C(sp2) → J=7 Hz fixe (rotation libre)
-    3. Tables couvrent tous les couplages (hétérocycles, sucres, vinyles)
-    
-    Cas où les conformères SONT nécessaires:
-    1. Cycles saturés semi-rigides (cyclohexane, pipéridine, tétrahydropyrane)
-    2. Chaînes alkyle sp3-sp3 avec CH2 diastéréotopiques
-    3. Systèmes avec contraintes conformationnelles spécifiques
-    4. MACROCYCLES (≥8 membres) - flexibles MAIS tables disponibles !
-    """
+
     from rdkit.Chem import Descriptors, Lipinski
-    
+
     mol_h = Chem.AddHs(mol)
     ring_info = mol.GetRingInfo()
-    
-    # =========================================================================
-    # ÉTAPE 0: VÉRIFIER SI LES TABLES COUVRENT TOUTES LES SOUS-STRUCTURES
-    # =========================================================================
-    # C'est la vérification la plus importante - si les tables couvrent tout,
-    # on n'a PAS besoin de conformères !
-    
+
     tables_coverage = _check_tables_coverage(mol)
     if tables_coverage['all_covered']:
         return (False, f"Tables couvrent tous les J-couplings: {tables_coverage['covered_types']}")
-    
-    # 0. MACROCYCLES - Vérification prioritaire
-    # Les macrocycles (≥8 membres) sont flexibles MAIS on a des tables de J moyens
-    # → On peut ÉVITER les conformères en utilisant get_macrocycle_coupling()
+
     for ring in ring_info.AtomRings():
         ring_size = len(ring)
         if ring_size >= 8:
-            # Compter les CH2 dans le macrocycle (partie flexible)
+
             n_ch2_in_ring = 0
             for atom_idx in ring:
                 atom = mol.GetAtomWithIdx(atom_idx)
                 if atom.GetSymbol() == 'C' and atom.GetTotalNumHs() == 2:
                     n_ch2_in_ring += 1
-            
-            # ✅ OPTIMISATION: Utiliser la table des macrocycles au lieu des conformères
-            # La table donne J ≈ 6-7 Hz (moyenne population-weighted)
-            # C'est suffisant pour la plupart des macrocycles (lactones, lactames, éthers couronne)
+
             return (False, f"Macrocycle ({ring_size} membres, {n_ch2_in_ring} CH2) - table J moyens utilisée (pas de conformères)")
-    
-    # Compter les différents types de structures
-    n_saturated_rings = 0  # Cycles saturés (cyclohexane, pipéridine, etc.)
-    n_semi_rigid_rings = 0  # Cycles 5-7 membres saturés FLEXIBLES
-    n_flexible_sp3_sp3 = 0  # Liaisons C(sp3)-C(sp3) acycliques flexibles
-    n_allylic_sp3_sp2 = 0   # Liaisons C(sp3)-C(sp2) à rotation libre
-    n_diastereotopic_ch2 = 0  # CH2 diastéréotopiques
-    
+
+    n_saturated_rings = 0
+    n_semi_rigid_rings = 0
+    n_flexible_sp3_sp3 = 0
+    n_allylic_sp3_sp2 = 0
+    n_diastereotopic_ch2 = 0
+
     reasons_need = []
     reasons_skip = []
-    
-    # 1. Analyser les cycles
+
     for ring in ring_info.AtomRings():
         ring_size = len(ring)
         if ring_size < 5 or ring_size > 7:
             continue
-            
-        # Vérifier si le cycle est vraiment saturé et FLEXIBLE
-        # Un cycle est semi-rigide seulement s'il a des liaisons C-C simples sp3-sp3
+
         is_saturated = True
-        is_rigid = False  # Contient C=O, C=N, ou aromatique → rigide
+        is_rigid = False
         has_heteroatom = False
         has_sp3_carbon = False
-        
+
         for atom_idx in ring:
             atom = mol.GetAtomWithIdx(atom_idx)
             if atom.GetIsAromatic():
@@ -5946,58 +4342,48 @@ def _molecule_needs_conformers(mol: Chem.Mol) -> Tuple[bool, str]:
                 has_heteroatom = True
             if atom.GetSymbol() == 'C' and atom.GetHybridization() == Chem.HybridizationType.SP3:
                 has_sp3_carbon = True
-        
-        # Vérifier les doubles liaisons dans le cycle (C=O, C=N, C=C)
-        # qui rendent le cycle rigide (pas besoin de conformères)
+
         if is_saturated:
             for i, atom_idx in enumerate(ring):
                 for neighbor in mol.GetAtomWithIdx(atom_idx).GetNeighbors():
                     bond = mol.GetBondBetweenAtoms(atom_idx, neighbor.GetIdx())
                     if bond and bond.GetBondType() == Chem.BondType.DOUBLE:
-                        # Double liaison dans ou adjacente au cycle → rigide
+
                         is_rigid = True
                         break
                 if is_rigid:
                     break
-        
-        # Cycle semi-rigide = saturé + flexibe + contient C(sp3)
+
         if is_saturated and not is_rigid and has_sp3_carbon:
             n_saturated_rings += 1
             if ring_size in (5, 6, 7):
                 n_semi_rigid_rings += 1
                 ring_type = "pipéridine/tétrahydropyrane" if has_heteroatom else "cyclohexane"
                 reasons_need.append(f"Cycle saturé flexible {ring_size}-membres ({ring_type})")
-    
-    # 2. Analyser les liaisons C-C acycliques
+
     for bond in mol.GetBonds():
         if bond.GetBondType() != Chem.BondType.SINGLE:
             continue
         if bond.IsInRing():
-            continue  # Liaisons dans les cycles → géré par cycles
-        
+            continue
+
         a1 = bond.GetBeginAtom()
         a2 = bond.GetEndAtom()
-        
-        # Ne considérer que les liaisons C-C
+
         if a1.GetSymbol() != 'C' or a2.GetSymbol() != 'C':
             continue
-        
+
         hyb1 = a1.GetHybridization()
         hyb2 = a2.GetHybridization()
-        
-        # C(sp3)-C(sp2): rotation quasi-libre → J = 7.0 Hz fixe
+
         if (hyb1 == Chem.HybridizationType.SP3 and hyb2 == Chem.HybridizationType.SP2) or \
            (hyb1 == Chem.HybridizationType.SP2 and hyb2 == Chem.HybridizationType.SP3):
             n_allylic_sp3_sp2 += 1
-            # Pas besoin de conformères pour ce type de liaison
-            
-        # C(sp3)-C(sp3): peut nécessiter conformères si CH2-CH2 avec stéréocentre
+
         elif hyb1 == Chem.HybridizationType.SP3 and hyb2 == Chem.HybridizationType.SP3:
-            # Vérifier si c'est une chaîne flexible simple
-            # ou s'il y a des CH2 diastéréotopiques
+
             n_flexible_sp3_sp3 += 1
-            
-            # Vérifier la présence de stéréocentres proches
+
             has_nearby_chiral = False
             for neighbor in a1.GetNeighbors():
                 if neighbor.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
@@ -6007,80 +4393,61 @@ def _molecule_needs_conformers(mol: Chem.Mol) -> Tuple[bool, str]:
                 if neighbor.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED:
                     has_nearby_chiral = True
                     break
-            
+
             if has_nearby_chiral:
                 n_diastereotopic_ch2 += 1
-    
-    # 3. Analyser les systèmes fusionnés (stéroïdes, etc.)
-    # Un système de cycles fusionnés avec beaucoup de stéréocentres est VERROUILLÉ
-    n_stereocenters = sum(1 for a in mol.GetAtoms() 
+
+    n_stereocenters = sum(1 for a in mol.GetAtoms()
                          if a.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED)
     n_fused_rings = len([r for r in ring_info.AtomRings() if len(r) >= 5])
-    
-    # ✅ AMÉLIORATION v2: Critère élargi pour systèmes "verrouillés"
-    # La clé: stéréocentres DANS les cycles = conformation verrouillée
-    # Stéroïde classique = 4+ cycles fusionnés + 5+ stéréocentres
-    # Diterpène/triterpène = 3+ cycles + 6+ stéréocentres
-    # Bicyclique (spiroketal, lactone fusionnée) = 2+ cycles + 5+ stéréocentres
-    # Les J sont FIXES car les angles dièdres sont définis par la stéréochimie
+
     is_steroid_like = (
-        (n_fused_rings >= 4 and n_stereocenters >= 5) or  # Stéroïde classique
-        (n_fused_rings >= 3 and n_stereocenters >= 5) or  # Triterpène, diterpène
-        (n_fused_rings >= 2 and n_stereocenters >= 5)     # Bicyclique (spiroketal, lactone)
+        (n_fused_rings >= 4 and n_stereocenters >= 5) or
+        (n_fused_rings >= 3 and n_stereocenters >= 5) or
+        (n_fused_rings >= 2 and n_stereocenters >= 5)
     )
-    
+
     if is_steroid_like:
-        # Les cycles sont verrouillés par les stéréocentres
-        # Vérifier s'il y a des chaînes latérales flexibles LONGUES
-        # Queue courte = impact négligeable sur les J des protons du cycle
+
         n_rotatable = Lipinski.NumRotatableBonds(mol)
         flexible_fraction = n_rotatable / max(1, mol.GetNumHeavyAtoms())
-        
-        # Pour un stéroïde, même avec quelques liaisons rotatives en chaîne latérale,
-        # les protons du squelette (>90% des signaux) ont des J fixes
-        if flexible_fraction < 0.20:  # < 20% de liaisons rotatives
+
+        if flexible_fraction < 0.20:
             return (False, f"Système stéroïde/polycyclique verrouillé ({n_fused_rings} cycles, {n_stereocenters} stéréocentres, {n_rotatable} rotatives) - J fixes par stéréochimie")
         else:
-            # Chaîne latérale longue mais squelette rigide → peu de conformères
-            return (False, f"Stéroïde avec chaîne latérale ({n_fused_rings} cycles, {n_stereocenters} stéréocentres) - squelette rigide, 1-10 conformères suffisants")
-    
-    # 4. Décision finale (pour molécules NON stéroïdes)
 
-    # =========================================================================
-    # ✅ NOUVEAU: Détection des LACTAMES FUSIONNÉS (DKP, pyrrolidinones, β-lactames)
-    # Ces systèmes sont RIGIDES car l'amide contraint la géométrie du cycle saturé
-    # =========================================================================
+            return (False, f"Stéroïde avec chaîne latérale ({n_fused_rings} cycles, {n_stereocenters} stéréocentres) - squelette rigide, 1-10 conformères suffisants")
+
     has_fused_lactam = False
     fused_lactam_info = ""
 
-    # Patterns SMARTS pour lactames fusionnés
     lactam_patterns = [
-        # DKP (dicétopipérazine) - 2 amides dans un cycle 6 fusionné
+
         ("[NX3]1[CX3](=O)[CX4,NX3][NX3][CX3](=O)[CX4,NX3]1", "DKP (dicétopipérazine)"),
-        # Pyrrolidinone fusionnée (γ-lactame dans système bicyclique)
+
         ("[NX3]1[CX3](=O)[CX4][CX4][CX4]1", "pyrrolidinone"),
-        # β-lactame (cycle 4 avec amide) - pénicillines, céphalosporines
+
         ("[NX3]1[CX3](=O)[CX4][CX4]1", "β-lactame"),
-        # Oxazolidinone fusionnée
+
         ("[OX2]1[CX3](=O)[NX3][CX4][CX4]1", "oxazolidinone"),
-        # Imidazolidinone (urée cyclique)
+
         ("[NX3]1[CX3](=O)[NX3][CX4][CX4]1", "imidazolidinone"),
-        # Lactame 5 membré générique fusionné à un autre cycle
+
         ("[NX3]1[CX3](=O)@[CX4]@[CX4]@[CX4,NX3,OX2]1", "lactame-5 fusionné"),
-        # Lactame 6 membré générique fusionné
+
         ("[NX3]1[CX3](=O)@[CX4]@[CX4]@[CX4]@[CX4,NX3,OX2]1", "lactame-6 fusionné"),
     ]
 
     for smarts, name in lactam_patterns:
         pattern = Chem.MolFromSmarts(smarts)
         if pattern and mol.HasSubstructMatch(pattern):
-            # Vérifier si ce lactame est fusionné (partage des atomes avec un autre cycle)
+
             matches = mol.GetSubstructMatches(pattern)
             for match in matches:
                 match_set = set(match)
                 for ring in ring_info.AtomRings():
                     ring_set = set(ring)
-                    # Fusion = au moins 2 atomes en commun avec un autre cycle
+
                     shared = match_set & ring_set
                     if len(shared) >= 2 and ring_set != match_set:
                         has_fused_lactam = True
@@ -6094,174 +4461,89 @@ def _molecule_needs_conformers(mol: Chem.Mol) -> Tuple[bool, str]:
     if has_fused_lactam:
         return (False, f"Lactame fusionné détecté ({fused_lactam_info}) → système rigide, J fixes par tables")
 
-    # =========================================================================
-    # ✅ CHANGEMENT MAJEUR: Les cycles saturés 5-6-7 membré utilisent des TABLES
-    # =========================================================================
-    # AVANT: on générait des conformères pour cyclohexane, pipéridine, etc.
-    # APRÈS: on utilise des J tabulés car ces systèmes sont bien caractérisés:
-    #
-    # | Cycle             | J tabulés                                    |
-    # |-------------------|----------------------------------------------|
-    # | Cyclopropane (3)  | ³J(cis)=9.0, ³J(trans)=5.6, ²J=−4.3 Hz      |
-    # | Cyclobutane (4)   | ³J ≈ 5-10 Hz selon géométrie                 |
-    # | Cyclopentane (5)  | ³J ≈ 7-9 Hz (envelope)                       |
-    # | Cyclohexane (6)   | ³J(ax-ax)=10-13, ³J(ax-eq)=3-5, ³J(eq-eq)=2-4|
-    # | Pipéridine (6)    | Idem cyclohexane                             |
-    # | Morpholine (6)    | Idem cyclohexane                             |
-    # | Tétrahydropyrane  | Idem cyclohexane + tables sucres             |
-    # | Cycloheptane (7)  | ³J ≈ 6-8 Hz (moyenne plusieurs conformères)  |
-    # | Proline           | ³J(Hα-Hβ)=6-8.5, ³J(Hβ-Hγ)=7, ³J(Hγ-Hδ)=7   |
-    #
-    # Pour les cas où ax/eq est connu (stéréochimie SMILES), on utilise la table.
-    # Sinon, on utilise le J moyen du cycle (~7 Hz).
-    # =========================================================================
     if n_semi_rigid_rings > 0 and not is_steroid_like:
-        # Tous les cycles 5-6-7 courants sont couverts par tables
+
         return (False, f"Cycles saturés ({n_semi_rigid_rings}x) → J tabulés par taille de cycle (ax/eq ou moyenne)")
-    
-    # ✅ NOUVEAU: Vérifier si c'est une chaîne TRÈS flexible (peptide, polyéther, etc.)
-    # où les J sont naturellement moyennés par rotation libre → tables suffisent
+
     n_rotatable = Lipinski.NumRotatableBonds(mol)
     n_heavy = mol.GetNumHeavyAtoms()
     rotatable_ratio = n_rotatable / max(1, n_heavy)
-    
-    # Molécule avec >30% de liaisons rotatives = TRÈS flexible
-    # Dans ce cas, les J sont moyennés (~7 Hz) et les tables suffisent
-    # Ex: peptides linéaires, chaînes polyéther, etc.
+
     is_highly_flexible = (n_rotatable >= 6 and rotatable_ratio > 0.25)
-    
-    # ✅ AMÉLIORATION: Les liaisons allyliques (sp3-sp2) ont des J quasi-fixes (~7 Hz)
-    # Si la majorité des liaisons flexibles sont allyliques, pas besoin de conformères
+
     has_mostly_allylic = (n_allylic_sp3_sp2 >= 2 and n_allylic_sp3_sp2 >= n_flexible_sp3_sp3 * 0.5)
-    
-    # Cas 2: CH2-CH2 sur chaîne sp3-sp3 flexible → PAS DE CONFORMÈRES
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # ❌ DÉSACTIVÉ: Le multi-conformer ETKDG/MMFF ne fonctionne PAS pour chaînes flexibles
-    # Le force field MMFF favorise systématiquement le même rotamère (gauche⁻, χ1≈60°)
-    # → Tous les conformères convergent vers le même minimum local
-    # → J calculés incorrects (~2-3 Hz au lieu de 7.7/5.0 Hz pour Hβ diastéréotopiques)
-    #
-    # SOLUTION: Utiliser le fallback J=7.0 Hz (moyenne statistique correcte pour
-    # chaînes flexibles avec rotation rapide à température ambiante)
-    # Réf: Karplus moyenne pondérée g+/g-/trans ≈ 7.0 Hz
-    # ═══════════════════════════════════════════════════════════════════════════════
+
     if n_flexible_sp3_sp3 > 0:
         return (False, f"Chaînes C(sp3)-C(sp3) flexibles ({n_flexible_sp3_sp3}x) → J moyen 7.0 Hz (MMFF biaisé, multi-conformer désactivé)")
-    
-    # Cas 3: Principalement des liaisons allyliques sp3-sp2 → PAS besoin
+
     if n_allylic_sp3_sp2 > 0 and n_flexible_sp3_sp3 <= 2:
         return (False, f"Liaisons C(sp3)-C(sp2) à rotation libre ({n_allylic_sp3_sp2}x) → J=7.0 Hz fixe")
-    
-    # Cas 4: Molécule principalement aromatique → PAS besoin
+
     n_aromatic = sum(1 for a in mol.GetAtoms() if a.GetIsAromatic())
     n_total = mol.GetNumHeavyAtoms()
     if n_aromatic > n_total * 0.6:
         return (False, f"Molécule principalement aromatique ({n_aromatic}/{n_total} atomes)")
-    
-    # Cas 5: Petite molécule sans complexité → PAS besoin
+
     if n_total < 15 and n_saturated_rings == 0:
         return (False, f"Petite molécule sans cycles saturés ({n_total} atomes)")
-    
-    # Cas 6: Chaînes flexibles longues sans stéréocentres → J=7 Hz par défaut suffit
+
     if n_flexible_sp3_sp3 > 0 and n_diastereotopic_ch2 == 0:
         return (False, f"Chaînes flexibles sans stéréocentres → J moyen 7.0 Hz")
-    
-    # Par défaut: si rien de spécial détecté, pas besoin
+
     return (False, "Aucune structure nécessitant un échantillonnage conformationnel détectée")
 
-
 def _has_amide_in_ring(mol: Chem.Mol, ring_atoms: Tuple[int, ...]) -> bool:
-    """
-    Vérifie si un cycle contient une fonction amide (C(=O)N).
-    
-    Utilisé pour distinguer macrolactames (avec amide) des macrolactones (avec ester).
-    
-    Args:
-        mol: Molécule RDKit
-        ring_atoms: Tuple des indices d'atomes dans le cycle
-    
-    Returns:
-        True si le cycle contient au moins une fonction amide
-    """
+
     ring_set = set(ring_atoms)
-    
+
     for atom_idx in ring_atoms:
         atom = mol.GetAtomWithIdx(atom_idx)
-        
-        # Chercher N dans le cycle
+
         if atom.GetSymbol() == 'N':
-            # Vérifier si N est adjacent à C(=O)
+
             for neighbor in atom.GetNeighbors():
                 if neighbor.GetSymbol() == 'C' and neighbor.GetIdx() in ring_set:
-                    # Vérifier si ce C a un =O
+
                     for n2 in neighbor.GetNeighbors():
                         if n2.GetSymbol() == 'O':
                             bond = mol.GetBondBetweenAtoms(neighbor.GetIdx(), n2.GetIdx())
                             if bond and bond.GetBondType() == Chem.BondType.DOUBLE:
-                                return True  # Amide trouvé: C(=O)-N
-    
-    return False
+                                return True
 
+    return False
 
 def _boltzmann_average_J(
     J_values_per_conformer: List[float],
     energies_kcal: List[float],
     temperature_k: float = 298.15
 ) -> float:
-    """
-    Calcule la moyenne de J pondérée par les populations de Boltzmann.
-    
-    P_i = exp(-E_i / RT) / Σ exp(-E_j / RT)
-    <J> = Σ P_i * J_i
-    """
+
     if not J_values_per_conformer or not energies_kcal:
         return 0.0
-    
+
     if len(J_values_per_conformer) != len(energies_kcal):
         return float(np.mean(J_values_per_conformer))
-    
-    R = 0.001987  # kcal/(mol·K)
+
+    R = 0.001987
     RT = R * temperature_k
-    
-    # Normaliser les énergies par rapport au minimum
+
     min_E = min(energies_kcal)
     rel_energies = [e - min_E for e in energies_kcal]
-    
-    # Calculer les facteurs de Boltzmann
+
     boltzmann_factors = [math.exp(-E / RT) for E in rel_energies]
-    Z = sum(boltzmann_factors)  # Fonction de partition
-    
+    Z = sum(boltzmann_factors)
+
     if Z <= 0:
         return float(np.mean(J_values_per_conformer))
-    
-    # Populations
+
     populations = [bf / Z for bf in boltzmann_factors]
-    
-    # Moyenne pondérée
+
     J_avg = sum(p * J for p, J in zip(populations, J_values_per_conformer))
-    
+
     return J_avg
 
-
-# ---------------------------
-# Classe cache pour conformères (évite de regénérer pour chaque paire H-H)
-# ---------------------------
 class ConformerCache:
-    """
-    Cache de conformères pour moyennage multi-conformères.
-    VERSION AMÉLIORÉE avec ETKDGv3, pruning adaptatif et clustering RMSD.
-    
-    Génère les conformères une seule fois et les réutilise pour tous les calculs de J.
-    Stocke également les énergies pour le moyennage Boltzmann.
-    
-    Améliorations:
-    - ETKDGv3 par défaut (meilleur échantillonnage géométrique)
-    - Pruning RMSD adaptatif (0.35 Å par défaut, ajustable)
-    - Clustering pour éliminer conformères redondants
-    - Génération 3x plus de conformères puis filtrage
-    - Support des molécules macrocycliques
-    - ✅ NOUVEAU: Échantillonnage systématique des dièdres pour chaînes flexibles
-    """
+
     def __init__(
         self,
         mol: Chem.Mol,
@@ -6271,80 +4553,75 @@ class ConformerCache:
         force_field: str = "MMFF94s",
         pruning_rmsd: float = 0.35,
         use_etkdg_v3: bool = True,
-        use_systematic_sampling: bool = True  # ✅ NOUVEAU
+        use_systematic_sampling: bool = True
     ):
         self.mol_h = Chem.AddHs(mol, addCoords=True)
         self.n_conformers = n_conformers
         self.energy_cutoff = energy_cutoff_kcal
         self.valid_conf_ids: List[int] = []
-        self.energies: List[float] = []  # kcal/mol, relatif au minimum
+        self.energies: List[float] = []
         self._initialized = False
         self._random_seed = random_seed
         self._force_field = force_field
         self._pruning_rmsd = pruning_rmsd
         self._use_etkdg_v3 = use_etkdg_v3
-        self._use_systematic_sampling = use_systematic_sampling  # ✅ NOUVEAU
-        
+        self._use_systematic_sampling = use_systematic_sampling
+
     def initialize(self) -> bool:
-        """Génère et optimise les conformères avec le force field configuré."""
+
         if self._initialized:
             return len(self.valid_conf_ids) > 0
-            
+
         try:
-            # ✅ AMÉLIORATION: Échantillonnage systématique pour molécules flexibles
+
             if self._use_systematic_sampling:
                 systematic_results = _generate_diverse_conformers_systematic(
-                    Chem.RemoveHs(self.mol_h),  # La fonction ajoute les H
+                    Chem.RemoveHs(self.mol_h),
                     n_conformers=self.n_conformers,
                     energy_cutoff_kcal=self.energy_cutoff
                 )
-                
+
                 if systematic_results:
-                    # Regénérer la molécule avec les bons conformères
+
                     mol_temp = Chem.AddHs(Chem.RemoveHs(self.mol_h), addCoords=True)
                     ps = AllChem.ETKDGv3() if hasattr(AllChem, 'ETKDGv3') else AllChem.ETKDG()
                     ps.randomSeed = self._random_seed
-                    
+
                     for i, (_, energy) in enumerate(systematic_results):
                         if i == 0:
                             AllChem.EmbedMolecule(self.mol_h, ps)
                         self.valid_conf_ids.append(i if i < self.mol_h.GetNumConformers() else 0)
                         self.energies.append(energy)
-                    
+
                     if self.valid_conf_ids:
                         self._initialized = True
                         return True
-            
-            # Paramètres ETKDG v3 (meilleur échantillonnage)
+
             if self._use_etkdg_v3:
                 try:
                     ps = AllChem.ETKDGv3()
-                    ps.useSmallRingTorsions = True  # Meilleur pour petits cycles
-                    ps.useMacrocycleTorsions = True  # Support macrocycles
+                    ps.useSmallRingTorsions = True
+                    ps.useMacrocycleTorsions = True
                 except AttributeError:
                     ps = AllChem.ETKDG()
             else:
                 ps = AllChem.ETKDG()
-                
+
             ps.randomSeed = self._random_seed
-            ps.numThreads = 0  # Auto-détection
-            ps.pruneRmsThresh = self._pruning_rmsd  # Éliminer conformères similaires
-            ps.useRandomCoords = True  # Meilleure diversité initiale
-            
-            # ✅ AMÉLIORATION: Générer 5x plus de conformères puis filtrer
-            # Cela garantit une meilleure couverture de l'espace conformationnel
-            # particulièrement important pour les chaînes CH₂-CH₂ flexibles
+            ps.numThreads = 0
+            ps.pruneRmsThresh = self._pruning_rmsd
+            ps.useRandomCoords = True
+
             n_generate = self.n_conformers * 5
-            
-            # Générer conformères
+
             conf_ids = AllChem.EmbedMultipleConfs(
-                self.mol_h, 
+                self.mol_h,
                 numConfs=n_generate,
                 params=ps
             )
-            
+
             if len(conf_ids) == 0:
-                # Fallback: un seul conformère avec coords aléatoires
+
                 ps.useRandomCoords = True
                 res = AllChem.EmbedMolecule(self.mol_h, ps)
                 if res == 0:
@@ -6353,15 +4630,14 @@ class ConformerCache:
                     self.energies = [0.0]
                 self._initialized = True
                 return len(self.valid_conf_ids) > 0
-            
-            # Optimiser tous les conformères avec le force field configuré
+
             ff_variant = self._force_field.upper()
             if "MMFF" in ff_variant:
                 variant = "MMFF94s" if "S" in ff_variant else "MMFF94"
                 try:
                     results = AllChem.MMFFOptimizeMoleculeConfs(self.mol_h, mmffVariant=variant, maxIters=200)
                 except Exception:
-                    # Fallback UFF
+
                     results = []
                     for cid in conf_ids:
                         try:
@@ -6372,7 +4648,7 @@ class ConformerCache:
                         except Exception:
                             results.append((1, 0.0))
             else:
-                # UFF
+
                 results = []
                 for cid in conf_ids:
                     try:
@@ -6382,131 +4658,109 @@ class ConformerCache:
                         results.append((0, energy))
                     except Exception:
                         results.append((1, 0.0))
-            
-            # Collecter énergies des conformères convergés
+
             energy_list = []
             for conf_id, (converged, energy) in zip(conf_ids, results):
-                if converged == 0:  # 0 = convergé
+                if converged == 0:
                     energy_list.append((conf_id, energy))
-            
+
             if not energy_list:
                 self._initialized = True
                 return False
-            
-            # Trier par énergie
+
             energy_list.sort(key=lambda x: x[1])
             min_energy = energy_list[0][1]
-            
-            # Garder conformères dans le seuil d'énergie
+
             for conf_id, energy in energy_list:
                 rel_energy = energy - min_energy
                 if rel_energy <= self.energy_cutoff:
                     self.valid_conf_ids.append(conf_id)
                     self.energies.append(rel_energy)
-                    
+
                 if len(self.valid_conf_ids) >= self.n_conformers:
                     break
-            
+
             self._initialized = True
             return len(self.valid_conf_ids) > 0
-            
+
         except Exception as e:
             self._initialized = True
             return False
-    
+
     def get_J_vicinal_averaged(
-        self, 
-        h1_idx: int, 
+        self,
+        h1_idx: int,
         h2_idx: int,
         use_haasnoot: bool = False,
         use_haasnoot_7_params: bool = True,
         electroneg_corr: float = 0.0,
         temperature_k: float = 298.15
     ) -> Optional[float]:
-        """
-        Calcule J vicinal avec moyennage Boltzmann sur tous les conformères.
-        
-        Utilise l'équation Haasnoot-Altona complète à 7 paramètres si activée,
-        avec détection automatique des substituants pour chaque conformère.
-        
-        Args:
-            h1_idx, h2_idx: Indices des deux protons
-            use_haasnoot: Si True, utilise Haasnoot-Altona (legacy)
-            use_haasnoot_7_params: Si True, utilise Haasnoot 7 paramètres complets
-            electroneg_corr: Correction EN manuelle (legacy)
-            temperature_k: Température pour Boltzmann
-        
-        Returns:
-            J moyenné en Hz, ou None si impossible
-        """
+
         if not self._initialized:
             self.initialize()
-            
+
         if not self.valid_conf_ids:
             return None
-            
+
         try:
-            # Trouver les carbones parents
+
             h1_atom = self.mol_h.GetAtomWithIdx(h1_idx)
             h2_atom = self.mol_h.GetAtomWithIdx(h2_idx)
-            
+
             c1_neighbors = [n for n in h1_atom.GetNeighbors() if n.GetSymbol() == 'C']
             c2_neighbors = [n for n in h2_atom.GetNeighbors() if n.GetSymbol() == 'C']
-            
+
             if not c1_neighbors or not c2_neighbors:
                 return None
-                
+
             c1_idx = c1_neighbors[0].GetIdx()
             c2_idx = c2_neighbors[0].GetIdx()
-            
-            # Vérifier que C1-C2 sont liés
+
             if not self.mol_h.GetBondBetweenAtoms(c1_idx, c2_idx):
                 return None
-            
-            # Récupérer les substituants (une seule fois, indépendant du conformère)
+
             subs_alpha = []
             subs_beta = []
-            
+
             if use_haasnoot_7_params:
                 c1_atom = self.mol_h.GetAtomWithIdx(c1_idx)
                 c2_atom = self.mol_h.GetAtomWithIdx(c2_idx)
-                
-                # Substituants sur C1 (excluant C2 et H)
+
                 for nb in c1_atom.GetNeighbors():
                     if nb.GetIdx() != c2_idx and nb.GetSymbol() != 'H':
                         subs_alpha.append(nb.GetSymbol())
-                
-                # Substituants sur C2 (excluant C1 et H)
+
                 for nb in c2_atom.GetNeighbors():
                     if nb.GetIdx() != c1_idx and nb.GetSymbol() != 'H':
                         subs_beta.append(nb.GetSymbol())
-            
+
             J_values = []
             valid_energies = []
-            
+
             for conf_id, energy in zip(self.valid_conf_ids, self.energies):
                 try:
                     conf = self.mol_h.GetConformer(conf_id)
                     dihedral = AllChem.GetDihedralDeg(conf, h1_idx, c1_idx, c2_idx, h2_idx)
-                    
+
                     if use_haasnoot_7_params:
-                        # Calculer les signes d'orientation pour ce conformère
+
                         orientation_signs = []
-                        
+
                         c1_atom = self.mol_h.GetAtomWithIdx(c1_idx)
                         for nb in c1_atom.GetNeighbors():
                             if nb.GetIdx() == c2_idx or nb.GetSymbol() == 'H':
                                 continue
                             sign = _haasnoot_orientation_sign(self.mol_h, h1_idx, c1_idx, c2_idx, nb.GetIdx())
                             orientation_signs.append(sign)
-                        
+
                         c2_atom = self.mol_h.GetAtomWithIdx(c2_idx)
                         for nb in c2_atom.GetNeighbors():
                             if nb.GetIdx() == c1_idx or nb.GetSymbol() == 'H':
                                 continue
                             sign = _haasnoot_orientation_sign(self.mol_h, h1_idx, c1_idx, c2_idx, nb.GetIdx())
                             orientation_signs.append(sign)
-                        
+
                         J = _karplus_haasnoot_altona_full(
                             dihedral,
                             substituents_alpha=subs_alpha,
@@ -6518,62 +4772,51 @@ class ConformerCache:
                         J = _karplus_haasnoot_altona(dihedral, electroneg_corr)
                     else:
                         J = _karplus_simple(dihedral)
-                    
+
                     if J is not None:
                         J_values.append(abs(J))
                         valid_energies.append(energy)
                 except Exception:
                     continue
-            
+
             if not J_values:
                 return None
-                
-            # Moyenne de Boltzmann
+
             return _boltzmann_average_J(J_values, valid_energies, temperature_k)
-            
+
         except Exception:
             return None
-    
+
     def get_num_conformers(self) -> int:
-        """Retourne le nombre de conformères valides."""
+
         if not self._initialized:
             self.initialize()
         return len(self.valid_conf_ids)
-    
+
     def get_populations(self, temperature_k: float = 298.15) -> List[float]:
-        """Retourne les populations de Boltzmann de chaque conformère."""
+
         if not self._initialized:
             self.initialize()
         if not self.energies:
             return []
-            
-        R = 0.001987  # kcal/(mol·K)
+
+        R = 0.001987
         RT = R * temperature_k
-        
+
         boltz = [math.exp(-E / RT) for E in self.energies]
         Z = sum(boltz)
-        
+
         if Z <= 0:
             return [1.0 / len(self.energies)] * len(self.energies)
-            
+
         return [b / Z for b in boltz]
 
-
-# ===========================================================================
-# DÉTECTION ET TRAITEMENT DES MOLÉCULES FLEXIBLES
-# ===========================================================================
-
 def _count_rotatable_bonds(mol: Chem.Mol) -> int:
-    """
-    Compte le nombre de liaisons rotables dans une molécule.
 
-    Liaisons rotables = liaisons simples non cycliques entre atomes lourds,
-    excluant les liaisons terminales (méthyles, OH, etc.)
-    """
     try:
         return Descriptors.NumRotatableBonds(mol)
     except Exception:
-        # Fallback manuel
+
         count = 0
         for bond in mol.GetBonds():
             if bond.IsInRing():
@@ -6583,28 +4826,20 @@ def _count_rotatable_bonds(mol: Chem.Mol) -> int:
             a1, a2 = bond.GetBeginAtom(), bond.GetEndAtom()
             if a1.GetSymbol() == "H" or a2.GetSymbol() == "H":
                 continue
-            # Exclure liaisons terminales
+
             if a1.GetDegree() <= 1 or a2.GetDegree() <= 1:
                 continue
             count += 1
         return count
 
-
 def _estimate_molecular_flexibility(mol: Chem.Mol) -> Tuple[str, int]:
-    """
-    Estime la flexibilité d'une molécule.
-    
-    Returns:
-        (niveau, n_rotatable) où niveau = "rigid", "moderate", "flexible", "very_flexible"
-    """
+
     n_rot = _count_rotatable_bonds(mol)
-    
-    # Compter les cycles
+
     n_rings = mol.GetRingInfo().NumRings()
-    
-    # Correction pour les cycles (réduisent la flexibilité effective)
+
     effective_rot = max(0, n_rot - n_rings * 0.5)
-    
+
     if effective_rot <= 2:
         return "rigid", n_rot
     elif effective_rot <= 5:
@@ -6614,92 +4849,55 @@ def _estimate_molecular_flexibility(mol: Chem.Mol) -> Tuple[str, int]:
     else:
         return "very_flexible", n_rot
 
-
 def _get_adaptive_n_conformers(
-    mol: Chem.Mol, 
-    base_n: int = 50, 
+    mol: Chem.Mol,
+    base_n: int = 50,
     max_n: int = 200,
     min_n: int = 10
 ) -> int:
-    """
-    Retourne un nombre adaptatif de conformères selon la flexibilité moléculaire.
-    VERSION AMÉLIORÉE avec échelle logarithmique et détection de chaînes longues.
-    
-    Règles d'échantillonnage:
-    - Molécules rigides (0-2 rotables): 10-25 conformères
-    - Modérées (3-5 rotables): 50-75 conformères  
-    - Flexibles (6-10 rotables): 100-150 conformères
-    - Très flexibles (>10 rotables): 150-200 conformères
-    
-    Args:
-        mol: Molécule RDKit
-        base_n: Nombre de base (défaut 50)
-        max_n: Maximum absolu (défaut 200)
-        min_n: Minimum absolu (défaut 10)
-    
-    Returns:
-        Nombre optimal de conformères à générer
-    
-    References:
-        - Ebejer J.P. et al., J. Chem. Inf. Model. 52, 1146-1158 (2012)
-        - Hawkins P.C.D. et al., J. Chem. Inf. Model. 50, 572-584 (2010)
-    """
+
     flexibility, n_rot = _estimate_molecular_flexibility(mol)
-    
-    # Formule logarithmique: plus de conformères pour plus de flexibilité
-    # n = base * (1 + 0.3 * ln(1 + n_rot))
+
     import math
-    
+
     if n_rot == 0:
-        # Molécule rigide
+
         return min_n
-    
-    # Facteur de scaling basé sur les liaisons rotables
-    # n_rot=3 → factor~1.6, n_rot=6 → factor~2.0, n_rot=10 → factor~2.4
+
     scale_factor = 1.0 + 0.5 * math.log(1 + n_rot)
-    
-    # Ajustement selon la classification
+
     if flexibility == "rigid":
         n_conf = int(base_n * 0.3 * scale_factor)
     elif flexibility == "moderate":
         n_conf = int(base_n * 0.6 * scale_factor)
     elif flexibility == "flexible":
         n_conf = int(base_n * 1.0 * scale_factor)
-    else:  # very_flexible
+    else:
         n_conf = int(base_n * 1.5 * scale_factor)
-    
-    # Boost pour chaînes carbonées longues (lipides, terpènes)
+
     if _has_long_flexible_chain(mol, min_length=6):
         n_conf = int(n_conf * 1.5)
-    
-    # Appliquer les limites
+
     n_conf = max(min_n, min(max_n, n_conf))
-    
+
     return n_conf
 
-
 def _has_long_flexible_chain(mol: Chem.Mol, min_length: int = 4) -> bool:
-    """
-    Détecte si la molécule contient une chaîne flexible longue.
-    
-    Cas typique: chaîne alkyle longue (lipides, acides gras, etc.)
-    """
-    # Chercher les chaînes C-C-C-C... non cycliques
+
     for atom in mol.GetAtoms():
         if atom.IsInRing() or atom.GetSymbol() != "C":
             continue
         if atom.GetDegree() <= 1:
             continue
-        
-        # BFS pour trouver la chaîne la plus longue
+
         visited = {atom.GetIdx()}
         queue = [(atom, 0)]
         max_len = 0
-        
+
         while queue:
             current, length = queue.pop(0)
             max_len = max(max_len, length)
-            
+
             for nb in current.GetNeighbors():
                 if nb.GetIdx() in visited:
                     continue
@@ -6707,36 +4905,12 @@ def _has_long_flexible_chain(mol: Chem.Mol, min_length: int = 4) -> bool:
                     continue
                 visited.add(nb.GetIdx())
                 queue.append((nb, length + 1))
-        
+
         if max_len >= min_length:
             return True
-    
+
     return False
 
-
-# ---------------------------
-# Effets de solvant avancés
-# ---------------------------
-
-# ===========================================================================
-# SYSTÈME SOPHISTIQUÉ DE CORRECTIONS SOLVANT/TEMPÉRATURE
-# ===========================================================================
-# 
-# Basé sur:
-# 1. Paramètres solvatochromiques de Kamlet-Taft (α, β, π*)
-# 2. Corrections spécifiques par type de proton (SMARTS)
-# 3. Modèle physique des liaisons hydrogène
-# 4. Coefficients de température empiriques
-#
-# Références:
-# - Kamlet, M.J. & Taft, R.W. J. Am. Chem. Soc. 98, 377 (1976)
-# - Abraham, M.H. Chem. Soc. Rev. 22, 73 (1993)
-# - Reichardt, C. "Solvents and Solvent Effects in Organic Chemistry" (2003)
-# - Muller, N. & Reiter, R.C. J. Chem. Phys. 42, 3265 (1965) - Température
-# ===========================================================================
-
-# Paramètres Kamlet-Taft des solvants
-# α = acidité H-bond (donneur), β = basicité H-bond (accepteur), π* = polarité/polarisabilité
 KAMLET_TAFT_PARAMS: Dict[str, Dict[str, float]] = {
     "CDCl3": {"alpha": 0.20, "beta": 0.10, "pi_star": 0.58, "ET30": 39.1},
     "DMSO-d6": {"alpha": 0.00, "beta": 0.76, "pi_star": 1.00, "ET30": 45.1},
@@ -6751,111 +4925,97 @@ KAMLET_TAFT_PARAMS: Dict[str, Dict[str, float]] = {
     "DCM-d2": {"alpha": 0.13, "beta": 0.10, "pi_star": 0.82, "ET30": 40.7},
 }
 
-# Coefficients de sensibilité au solvant par type de proton
-# Δδ = a·α + b·β + c·π* + d (constante)
-# où α, β, π* sont les paramètres Kamlet-Taft du solvant
 PROTON_SOLVENT_SENSITIVITY: Dict[str, Dict[str, float]] = {
-    # Protons donneurs de liaison H (très sensibles au β du solvant)
-    "OH_phenol": {"a": -0.5, "b": +2.0, "c": +0.3, "d": 0.0},      # Phénol OH
-    "OH_alcohol": {"a": -0.3, "b": +1.5, "c": +0.2, "d": 0.0},     # Alcool OH
-    "OH_carboxylic": {"a": -0.8, "b": +2.5, "c": +0.5, "d": 0.0},  # COOH
-    "NH_amide": {"a": -0.2, "b": +1.2, "c": +0.3, "d": 0.0},       # Amide NH
-    "NH_amine": {"a": -0.4, "b": +1.0, "c": +0.2, "d": 0.0},       # Amine NH
-    "NH_aromatic": {"a": -0.3, "b": +1.5, "c": +0.4, "d": 0.0},    # Pyrrole, indole
-    
-    # Protons accepteurs (sensibles au α du solvant donneur)
-    "CHO_aldehyde": {"a": +0.3, "b": -0.2, "c": +0.1, "d": 0.0},   # Aldéhyde
+
+    "OH_phenol": {"a": -0.5, "b": +2.0, "c": +0.3, "d": 0.0},
+    "OH_alcohol": {"a": -0.3, "b": +1.5, "c": +0.2, "d": 0.0},
+    "OH_carboxylic": {"a": -0.8, "b": +2.5, "c": +0.5, "d": 0.0},
+    "NH_amide": {"a": -0.2, "b": +1.2, "c": +0.3, "d": 0.0},
+    "NH_amine": {"a": -0.4, "b": +1.0, "c": +0.2, "d": 0.0},
+    "NH_aromatic": {"a": -0.3, "b": +1.5, "c": +0.4, "d": 0.0},
+
+    "CHO_aldehyde": {"a": +0.3, "b": -0.2, "c": +0.1, "d": 0.0},
     "CH_ketone_alpha": {"a": +0.2, "b": -0.1, "c": +0.05, "d": 0.0},
-    
-    # Protons aromatiques (sensibles aux effets d'anisotropie)
+
     "Ar_H": {"a": +0.05, "b": -0.1, "c": +0.15, "d": 0.0},
     "Ar_H_electron_rich": {"a": +0.02, "b": -0.15, "c": +0.1, "d": 0.0},
     "Ar_H_electron_poor": {"a": +0.08, "b": -0.05, "c": +0.2, "d": 0.0},
-    
-    # Protons alkyle (peu sensibles)
+
     "CH3_alkyl": {"a": 0.0, "b": 0.0, "c": +0.02, "d": 0.0},
     "CH2_alkyl": {"a": 0.0, "b": 0.0, "c": +0.02, "d": 0.0},
     "CH_alkyl": {"a": 0.0, "b": 0.0, "c": +0.02, "d": 0.0},
-    
-    # Protons vinyliques
+
     "CH_vinyl": {"a": +0.05, "b": -0.05, "c": +0.08, "d": 0.0},
     "CH2_vinyl": {"a": +0.03, "b": -0.03, "c": +0.05, "d": 0.0},
 }
 
-# Coefficients de température (ppm/K) - effet sur le déplacement chimique
-# La plupart des protons ont un coefficient négatif (déblindage quand T augmente)
 TEMPERATURE_COEFFICIENTS: Dict[str, float] = {
-    # Protons échangeables - très sensibles (liaisons H affaiblies à haute T)
-    "OH_phenol": -0.0080,        # ppm/K
+
+    "OH_phenol": -0.0080,
     "OH_alcohol": -0.0100,
     "OH_carboxylic": -0.0120,
     "NH_amide": -0.0060,
     "NH_amine": -0.0080,
     "NH_aromatic": -0.0070,
-    
-    # Protons fixes - peu sensibles
+
     "CHO_aldehyde": -0.0015,
     "Ar_H": -0.0008,
     "CH_vinyl": -0.0005,
     "CH3_alkyl": -0.0003,
     "CH2_alkyl": -0.0003,
     "CH_alkyl": -0.0003,
-    
-    # Défaut
+
     "default": -0.0005,
 }
 
-# SMARTS patterns pour identifier les types de protons
 PROTON_TYPE_SMARTS: Dict[str, str] = {
-    "OH_phenol": "[OH;$([OH]c)]",                    # Phénol
-    "OH_alcohol": "[OH;$([OH]C);!$([OH]c)]",         # Alcool aliphatique
-    "OH_carboxylic": "[OH;$([OH]C=O)]",              # Acide carboxylique
-    "NH_amide": "[NH;$([NH]C=O)]",                   # Amide
-    "NH_amine": "[NH2,NH;!$([NH]C=O);!$([NH]c)]",    # Amine
-    "NH_aromatic": "[nH]",                            # N aromatique (pyrrole, indole)
-    "CHO_aldehyde": "[CH;$([CH](=O))]",              # Aldéhyde
-    "CH_ketone_alpha": "[CH;$([CH]C(=O))]",          # Alpha-cétone
-    "Ar_H": "[cH]",                                   # Aromatique générique
-    "CH_vinyl": "[CH;$([CH]=C)]",                    # Vinylique CH
-    "CH2_vinyl": "[CH2;$([CH2]=C)]",                 # Vinylique CH2
-    "CH3_alkyl": "[CH3;$([CH3]C)]",                  # Méthyle
-    "CH2_alkyl": "[CH2;$([CH2](C)C)]",               # Méthylène
-    "CH_alkyl": "[CH;$([CH](C)(C)C)]",               # Méthine
+    "OH_phenol": "[OH;$([OH]c)]",
+    "OH_alcohol": "[OH;$([OH]C);!$([OH]c)]",
+    "OH_carboxylic": "[OH;$([OH]C=O)]",
+    "NH_amide": "[NH;$([NH]C=O)]",
+    "NH_amine": "[NH2,NH;!$([NH]C=O);!$([NH]c)]",
+    "NH_aromatic": "[nH]",
+    "CHO_aldehyde": "[CH;$([CH](=O))]",
+    "CH_ketone_alpha": "[CH;$([CH]C(=O))]",
+    "Ar_H": "[cH]",
+    "CH_vinyl": "[CH;$([CH]=C)]",
+    "CH2_vinyl": "[CH2;$([CH2]=C)]",
+    "CH3_alkyl": "[CH3;$([CH3]C)]",
+    "CH2_alkyl": "[CH2;$([CH2](C)C)]",
+    "CH_alkyl": "[CH;$([CH](C)(C)C)]",
 }
 
-# Corrections de déplacement chimique par solvant (en ppm) - VERSION SIMPLE
-# Gardé pour compatibilité arrière
 SOLVENT_SHIFT_CORRECTIONS: Dict[str, Dict[str, float]] = {
     "CDCl3": {
-        "aromatic": 0.0,    # Référence
+        "aromatic": 0.0,
         "alkyl": 0.0,
-        "OH": -2.0,         # OH souvent échangé, signal large
+        "OH": -2.0,
         "NH": -1.5,
         "aldehyde": 0.0,
     },
     "DMSO-d6": {
-        "aromatic": +0.1,   # Légèrement déblindé
+        "aromatic": +0.1,
         "alkyl": 0.0,
-        "OH": +0.5,         # OH visible, pic sharp
+        "OH": +0.5,
         "NH": +0.3,
         "aldehyde": +0.1,
     },
     "D2O": {
         "aromatic": -0.1,
         "alkyl": -0.05,
-        "OH": 0.0,          # Échangé → disparu
-        "NH": 0.0,          # Échangé → disparu
+        "OH": 0.0,
+        "NH": 0.0,
         "aldehyde": -0.1,
     },
     "CD3OD": {
         "aromatic": 0.0,
         "alkyl": 0.0,
-        "OH": 0.0,          # Échangé
+        "OH": 0.0,
         "NH": 0.0,
         "aldehyde": 0.0,
     },
     "C6D6": {
-        "aromatic": -0.5,   # Effet de courant de cycle
+        "aromatic": -0.5,
         "alkyl": -0.3,
         "OH": -1.0,
         "NH": -0.8,
@@ -6870,7 +5030,6 @@ SOLVENT_SHIFT_CORRECTIONS: Dict[str, Dict[str, float]] = {
     },
 }
 
-# Largeurs de raie selon viscosité du solvant (en Hz)
 SOLVENT_LINEWIDTH: Dict[str, float] = {
     "CDCl3": 0.5,
     "DMSO-d6": 1.2,
@@ -6883,71 +5042,54 @@ SOLVENT_LINEWIDTH: Dict[str, float] = {
     "toluene-d8": 0.6,
 }
 
-# ===========================================================================
-# CORRECTIONS DES CONSTANTES J PAR SOLVANT
-# ===========================================================================
-# Les constantes de couplage J sont légèrement affectées par:
-# 1. La polarité du solvant (constante diélectrique)
-# 2. Les liaisons hydrogène (solvants protiques)
-# 3. Les effets d'anisotropie (solvants aromatiques)
-#
-# Références:
-# - Berger, S. & Braun, S. "200 and More NMR Experiments" (2004)
-# - Hansen, P.E. Prog. Nucl. Magn. Reson. Spectrosc. (1981) 14, 175-296
-# - Abraham, R.J. et al. J. Chem. Soc. Perkin Trans. 2 (1999) 699-711
-# ===========================================================================
-
-# Facteurs de correction J par type de couplage et solvant
-# Valeur = multiplicateur (1.0 = pas de changement)
 SOLVENT_J_CORRECTIONS: Dict[str, Dict[str, float]] = {
     "CDCl3": {
-        # Référence (apolaire, non protique)
-        "3J_vicinal": 1.00,      # ³J(H-C-C-H)
-        "3J_vinyl": 1.00,        # ³J alcènes
-        "2J_geminal": 1.00,      # ²J géminal
-        "4J_allylic": 1.00,      # ⁴J allylique
-        "3J_aromatic": 1.00,     # ³J aromatique
-        "3J_HNCH": 1.00,         # ³J peptides
+
+        "3J_vicinal": 1.00,
+        "3J_vinyl": 1.00,
+        "2J_geminal": 1.00,
+        "4J_allylic": 1.00,
+        "3J_aromatic": 1.00,
+        "3J_HNCH": 1.00,
     },
     "DMSO-d6": {
-        # Polaire aprotique - liaisons H intramoléculaires stabilisées
-        # → conformations légèrement différentes
-        "3J_vicinal": 1.02,      # Légère augmentation
-        "3J_vinyl": 0.98,        # Stabilisation conformationnelle
+
+        "3J_vicinal": 1.02,
+        "3J_vinyl": 0.98,
         "2J_geminal": 1.00,
-        "4J_allylic": 1.05,      # Plus visible (échange lent)
+        "4J_allylic": 1.05,
         "3J_aromatic": 1.00,
-        "3J_HNCH": 1.08,         # NH visibles → J mesurables
+        "3J_HNCH": 1.08,
     },
     "D2O": {
-        # Très polaire, protique - liaisons H avec solvant
-        "3J_vicinal": 0.98,      # Légère réduction
+
+        "3J_vicinal": 0.98,
         "3J_vinyl": 0.97,
         "2J_geminal": 1.00,
-        "4J_allylic": 0.90,      # Échange rapide → moyennage
+        "4J_allylic": 0.90,
         "3J_aromatic": 1.00,
-        "3J_HNCH": 0.0,          # NH échangés → pas de couplage visible
+        "3J_HNCH": 0.0,
     },
     "CD3OD": {
-        # Polaire protique
+
         "3J_vicinal": 0.99,
         "3J_vinyl": 0.98,
         "2J_geminal": 1.00,
         "4J_allylic": 0.95,
         "3J_aromatic": 1.00,
-        "3J_HNCH": 0.5,          # NH partiellement échangé
+        "3J_HNCH": 0.5,
     },
     "C6D6": {
-        # Aromatique - effets d'anisotropie magnétique
+
         "3J_vicinal": 1.00,
-        "3J_vinyl": 1.02,        # Légère augmentation
+        "3J_vinyl": 1.02,
         "2J_geminal": 1.00,
         "4J_allylic": 1.05,
-        "3J_aromatic": 0.98,     # Effet de solvation aromatique
+        "3J_aromatic": 0.98,
         "3J_HNCH": 1.00,
     },
     "CD3CN": {
-        # Polaire aprotique
+
         "3J_vicinal": 1.01,
         "3J_vinyl": 1.00,
         "2J_geminal": 1.00,
@@ -6956,13 +5098,13 @@ SOLVENT_J_CORRECTIONS: Dict[str, Dict[str, float]] = {
         "3J_HNCH": 1.02,
     },
     "pyridine-d5": {
-        # Basique, accepteur de liaisons H
+
         "3J_vicinal": 1.02,
         "3J_vinyl": 1.00,
         "2J_geminal": 1.00,
         "4J_allylic": 1.05,
         "3J_aromatic": 0.98,
-        "3J_HNCH": 1.10,         # NH/OH très visibles
+        "3J_HNCH": 1.10,
     },
 }
 
@@ -6970,19 +5112,9 @@ def _get_solvent_J_correction(
     solvent_name: str,
     j_type: str = "3J_vicinal"
 ) -> float:
-    """
-    Retourne le facteur de correction J pour un type de couplage dans un solvant.
-    
-    Args:
-        solvent_name: Nom du solvant (ex: "CDCl3", "DMSO-d6")
-        j_type: Type de couplage ("3J_vicinal", "3J_vinyl", "2J_geminal", etc.)
-    
-    Returns:
-        Facteur multiplicatif (1.0 = pas de correction)
-    """
+
     corrections = SOLVENT_J_CORRECTIONS.get(solvent_name, SOLVENT_J_CORRECTIONS.get("CDCl3", {}))
     return corrections.get(j_type, 1.0)
-
 
 def _apply_solvent_J_correction(
     J_hz: float,
@@ -6990,25 +5122,13 @@ def _apply_solvent_J_correction(
     j_type: str = "3J_vicinal",
     is_labile_H: bool = False
 ) -> float:
-    """
-    Applique une correction de J selon le solvant.
-    
-    Args:
-        J_hz: Constante de couplage en Hz
-        solvent_name: Nom du solvant
-        j_type: Type de couplage
-        is_labile_H: True si implique un proton labile (OH, NH)
-    
-    Returns:
-        J corrigé en Hz
-    """
+
     if is_labile_H and solvent_name == "D2O":
-        # Proton échangé → pas de couplage visible
+
         return 0.0
-    
+
     factor = _get_solvent_J_correction(solvent_name, j_type)
     return J_hz * factor
-
 
 def _apply_solvent_corrections(
     proton_shifts_ppm: Dict[int, float],
@@ -7016,27 +5136,22 @@ def _apply_solvent_corrections(
     heavy_to_H: Dict[int, List[int]],
     solvent_name: str
 ) -> Dict[int, float]:
-    """
-    Applique les corrections de déplacement chimique selon le solvant.
-    
-    Modifie les shifts en fonction du type de proton et du solvant.
-    """
+
     corrections = SOLVENT_SHIFT_CORRECTIONS.get(solvent_name, {})
     if not corrections:
         return proton_shifts_ppm
-    
+
     corrected = dict(proton_shifts_ppm)
-    
+
     for heavy_idx, h_list in heavy_to_H.items():
         if not h_list:
             continue
-        
+
         atom = mol.GetAtomWithIdx(heavy_idx)
         sym = atom.GetSymbol()
-        
-        # Déterminer le type de proton
-        proton_type = "alkyl"  # Défaut
-        
+
+        proton_type = "alkyl"
+
         if sym == "O":
             proton_type = "OH"
         elif sym == "N":
@@ -7045,54 +5160,36 @@ def _apply_solvent_corrections(
             if atom.GetIsAromatic():
                 proton_type = "aromatic"
             elif any(b.GetBondTypeAsDouble() >= 2 for b in atom.GetBonds()):
-                # Vérifier si aldéhyde (C=O avec H)
+
                 for b in atom.GetBonds():
                     other = b.GetOtherAtom(atom)
                     if other.GetSymbol() == "O" and b.GetBondTypeAsDouble() >= 2:
                         proton_type = "aldehyde"
                         break
-        
-        # Appliquer la correction
+
         correction = corrections.get(proton_type, 0.0)
         for h_idx in h_list:
             if h_idx in corrected:
                 corrected[h_idx] = corrected[h_idx] + correction
-    
+
     return corrected
 
-
 def _get_solvent_linewidth(solvent_name: str, default: float = 0.8) -> float:
-    """Retourne la largeur de raie typique pour un solvant."""
+
     return SOLVENT_LINEWIDTH.get(solvent_name, default)
 
-
-# ===========================================================================
-# FONCTIONS SOPHISTIQUÉES DE CORRECTION SOLVANT/TEMPÉRATURE
-# ===========================================================================
-
 def _identify_proton_type_smarts(mol: Chem.Mol, h_idx: int) -> str:
-    """
-    Identifie le type de proton en utilisant les patterns SMARTS.
-    
-    Args:
-        mol: Molécule RDKit
-        h_idx: Index de l'atome H
-    
-    Returns:
-        Type de proton (clé pour les tables de correction)
-    """
+
     h_atom = mol.GetAtomWithIdx(h_idx)
-    
-    # Trouver l'atome lourd attaché
+
     neighbors = h_atom.GetNeighbors()
     if not neighbors:
         return "default"
-    
+
     heavy_atom = neighbors[0]
     heavy_sym = heavy_atom.GetSymbol()
     heavy_idx = heavy_atom.GetIdx()
-    
-    # Tester les patterns SMARTS
+
     for proton_type, smarts in PROTON_TYPE_SMARTS.items():
         try:
             pattern = Chem.MolFromSmarts(smarts)
@@ -7104,8 +5201,7 @@ def _identify_proton_type_smarts(mol: Chem.Mol, h_idx: int) -> str:
                     return proton_type
         except:
             continue
-    
-    # Fallback basé sur l'atome lourd
+
     if heavy_sym == "O":
         return "OH_alcohol"
     elif heavy_sym == "N":
@@ -7123,104 +5219,59 @@ def _identify_proton_type_smarts(mol: Chem.Mol, h_idx: int) -> str:
                 return "CH2_alkyl"
             else:
                 return "CH_alkyl"
-    
-    return "default"
 
+    return "default"
 
 def _calculate_kamlet_taft_correction(
     proton_type: str,
     solvent_name: str,
     reference_solvent: str = "CDCl3"
 ) -> float:
-    """
-    Calcule la correction de déplacement chimique basée sur les paramètres Kamlet-Taft.
-    
-    Δδ = a·Δα + b·Δβ + c·Δπ*
-    
-    où Δα = α(solvant) - α(référence), etc.
-    
-    Args:
-        proton_type: Type de proton (ex: "OH_phenol", "Ar_H")
-        solvent_name: Nom du solvant cible
-        reference_solvent: Solvant de référence (défaut: CDCl3)
-    
-    Returns:
-        Correction en ppm
-    """
-    # Paramètres du solvant cible et de référence
+
     params_target = KAMLET_TAFT_PARAMS.get(solvent_name, KAMLET_TAFT_PARAMS.get("CDCl3"))
     params_ref = KAMLET_TAFT_PARAMS.get(reference_solvent, KAMLET_TAFT_PARAMS.get("CDCl3"))
-    
-    # Différences de paramètres
+
     d_alpha = params_target["alpha"] - params_ref["alpha"]
     d_beta = params_target["beta"] - params_ref["beta"]
     d_pi = params_target["pi_star"] - params_ref["pi_star"]
-    
-    # Coefficients de sensibilité du proton
-    sensitivity = PROTON_SOLVENT_SENSITIVITY.get(proton_type, 
+
+    sensitivity = PROTON_SOLVENT_SENSITIVITY.get(proton_type,
                   PROTON_SOLVENT_SENSITIVITY.get("CH3_alkyl", {"a": 0, "b": 0, "c": 0, "d": 0}))
-    
-    # Calcul de la correction
+
     correction = (
         sensitivity["a"] * d_alpha +
         sensitivity["b"] * d_beta +
         sensitivity["c"] * d_pi +
         sensitivity["d"]
     )
-    
-    return correction
 
+    return correction
 
 def _calculate_temperature_correction(
     proton_type: str,
     temperature_k: float,
     reference_temp_k: float = 298.15
 ) -> float:
-    """
-    Calcule la correction de température pour un type de proton.
-    
-    Δδ = coef × (T - T_ref)
-    
-    Args:
-        proton_type: Type de proton
-        temperature_k: Température de mesure (K)
-        reference_temp_k: Température de référence (K)
-    
-    Returns:
-        Correction en ppm
-    """
-    # Coefficient de température
-    coef = TEMPERATURE_COEFFICIENTS.get(proton_type, 
+
+    coef = TEMPERATURE_COEFFICIENTS.get(proton_type,
                                         TEMPERATURE_COEFFICIENTS.get("default", -0.0005))
-    
-    # Différence de température
+
     dT = temperature_k - reference_temp_k
-    
+
     return coef * dT
 
-
 def _is_proton_exchangeable(mol: Chem.Mol, h_idx: int) -> bool:
-    """
-    Détermine si un proton est échangeable (OH, NH, SH).
-    
-    Args:
-        mol: Molécule RDKit
-        h_idx: Index de l'atome H
-    
-    Returns:
-        True si le proton est échangeable
-    """
+
     h_atom = mol.GetAtomWithIdx(h_idx)
     neighbors = h_atom.GetNeighbors()
-    
+
     if not neighbors:
         return False
-    
+
     heavy_atom = neighbors[0]
     sym = heavy_atom.GetSymbol()
-    
-    return sym in ("O", "N", "S")
 
+    return sym in ("O", "N", "S")
 
 def _calculate_exchange_effect(
     mol: Chem.Mol,
@@ -7228,101 +5279,70 @@ def _calculate_exchange_effect(
     solvent_name: str,
     temperature_k: float = 298.15
 ) -> Dict[str, Any]:
-    """
-    Calcule l'effet de l'échange chimique sur un proton.
-    
-    Args:
-        mol: Molécule RDKit
-        h_idx: Index du proton
-        solvent_name: Nom du solvant
-        temperature_k: Température
-    
-    Returns:
-        Dict avec 'visible' (bool), 'broadening' (float), 'shift_correction' (float)
-    """
+
     if not _is_proton_exchangeable(mol, h_idx):
         return {"visible": True, "broadening": 1.0, "shift_correction": 0.0}
-    
+
     h_atom = mol.GetAtomWithIdx(h_idx)
     heavy_atom = h_atom.GetNeighbors()[0]
     heavy_sym = heavy_atom.GetSymbol()
-    
-    # Solvants qui échangent les protons labiles
+
     exchange_solvents = {
-        "D2O": {"OH": False, "NH": False, "SH": True},      # OH, NH échangés
-        "CD3OD": {"OH": False, "NH": True, "SH": True},     # OH échangé
+        "D2O": {"OH": False, "NH": False, "SH": True},
+        "CD3OD": {"OH": False, "NH": True, "SH": True},
         "CD3OD + D2O": {"OH": False, "NH": False, "SH": True},
     }
-    
-    # Vérifier si visible
+
     visibility_map = exchange_solvents.get(solvent_name, {"OH": True, "NH": True, "SH": True})
     proton_class = "OH" if heavy_sym == "O" else ("NH" if heavy_sym == "N" else "SH")
     visible = visibility_map.get(proton_class, True)
-    
-    # Élargissement de raie dû à l'échange
+
     broadening_factors = {
         "CDCl3": {"OH": 3.0, "NH": 2.0, "SH": 1.5},
-        "DMSO-d6": {"OH": 1.2, "NH": 1.1, "SH": 1.0},      # Échange lent → pics fins
+        "DMSO-d6": {"OH": 1.2, "NH": 1.1, "SH": 1.0},
         "C6D6": {"OH": 2.0, "NH": 1.5, "SH": 1.2},
         "acetone-d6": {"OH": 2.5, "NH": 1.8, "SH": 1.3},
-        "pyridine-d5": {"OH": 1.3, "NH": 1.1, "SH": 1.0},  # Base → stabilise
+        "pyridine-d5": {"OH": 1.3, "NH": 1.1, "SH": 1.0},
     }
-    
+
     broadening_map = broadening_factors.get(solvent_name, {"OH": 2.0, "NH": 1.5, "SH": 1.2})
     broadening = broadening_map.get(proton_class, 1.0)
-    
-    # Effet de température sur l'élargissement
+
     T_factor = (temperature_k / 298.15) ** 1.5
     broadening *= T_factor
-    
-    # Correction de shift due aux liaisons H avec le solvant
+
     kt_params = KAMLET_TAFT_PARAMS.get(solvent_name, KAMLET_TAFT_PARAMS.get("CDCl3"))
     shift_correction = 0.0
-    
+
     if proton_class in ("OH", "NH"):
-        # Proton donneur + solvant accepteur → déblindage
-        shift_correction = kt_params["beta"] * 1.5  # Proportionnel à β
-    
+
+        shift_correction = kt_params["beta"] * 1.5
+
     return {
         "visible": visible,
         "broadening": broadening,
         "shift_correction": shift_correction
     }
 
-
-# ===========================================================================
-# SIMULATION EXACTE PAR DIAGONALISATION DE L'HAMILTONIEN DE SPIN
-# ===========================================================================
-# Cette section implémente le calcul quantique exact des spectres RMN
-# pour les systèmes de spin couplés (AB, AB₂, ABX, AA'BB', etc.)
-# La méthode donne les positions et intensités exactes des raies.
-# ===========================================================================
-
 def _build_spin_operators(n_spins: int) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-    """
-    Construit les opérateurs de spin Ix, Iy, Iz pour n spins 1/2.
-    
-    Returns:
-        (Ix_list, Iy_list, Iz_list) où chaque liste contient n matrices 2^n × 2^n
-    """
+
     dim = 2 ** n_spins
-    
-    # Matrices de Pauli / 2
+
     Ix_single = np.array([[0, 0.5], [0.5, 0]], dtype=complex)
     Iy_single = np.array([[0, -0.5j], [0.5j, 0]], dtype=complex)
     Iz_single = np.array([[0.5, 0], [0, -0.5]], dtype=complex)
     I_identity = np.eye(2, dtype=complex)
-    
+
     Ix_list = []
     Iy_list = []
     Iz_list = []
-    
+
     for spin_idx in range(n_spins):
-        # Produit tensoriel: I ⊗ I ⊗ ... ⊗ Ix ⊗ ... ⊗ I
+
         Ix = np.array([[1]], dtype=complex)
         Iy = np.array([[1]], dtype=complex)
         Iz = np.array([[1]], dtype=complex)
-        
+
         for j in range(n_spins):
             if j == spin_idx:
                 Ix = np.kron(Ix, Ix_single)
@@ -7332,13 +5352,12 @@ def _build_spin_operators(n_spins: int) -> Tuple[List[np.ndarray], List[np.ndarr
                 Ix = np.kron(Ix, I_identity)
                 Iy = np.kron(Iy, I_identity)
                 Iz = np.kron(Iz, I_identity)
-        
+
         Ix_list.append(Ix)
         Iy_list.append(Iy)
         Iz_list.append(Iz)
-    
-    return Ix_list, Iy_list, Iz_list
 
+    return Ix_list, Iy_list, Iz_list
 
 def _build_spin_hamiltonian(
     frequencies_hz: List[float],
@@ -7347,82 +5366,52 @@ def _build_spin_hamiltonian(
     Iy_list: List[np.ndarray],
     Iz_list: List[np.ndarray]
 ) -> np.ndarray:
-    """
-    Construit l'Hamiltonien de spin complet.
-    
-    H = -Σᵢ νᵢ Izᵢ + Σᵢ<ⱼ Jᵢⱼ (Ixᵢ·Ixⱼ + Iyᵢ·Iyⱼ + Izᵢ·Izⱼ)
-    
-    Args:
-        frequencies_hz: Liste des fréquences de Larmor (νᵢ) en Hz
-        J_matrix: Matrice des couplages J[i,j] en Hz
-        Ix_list, Iy_list, Iz_list: Opérateurs de spin
-    
-    Returns:
-        Hamiltonien (matrice hermitienne)
-    """
+
     n_spins = len(frequencies_hz)
     dim = 2 ** n_spins
     H = np.zeros((dim, dim), dtype=complex)
-    
-    # Termes Zeeman: -Σ νᵢ Izᵢ
+
     for i in range(n_spins):
         H -= frequencies_hz[i] * Iz_list[i]
-    
-    # Termes de couplage: Σᵢ<ⱼ Jᵢⱼ Iᵢ·Iⱼ
+
     for i in range(n_spins):
         for j in range(i + 1, n_spins):
             Jij = J_matrix[i, j]
             if abs(Jij) > 1e-10:
-                # Iᵢ·Iⱼ = Ixᵢ·Ixⱼ + Iyᵢ·Iyⱼ + Izᵢ·Izⱼ
-                H += Jij * (Ix_list[i] @ Ix_list[j] + 
-                           Iy_list[i] @ Iy_list[j] + 
-                           Iz_list[i] @ Iz_list[j])
-    
-    return H
 
+                H += Jij * (Ix_list[i] @ Ix_list[j] +
+                           Iy_list[i] @ Iy_list[j] +
+                           Iz_list[i] @ Iz_list[j])
+
+    return H
 
 def _calculate_nmr_transitions(
     H: np.ndarray,
     Ix_list: List[np.ndarray],
     intensity_threshold: float = 0.001
 ) -> List[Tuple[float, float, int, int]]:
-    """
-    Calcule les transitions RMN permises par diagonalisation.
-    
-    Args:
-        H: Hamiltonien de spin
-        Ix_list: Opérateurs Ix pour chaque spin
-        intensity_threshold: Seuil minimum d'intensité
-    
-    Returns:
-        Liste de (fréquence_hz, intensité, état_initial, état_final)
-    """
+
     from scipy import linalg
-    
-    # Diagonalisation
+
     eigenvalues, eigenvectors = linalg.eigh(H)
-    
-    # Opérateur de détection: Ix_total = Σ Ixᵢ
+
     Ix_total = sum(Ix_list)
-    
-    # Calculer toutes les transitions
+
     dim = len(eigenvalues)
     transitions = []
-    
+
     for i in range(dim):
         for j in range(i + 1, dim):
-            # Fréquence de transition
+
             freq = eigenvalues[j] - eigenvalues[i]
-            
-            # Élément de matrice <j|Ix|i>
+
             matrix_element = eigenvectors[:, j].conj().T @ Ix_total @ eigenvectors[:, i]
             intensity = float(abs(matrix_element) ** 2)
-            
+
             if intensity > intensity_threshold:
                 transitions.append((float(freq), intensity, i, j))
-    
-    return transitions
 
+    return transitions
 
 def _simulate_spin_system_exact(
     frequencies_hz: List[float],
@@ -7431,31 +5420,16 @@ def _simulate_spin_system_exact(
     use_fragmentation: bool = True,
     fragmentation_threshold: float = 0.05
 ) -> List[Tuple[float, float]]:
-    """
-    Simule un système de spin par diagonalisation exacte de l'Hamiltonien.
 
-    LIMITE: 10 spins maximum (1024×1024 matrices) sans fragmentation.
-    Avec fragmentation: peut gérer des systèmes plus grands si fragmentables.
-
-    Args:
-        frequencies_hz: Fréquences de Larmor pour chaque spin (en Hz)
-        J_matrix: Matrice des couplages J[i,j] en Hz (symétrique)
-        intensity_threshold: Seuil d'intensité minimum
-        use_fragmentation: Si True, tenter la fragmentation pour systèmes > 10 spins
-        fragmentation_threshold: Seuil |J/Δν| pour la fragmentation (défaut 0.05)
-
-    Returns:
-        Liste de (position_hz, intensité) pour chaque raie, ou None si trop grand
-    """
     n_spins = len(frequencies_hz)
 
     if n_spins == 0:
         return []
 
     if n_spins > 10:
-        # Système trop grand pour simulation directe
+
         if use_fragmentation:
-            # Tenter la fragmentation automatique
+
             import sys
             print(f"[INFO] Système de {n_spins} spins > 10, tentative de fragmentation", file=sys.stderr)
             result = _simulate_large_spin_system(
@@ -7468,22 +5442,15 @@ def _simulate_spin_system_exact(
             else:
                 print(f"[WARN] Fragmentation échouée, fallback approximation premier ordre", file=sys.stderr)
 
-        # Fragmentation désactivée ou échouée → retourner None pour fallback
         return None
 
-    # ≤ 10 spins: simulation directe par diagonalisation
-    # Construire les opérateurs
     Ix_list, Iy_list, Iz_list = _build_spin_operators(n_spins)
 
-    # Construire l'Hamiltonien
     H = _build_spin_hamiltonian(frequencies_hz, J_matrix, Ix_list, Iy_list, Iz_list)
 
-    # Calculer les transitions
     transitions = _calculate_nmr_transitions(H, Ix_list, intensity_threshold)
 
-    # Retourner (freq, intensity)
     return [(freq, intensity) for freq, intensity, _, _ in transitions]
-
 
 def simulate_AB_system(
     delta_A_ppm: float,
@@ -7491,32 +5458,17 @@ def simulate_AB_system(
     J_AB_hz: float,
     spectrometer_mhz: float = 400.0
 ) -> Dict[str, Any]:
-    """
-    Simule exactement un système AB (2 spins couplés).
-    
-    Args:
-        delta_A_ppm: Déplacement chimique du proton A (ppm)
-        delta_B_ppm: Déplacement chimique du proton B (ppm)
-        J_AB_hz: Constante de couplage (Hz)
-        spectrometer_mhz: Fréquence du spectromètre (MHz)
-    
-    Returns:
-        Dict avec 'transitions', 'delta_nu_J_ratio', 'is_second_order', 'label'
-    """
-    # Convertir en Hz
+
     nu_A = delta_A_ppm * spectrometer_mhz
     nu_B = delta_B_ppm * spectrometer_mhz
-    
+
     delta_nu = abs(nu_A - nu_B)
     ratio = delta_nu / abs(J_AB_hz) if J_AB_hz != 0 else float('inf')
-    
-    # Construire la matrice J
+
     J_matrix = np.array([[0, J_AB_hz], [J_AB_hz, 0]])
-    
-    # Simuler
+
     transitions = _simulate_spin_system_exact([nu_A, nu_B], J_matrix)
-    
-    # Classifier
+
     if ratio > 10:
         is_second_order = False
         label = "d" if len(transitions) == 2 else "dd"
@@ -7526,7 +5478,7 @@ def simulate_AB_system(
     else:
         is_second_order = True
         label = "AB"
-    
+
     return {
         "transitions": transitions,
         "delta_nu_hz": delta_nu,
@@ -7537,42 +5489,29 @@ def simulate_AB_system(
         "center_hz": (nu_A + nu_B) / 2,
     }
 
-
 def simulate_AB2_system(
     delta_A_ppm: float,
     delta_B_ppm: float,
     J_AB_hz: float,
     spectrometer_mhz: float = 400.0
 ) -> Dict[str, Any]:
-    """
-    Simule exactement un système AB₂ (1 spin couplé à 2 équivalents).
-    
-    Exemple: CHCl₂-CH₂Cl
-    
-    Args:
-        delta_A_ppm: Déplacement chimique du proton A
-        delta_B_ppm: Déplacement chimique des 2 protons B (équivalents)
-        J_AB_hz: Constante de couplage A-B
-        spectrometer_mhz: Fréquence du spectromètre
-    """
+
     nu_A = delta_A_ppm * spectrometer_mhz
     nu_B = delta_B_ppm * spectrometer_mhz
-    
-    # 3 spins: A, B1, B2 (B1 et B2 ont même fréquence)
+
     frequencies = [nu_A, nu_B, nu_B]
-    
-    # Matrice J: A couplé à B1 et B2, B1-B2 fortement couplé (J~0 mais même shift)
+
     J_matrix = np.array([
         [0, J_AB_hz, J_AB_hz],
-        [J_AB_hz, 0, 0],      # B1-B2: pas de couplage explicite (équivalents)
+        [J_AB_hz, 0, 0],
         [J_AB_hz, 0, 0]
     ])
-    
+
     transitions = _simulate_spin_system_exact(frequencies, J_matrix)
-    
+
     delta_nu = abs(nu_A - nu_B)
     ratio = delta_nu / abs(J_AB_hz) if J_AB_hz != 0 else float('inf')
-    
+
     return {
         "transitions": transitions,
         "delta_nu_hz": delta_nu,
@@ -7581,7 +5520,6 @@ def simulate_AB2_system(
         "is_second_order": ratio < 10,
         "label": "AB2" if ratio < 10 else "AX2",
     }
-
 
 def simulate_ABX_system(
     delta_A_ppm: float,
@@ -7592,33 +5530,24 @@ def simulate_ABX_system(
     J_BX_hz: float,
     spectrometer_mhz: float = 400.0
 ) -> Dict[str, Any]:
-    """
-    Simule exactement un système ABX (2 spins fortement couplés + 1 distinct).
-    
-    Exemple: Styrène oxide, amino-alcools
-    
-    Args:
-        delta_A_ppm, delta_B_ppm: Protons du système AB
-        delta_X_ppm: Proton X (bien séparé)
-        J_AB_hz, J_AX_hz, J_BX_hz: Constantes de couplage
-    """
+
     nu_A = delta_A_ppm * spectrometer_mhz
     nu_B = delta_B_ppm * spectrometer_mhz
     nu_X = delta_X_ppm * spectrometer_mhz
-    
+
     frequencies = [nu_A, nu_B, nu_X]
-    
+
     J_matrix = np.array([
         [0, J_AB_hz, J_AX_hz],
         [J_AB_hz, 0, J_BX_hz],
         [J_AX_hz, J_BX_hz, 0]
     ])
-    
+
     transitions = _simulate_spin_system_exact(frequencies, J_matrix)
-    
+
     delta_nu_AB = abs(nu_A - nu_B)
     ratio_AB = delta_nu_AB / abs(J_AB_hz) if J_AB_hz != 0 else float('inf')
-    
+
     return {
         "transitions": transitions,
         "delta_nu_AB_hz": delta_nu_AB,
@@ -7630,7 +5559,6 @@ def simulate_ABX_system(
         "label": "ABX" if ratio_AB < 10 else "AMX",
     }
 
-
 def simulate_AA_BB_system(
     delta_A_ppm: float,
     delta_B_ppm: float,
@@ -7640,41 +5568,24 @@ def simulate_AA_BB_system(
     J_AB_prime_hz: float = 0.0,
     spectrometer_mhz: float = 400.0
 ) -> Dict[str, Any]:
-    """
-    Simule exactement un système AA'BB' (ex: -CH₂-CH₂-).
-    
-    4 spins: A, A', B, B'
-    - A et A' sont équivalents chimiquement mais pas magnétiquement
-    - Idem pour B et B'
-    
-    Args:
-        delta_A_ppm: Déplacement chimique des protons A/A'
-        delta_B_ppm: Déplacement chimique des protons B/B'
-        J_AB_hz: Couplage vicinal A-B (et A'-B')
-        J_AA_hz: Couplage geminal A-A' (typiquement ~-12 Hz pour CH₂)
-        J_BB_hz: Couplage geminal B-B'
-        J_AB_prime_hz: Couplage longue portée A-B' (et A'-B)
-    """
+
     nu_A = delta_A_ppm * spectrometer_mhz
     nu_B = delta_B_ppm * spectrometer_mhz
-    
-    # 4 spins: A, A', B, B'
+
     frequencies = [nu_A, nu_A, nu_B, nu_B]
-    
-    # Matrice J (symétrique)
-    #        A    A'   B    B'
+
     J_matrix = np.array([
-        [0,      J_AA_hz,       J_AB_hz,        J_AB_prime_hz],  # A
-        [J_AA_hz, 0,            J_AB_prime_hz,  J_AB_hz],        # A'
-        [J_AB_hz, J_AB_prime_hz, 0,             J_BB_hz],        # B
-        [J_AB_prime_hz, J_AB_hz, J_BB_hz,       0]               # B'
+        [0,      J_AA_hz,       J_AB_hz,        J_AB_prime_hz],
+        [J_AA_hz, 0,            J_AB_prime_hz,  J_AB_hz],
+        [J_AB_hz, J_AB_prime_hz, 0,             J_BB_hz],
+        [J_AB_prime_hz, J_AB_hz, J_BB_hz,       0]
     ])
-    
+
     transitions = _simulate_spin_system_exact(frequencies, J_matrix)
-    
+
     delta_nu = abs(nu_A - nu_B)
     ratio = delta_nu / abs(J_AB_hz) if J_AB_hz != 0 else float('inf')
-    
+
     return {
         "transitions": transitions,
         "delta_nu_hz": delta_nu,
@@ -7686,42 +5597,31 @@ def simulate_AA_BB_system(
         "label": "AA'BB'" if ratio < 10 else "AA'XX'",
     }
 
-
 def simulate_A2X3_system(
     delta_A_ppm: float,
     delta_X_ppm: float,
     J_AX_hz: float,
     spectrometer_mhz: float = 400.0
 ) -> Dict[str, Any]:
-    """
-    Simule un système A₂X₃ (ex: éthanol CH₂-CH₃).
-    
-    5 spins: 2 A (CH₂) + 3 X (CH₃)
-    
-    Note: Pour les très grands systèmes, on peut utiliser des approximations.
-    """
+
     nu_A = delta_A_ppm * spectrometer_mhz
     nu_X = delta_X_ppm * spectrometer_mhz
-    
-    # 5 spins: A1, A2, X1, X2, X3
+
     frequencies = [nu_A, nu_A, nu_X, nu_X, nu_X]
-    
-    # Matrice J
-    #        A1   A2   X1   X2   X3
+
     J_matrix = np.zeros((5, 5))
-    # A1-A2: geminal (souvent ~0 ou négatif)
+
     J_matrix[0, 1] = J_matrix[1, 0] = 0.0
-    # A-X: vicinal
+
     for i in range(2):
         for j in range(2, 5):
             J_matrix[i, j] = J_matrix[j, i] = J_AX_hz
-    # X-X: aucun couplage entre équivalents
-    
+
     transitions = _simulate_spin_system_exact(frequencies, J_matrix)
-    
+
     delta_nu = abs(nu_A - nu_X)
     ratio = delta_nu / abs(J_AX_hz) if J_AX_hz != 0 else float('inf')
-    
+
     return {
         "transitions": transitions,
         "delta_nu_hz": delta_nu,
@@ -7731,7 +5631,6 @@ def simulate_A2X3_system(
         "label": "A2B3" if ratio < 10 else "A2X3",
     }
 
-
 def _get_exact_spectrum_for_spin_system(
     system_type: str,
     proton_shifts_ppm: Dict[int, float],
@@ -7739,65 +5638,48 @@ def _get_exact_spectrum_for_spin_system(
     J_values: List[float],
     spectrometer_mhz: float = 400.0
 ) -> Optional[List[Tuple[float, float]]]:
-    """
-    Interface pour obtenir le spectre exact d'un système de spin détecté.
-    
-    Args:
-        system_type: Type de système ("AB", "AB₂", "AA'BB'", "ABX", "A₂X₃")
-        proton_shifts_ppm: Dictionnaire des shifts par indice de proton
-        h_indices: Indices des protons impliqués
-        J_values: Valeurs de J correspondantes
-        spectrometer_mhz: Fréquence du spectromètre
-    
-    Returns:
-        Liste de (freq_hz, intensity) ou None si non applicable
-    """
+
     if not h_indices or not proton_shifts_ppm:
         return None
-    
-    # Extraire les shifts
+
     shifts = [proton_shifts_ppm.get(h, 0.0) for h in h_indices]
-    
+
     if len(shifts) < 2:
         return None
-    
+
     J_main = J_values[0] if J_values else 7.0
-    
+
     if system_type in ("AB", "AB_weak"):
         if len(shifts) >= 2:
             result = simulate_AB_system(shifts[0], shifts[1], J_main, spectrometer_mhz)
             return result["transitions"]
-    
+
     elif system_type == "AB₂":
         if len(shifts) >= 2:
             result = simulate_AB2_system(shifts[0], shifts[1], J_main, spectrometer_mhz)
             return result["transitions"]
-    
+
     elif system_type in ("AA'BB'", "A₂X₂"):
         if len(shifts) >= 2:
-            result = simulate_AA_BB_system(shifts[0], shifts[1], J_main, 
+            result = simulate_AA_BB_system(shifts[0], shifts[1], J_main,
                                            J_AA_hz=-12.0, J_BB_hz=-12.0,
                                            spectrometer_mhz=spectrometer_mhz)
             return result["transitions"]
-    
+
     elif system_type == "ABX":
         if len(shifts) >= 3 and len(J_values) >= 3:
             result = simulate_ABX_system(shifts[0], shifts[1], shifts[2],
                                         J_values[0], J_values[1], J_values[2],
                                         spectrometer_mhz)
             return result["transitions"]
-    
+
     elif system_type in ("A₂X₃", "A₂B₃"):
         if len(shifts) >= 2:
             result = simulate_A2X3_system(shifts[0], shifts[1], J_main, spectrometer_mhz)
             return result["transitions"]
-    
+
     return None
 
-
-# ---------------------------
-# Détection couplage virtuel
-# ---------------------------
 def _detect_virtual_coupling(
     molH: Chem.Mol,
     h_idx: int,
@@ -7806,30 +5688,21 @@ def _detect_virtual_coupling(
     proton_shifts_ppm: Dict[int, float],
     spectrometer_mhz: float
 ) -> bool:
-    """
-    Détecte un couplage virtuel (X couplé à un système AB fortement couplé).
-    
-    IMPORTANT: Le couplage virtuel ne s'applique PAS si les deux partenaires
-    sont des protons équivalents (attachés au même carbone, ex: CH₂ ou CH₃).
-    Dans ce cas, ils n'ont pas de différence de shift chimique et ne forment
-    pas un système AB.
-    """
+
     if len(partners) != 2 or len(J_vals) != 2:
         return False
 
     h_a, h_b = partners
-    
-    # ✅ CORRECTION: Vérifier si les partenaires sont sur le MÊME carbone (équivalents)
-    # Si oui, pas de couplage virtuel possible car ils ont le même shift
+
     try:
         parent_a = next(n.GetIdx() for n in molH.GetAtomWithIdx(h_a).GetNeighbors())
         parent_b = next(n.GetIdx() for n in molH.GetAtomWithIdx(h_b).GetNeighbors())
         if parent_a == parent_b:
-            # Les deux H sont sur le même carbone → équivalents, pas de couplage virtuel
+
             return False
     except Exception:
         pass
-    
+
     if h_a not in proton_shifts_ppm or h_b not in proton_shifts_ppm:
         return False
 
@@ -7844,148 +5717,59 @@ def _detect_virtual_coupling(
         return True
     return False
 
-# ---------------------------
-# Karplus avec correction substituants
-# ---------------------------
-
-# ===================================================================
-# ÉQUATIONS KARPLUS SPÉCIALISÉES
-# ===================================================================
-#
-# Ce module implémente plusieurs variantes de l'équation Karplus
-# optimisées pour différents systèmes moléculaires:
-#
-# 1. HAASNOOT-ALTONA 7 PARAMÈTRES (1980)
-#    Pour ³J(H-C-C-H) saturés avec corrections d'électronégativité
-#    Réf: Tetrahedron 36, 2783-2792 (1980)
-#
-# 2. GARBISCH ALCÈNES (1968)
-#    Pour ³J(H-C=C-H) vinyliques cis/trans
-#    Réf: J. Am. Chem. Soc. 90, 6543 (1968)
-#
-# 3. BYSTROV PEPTIDES (1976)
-#    Pour ³J(HN-Cα-C'-N) et ³J(HN-Cα-Hα) dans les peptides
-#    Réf: Prog. NMR Spectrosc. 10, 41-82 (1976)
-#
-# ===================================================================
-
-# Électronégativités de Huggins pour Haasnoot-Altona
-# IMPORTANT: Dans l'équation Haasnoot-Altona, Δχ = χ(substituant) - χ(H)
-# où χ(H) est pris comme référence = 2.20 (pas 0.0)
-# Cela donne des Δχ plus raisonnables (~0.3 à 1.7)
-#
-# Réf: Haasnoot et al., Tetrahedron 36, 2783-2792 (1980)
-# Réf: Huggins M.L., J. Am. Chem. Soc. 75, 4123 (1953)
 _HUGGINS_ELECTRONEGATIVITY = {
-    'H': 2.20,   # Référence pour H (pas 0!)
-    'C': 2.60, 
-    'N': 3.05, 
-    'O': 3.50, 
+    'H': 2.20,
+    'C': 2.60,
+    'N': 3.05,
+    'O': 3.50,
     'F': 3.90,
-    'P': 2.19, 
-    'S': 2.58, 
-    'Cl': 3.16, 
-    'Br': 2.96, 
+    'P': 2.19,
+    'S': 2.58,
+    'Cl': 3.16,
+    'Br': 2.96,
     'I': 2.66,
-    'Si': 1.90, 
-    'B': 2.04, 
+    'Si': 1.90,
+    'B': 2.04,
     'Se': 2.55,
 }
 
-# Δχ typiques résultantes:
-# Δχ(C) = 2.60 - 2.20 = 0.40
-# Δχ(N) = 3.05 - 2.20 = 0.85
-# Δχ(O) = 3.50 - 2.20 = 1.30
-# Δχ(F) = 3.90 - 2.20 = 1.70
-
-# Paramètres Karplus pour alcènes - Calibrés sur données expérimentales
-# ³J(H-C=C-H) = A + B·cos(θ) + C·cos(2θ)
-# Convention: θ = 0° pour cis (H sur même côté), θ = 180° pour trans
-# 
-# Pour cis (θ=0°): J = A + B + C
-# Pour trans (θ=180°): J = A - B + C
-#
-# Valeurs typiques: Jcis ~10 Hz, Jtrans ~16 Hz, Jgem ~2 Hz
-#
-# Références:
-# - Garbisch E.W., J. Am. Chem. Soc. 90, 6543 (1968)
-# - Bothner-By A.A., Adv. Magn. Reson. 1, 195 (1965)
-# - Jackman & Sternhell, Applications of NMR Spectroscopy
 _GARBISCH_ALKENE_PARAMS = {
-    # (A, B, C) calibrés pour: Jcis(0°)~10Hz, Jtrans(180°)~16Hz
-    # Jcis = A + B + C = 10, Jtrans = A - B + C = 16 → B = -3
-    # A + C = 13, donc A = 11, C = 2 donne Jcis = 11-3+2 = 10, Jtrans = 11+3+2 = 16 ✓
-    'standard': (11.0, -3.0, 2.0),      # Alcènes simples: cis=10, trans=16
-    'conjugated': (11.5, -3.5, 2.0),    # Alcènes conjugués: légèrement plus grands
-    'strained': (9.0, -2.5, 1.5),       # Alcènes contraints: valeurs réduites
-    'electronegative': (10.0, -2.5, 1.5),  # Substituants électronégatifs
+
+    'standard': (11.0, -3.0, 2.0),
+    'conjugated': (11.5, -3.5, 2.0),
+    'strained': (9.0, -2.5, 1.5),
+    'electronegative': (10.0, -2.5, 1.5),
 }
 
-# Paramètres Bystrov pour peptides (1976)
-# ³J(HN-Cα-Hα) dépend de φ avec une phase de -60° due à la géométrie peptidique
-# Valeurs typiques: hélice α (φ≈-60°) ~3-5 Hz, feuillet β (φ≈-120°) ~8-9 Hz
-#
-# Références:
-# - Bystrov V.F., Prog. NMR Spectrosc. 10, 41-82 (1976)
-# - Vuister G.W. & Bax A., J. Am. Chem. Soc. 115, 7772 (1993)
-# - Pardi A. et al., J. Mol. Biol. 180, 741 (1984)
 _BYSTROV_PEPTIDE_PARAMS = {
-    # (A, B, C) en Hz - Calibrés pour valeurs expérimentales
-    'HNCH_alpha': (7.9, -1.05, 0.65),   # ³J(HN-Cα-Hα): hélice~4Hz, feuillet~8Hz
-    'HNCH_psi': (5.8, -1.2, 1.4),       # ³J(HN-C'-N) via ψ
-    'HCCH_peptide': (9.5, -1.6, 1.8),   # ³J(Hα-Cα-Cβ-Hβ) chaîne latérale
+
+    'HNCH_alpha': (7.9, -1.05, 0.65),
+    'HNCH_psi': (5.8, -1.2, 1.4),
+    'HCCH_peptide': (9.5, -1.6, 1.8),
 }
 
-# Paramètres Haasnoot-Altona complets (7 paramètres, 1980)
-# ³J = P1·cos²φ + P2·cosφ + P3 + Σᵢ Δχᵢ·[P4 + P5·cos²(sᵢ·φ + P6·|Δχᵢ|)] + P7·ΠΔχ
 _HAASNOOT_7_PARAMS = {
-    'P1': 13.70,   # cos²φ coefficient (Hz)
-    'P2': -0.73,   # cosφ coefficient (Hz)
-    'P3': 0.00,    # constante (Hz)
-    'P4': 0.56,    # correction EN constante
-    'P5': -2.47,   # correction EN cos²
-    'P6': 16.9,    # phase EN (degrés)
-    'P7': -0.47,   # terme produit Π(Δχ) - NOUVEAU
+    'P1': 13.70,
+    'P2': -0.73,
+    'P3': 0.00,
+    'P4': 0.56,
+    'P5': -2.47,
+    'P6': 16.9,
+    'P7': -0.47,
 }
-
 
 def _karplus_garbisch_alkene(
     theta_deg: float,
     alkene_type: str = 'standard',
     substituents: Optional[List[str]] = None
 ) -> float:
-    """
-    Équation Karplus-Garbisch pour couplages vinyliques ³J(H-C=C-H).
-    
-    Cette équation est spécifiquement paramétrée pour les alcènes et donne
-    des résultats plus précis que l'équation Karplus standard pour:
-    - Couplages cis (³Jcis ≈ 6-12 Hz)
-    - Couplages trans (³Jtrans ≈ 12-18 Hz)
-    - Couplages géminaux (²J ≈ 0-3 Hz)
-    
-    Équation: ³J = A + B·cos(θ) + C·cos(2θ)
-    
-    Args:
-        theta_deg: Angle dièdre H-C=C-H en degrés
-                   0° = cis, 180° = trans
-        alkene_type: Type d'alcène ('standard', 'conjugated', 'strained', 'electronegative')
-        substituents: Liste des substituants sur la double liaison (pour ajustements)
-    
-    Returns:
-        ³J en Hz
-    
-    Références:
-        - Garbisch E.W., J. Am. Chem. Soc. 90, 6543-6544 (1968)
-        - Bothner-By A.A., Adv. Magn. Reson. 1, 195 (1965)
-    """
+
     A, B, C = _GARBISCH_ALKENE_PARAMS.get(alkene_type, _GARBISCH_ALKENE_PARAMS['standard'])
-    
+
     theta = math.radians(theta_deg)
-    
-    # Équation Garbisch de base
+
     J = A + B * math.cos(theta) + C * math.cos(2 * theta)
-    
-    # Corrections pour substituants électronégatifs
+
     if substituents:
         en_correction = 0.0
         for sub in substituents:
@@ -7993,62 +5777,32 @@ def _karplus_garbisch_alkene(
             chi_H = _HUGGINS_ELECTRONEGATIVITY.get('H', 0.0)
             delta_chi = chi - chi_H
             if delta_chi > 0.5:
-                # Réduction de J pour substituants électronégatifs
+
                 en_correction -= 0.3 * delta_chi
         J += en_correction
-    
-    return max(0.0, J)
 
+    return max(0.0, J)
 
 def _karplus_bystrov_peptide(
     phi_deg: float,
     coupling_type: str = 'HNCH_alpha',
     psi_deg: Optional[float] = None
 ) -> float:
-    """
-    Équation Karplus-Bystrov pour couplages peptidiques.
-    
-    Cette équation est spécifiquement paramétrée pour les protéines et peptides,
-    tenant compte de la géométrie particulière du backbone peptidique.
-    
-    Types de couplages:
-    - HNCH_alpha: ³J(HN-Cα-Hα) - le plus utilisé pour déterminer φ
-    - HNCH_psi: ³J(HN-C'-N) - pour déterminer ψ  
-    - HCCH_peptide: ³J(Hα-Cα-Cβ-Hβ) - chaînes latérales
-    
-    Équation HNCH: ³J = A·cos²(φ-60°) + B·cos(φ-60°) + C
-    
-    La phase de -60° correspond à la géométrie standard du backbone peptidique
-    où le NH et le Hα sont décalés de ~60° par rapport à l'angle dièdre φ pur.
-    
-    Args:
-        phi_deg: Angle dièdre φ (C'-N-Cα-C') en degrés
-        coupling_type: Type de couplage peptidique
-        psi_deg: Angle dièdre ψ (N-Cα-C'-N) pour couplages dépendant de ψ
-    
-    Returns:
-        ³J en Hz
-    
-    Références:
-        - Bystrov V.F., Prog. NMR Spectrosc. 10, 41-82 (1976)
-        - Pardi A. et al., J. Mol. Biol. 180, 741 (1984)
-        - Vuister G.W. & Bax A., J. Am. Chem. Soc. 115, 7772 (1993)
-    """
+
     A, B, C = _BYSTROV_PEPTIDE_PARAMS.get(coupling_type, _BYSTROV_PEPTIDE_PARAMS['HNCH_alpha'])
-    
+
     if coupling_type == 'HNCH_alpha':
-        # ³J(HN-Cα-Hα) dépend de φ avec phase de -60°
+
         theta = math.radians(phi_deg - 60.0)
     elif coupling_type == 'HNCH_psi' and psi_deg is not None:
-        # Couplage via ψ
+
         theta = math.radians(psi_deg)
     else:
         theta = math.radians(phi_deg)
-    
-    J = A * (math.cos(theta) ** 2) + B * math.cos(theta) + C
-    
-    return max(0.0, J)
 
+    J = A * (math.cos(theta) ** 2) + B * math.cos(theta) + C
+
+    return max(0.0, J)
 
 def _haasnoot_orientation_sign(
     mol: Chem.Mol,
@@ -8058,42 +5812,11 @@ def _haasnoot_orientation_sign(
     substituent_idx: int,
     conf_id: int = -1
 ) -> int:
-    """
-    Détermine le signe d'orientation pour l'équation Haasnoot-Altona.
-    VERSION AMÉLIORÉE avec calcul 3D précis.
-    
-    Le signe dépend de la position relative du substituant par rapport
-    au plan H1-C1-C2-H2:
-    - +1 si le substituant est du même côté que H1 (ξ positif)
-    - -1 si le substituant est du côté opposé (ξ négatif)
-    
-    L'orientation ξ est définie par Haasnoot comme:
-    ξᵢ = sign(φ_H1-C1-C2-Sᵢ) où φ est l'angle dièdre
-    
-    Cas spéciaux traités:
-    - Substituants axiaux/équatoriaux dans cyclohexane
-    - Systèmes avec conformères multiples (moyenne pondérée)
-    - Angles proches de 0° ou 180° (ambiguïté)
-    
-    Args:
-        mol: Molécule RDKit avec coordonnées 3D
-        h1_idx: Index du premier H
-        c1_idx: Index du premier C
-        c2_idx: Index du second C
-        substituent_idx: Index de l'atome substituant
-        conf_id: ID du conformère à utiliser (-1 = premier disponible)
-    
-    Returns:
-        +1 ou -1 selon l'orientation
-    
-    References:
-        Haasnoot C.A.G. et al., Tetrahedron 36, 2783-2792 (1980), Section 2.2
-    """
+
     try:
         if not mol.GetNumConformers():
-            return 1  # Défaut si pas de 3D
-        
-        # Sélectionner le bon conformère
+            return 1
+
         if conf_id < 0:
             conf = mol.GetConformer()
         else:
@@ -8101,62 +5824,45 @@ def _haasnoot_orientation_sign(
                 conf = mol.GetConformer(conf_id)
             except Exception:
                 conf = mol.GetConformer()
-        
-        # Calculer l'angle dièdre H1-C1-C2-Substituant
+
         dihed = AllChem.GetDihedralDeg(conf, h1_idx, c1_idx, c2_idx, substituent_idx)
-        
-        # Normaliser l'angle dans [-180, 180]
+
         while dihed > 180:
             dihed -= 360
         while dihed < -180:
             dihed += 360
-        
-        # Déterminer le signe selon la convention Haasnoot
-        # Substituants avec φ dans [0°, 120°] ou [-120°, 0°] → même côté que H1 → +1
-        # Substituants avec φ dans [120°, 180°] ou [-180°, -120°] → côté opposé → -1
-        
-        # Plus précisément, on utilise la position relative:
-        # - Si |φ| < 90° : substituant "gauche" par rapport à H1 → +1
-        # - Si |φ| > 90° : substituant "anti" par rapport à H1 → -1
-        
-        # Gestion des cas limites (près de 90°) avec hystérésis
+
         abs_dihed = abs(dihed)
-        
+
         if abs_dihed < 75.0:
-            # Clairement même côté
+
             return 1
         elif abs_dihed > 105.0:
-            # Clairement côté opposé
+
             return -1
         else:
-            # Zone ambiguë (75-105°): utiliser une classification plus fine
-            # Basée sur le vecteur normal au plan C1-C2
+
             try:
                 pos_h1 = np.array(conf.GetAtomPosition(h1_idx))
                 pos_c1 = np.array(conf.GetAtomPosition(c1_idx))
                 pos_c2 = np.array(conf.GetAtomPosition(c2_idx))
                 pos_sub = np.array(conf.GetAtomPosition(substituent_idx))
-                
-                # Vecteurs
+
                 v_c1c2 = pos_c2 - pos_c1
                 v_c1h1 = pos_h1 - pos_c1
                 v_c1sub = pos_sub - pos_c1
-                
-                # Normal au plan H1-C1-C2
+
                 normal = np.cross(v_c1c2, v_c1h1)
-                
-                # Projection du substituant sur la normale
+
                 proj = np.dot(v_c1sub, normal)
-                
-                # Si projection positive → même côté que H1
+
                 return 1 if proj >= 0 else -1
             except Exception:
-                # Fallback: utiliser le signe de l'angle dièdre
-                return 1 if abs_dihed < 90 else -1
-            
-    except Exception:
-        return 1  # Défaut
 
+                return 1 if abs_dihed < 90 else -1
+
+    except Exception:
+        return 1
 
 def _karplus_haasnoot_altona_full(
     theta_deg: float,
@@ -8165,46 +5871,7 @@ def _karplus_haasnoot_altona_full(
     orientation_signs: List[int] = None,
     use_7_params: bool = True,
 ) -> float:
-    """
-    Équation Haasnoot-de Leeuw-Altona COMPLÈTE à 7 PARAMÈTRES (1980).
-    
-    Version améliorée incluant le terme P7 (produit des électronégativités)
-    qui améliore la précision pour les systèmes multi-substitués.
-    
-    Équation complète:
-    ³J = P1·cos²φ + P2·cosφ + P3 
-         + Σᵢ Δχᵢ·[P4 + P5·cos²(sᵢ·φ + P6·|Δχᵢ|)]
-         + P7·Π(Δχᵢ)  ← NOUVEAU: terme produit
-    
-    Paramètres (Haasnoot et al., Tetrahedron 36, 2783-2792, 1980):
-    - P1 = 13.70 Hz  (cos²φ)
-    - P2 = -0.73 Hz  (cosφ)
-    - P3 = 0.00 Hz   (constante)
-    - P4 = 0.56      (correction EN linéaire)
-    - P5 = -2.47     (correction EN angulaire)
-    - P6 = 16.9°     (phase EN)
-    - P7 = -0.47     (terme produit pour interactions multi-substituants)
-    
-    Le terme P7 est important pour:
-    - Systèmes avec plusieurs substituants électronégatifs
-    - Sucres et dérivés glycosidiques
-    - Composés α,β-disubstitués
-    
-    Args:
-        theta_deg: Angle dièdre H-C-C-H en degrés
-        substituents_alpha: Symboles des substituants sur Cα (hors H observé)
-        substituents_beta: Symboles des substituants sur Cβ (hors H couplé)
-        orientation_signs: Signes d'orientation pour chaque substituant (+1 ou -1)
-        use_7_params: Si True, utilise le terme P7 (défaut)
-    
-    Returns:
-        ³J en Hz (>= 0)
-    
-    Références:
-        - Haasnoot C.A.G., de Leeuw F.A.A.M., Altona C., Tetrahedron 36, 2783-2792 (1980)
-        - Altona C. & Haasnoot C.A.G., Org. Magn. Reson. 13, 417 (1980)
-    """
-    # Récupérer les 7 paramètres
+
     P1 = _HAASNOOT_7_PARAMS['P1']
     P2 = _HAASNOOT_7_PARAMS['P2']
     P3 = _HAASNOOT_7_PARAMS['P3']
@@ -8212,21 +5879,18 @@ def _karplus_haasnoot_altona_full(
     P5 = _HAASNOOT_7_PARAMS['P5']
     P6_deg = _HAASNOOT_7_PARAMS['P6']
     P7 = _HAASNOOT_7_PARAMS['P7']
-    
+
     phi = math.radians(theta_deg)
     P6 = math.radians(P6_deg)
-    
-    # Terme Karplus de base (P1, P2, P3)
+
     J = P1 * (math.cos(phi) ** 2) + P2 * math.cos(phi) + P3
-    
-    # Initialiser les listes de substituants
+
     if substituents_alpha is None:
         substituents_alpha = []
     if substituents_beta is None:
         substituents_beta = []
     if orientation_signs is None:
-        # Attribution intelligente des signes basée sur la position
-        # α1, α2 reçoivent +1, -1; β1, β2 reçoivent +1, -1
+
         n_alpha = len(substituents_alpha)
         n_beta = len(substituents_beta)
         orientation_signs = []
@@ -8234,68 +5898,57 @@ def _karplus_haasnoot_altona_full(
             orientation_signs.append(1 if i % 2 == 0 else -1)
         for i in range(n_beta):
             orientation_signs.append(1 if i % 2 == 0 else -1)
-    
+
     chi_H = _HUGGINS_ELECTRONEGATIVITY.get('H', 0.0)
     all_subs = list(substituents_alpha) + list(substituents_beta)
     delta_chi_list = []
-    
-    # Corrections d'électronégativité individuelles (P4, P5, P6)
+
     for i, sub in enumerate(all_subs):
-        chi_i = _HUGGINS_ELECTRONEGATIVITY.get(sub, 2.5)  # Défaut C-like
+        chi_i = _HUGGINS_ELECTRONEGATIVITY.get(sub, 2.5)
         delta_chi = chi_i - chi_H
         delta_chi_list.append(delta_chi)
-        
+
         if delta_chi <= 0:
             continue
-            
+
         s_i = orientation_signs[i] if i < len(orientation_signs) else 1
-        
-        # Terme correctif Haasnoot-Altona individuel
+
         correction = delta_chi * (
             P4 + P5 * (math.cos(s_i * phi + P6 * abs(delta_chi)) ** 2)
         )
         J += correction
-    
-    # Terme P7: produit des électronégativités (interactions multi-substituants)
+
     if use_7_params and len(delta_chi_list) >= 2:
-        # Calculer le produit des Δχ pour tous les substituants
+
         product_delta_chi = 1.0
         n_significant = 0
         for dc in delta_chi_list:
-            if dc > 0.1:  # Seuil pour éviter les produits nuls
+            if dc > 0.1:
                 product_delta_chi *= dc
                 n_significant += 1
-        
+
         if n_significant >= 2:
-            # Normaliser le produit pour éviter les valeurs extrêmes
-            # et appliquer la correction P7
+
             normalized_product = product_delta_chi ** (1.0 / n_significant)
             J += P7 * normalized_product * n_significant
-    
-    return max(0.0, J)
 
+    return max(0.0, J)
 
 def _karplus_with_substituent_correction(
     theta_deg: float,
     alpha_EN: float = 0.0,
     beta_EN: float = 0.0
 ) -> float:
-    """
-    Wrapper rétrocompatible - utilise maintenant l'équation complète.
-    """
-    # Convertir les corrections EN en substituants équivalents
+
     subs_alpha = ['O'] if alpha_EN > 0.3 else (['N'] if alpha_EN > 0.1 else [])
     subs_beta = ['O'] if beta_EN > 0.3 else (['N'] if beta_EN > 0.1 else [])
-    
+
     return _karplus_haasnoot_altona_full(
         theta_deg,
         substituents_alpha=subs_alpha,
         substituents_beta=subs_beta
     )
 
-# ---------------------------
-# Lignes de combinaison – systèmes AB/ABX
-# ---------------------------
 def _add_combination_lines(
     lines: List[Tuple[float, float]],
     system_type: Optional[str],
@@ -8303,95 +5956,60 @@ def _add_combination_lines(
     config: "SimConfig",
     delta_nu_hz: float = 0.0,
 ) -> List[Tuple[float, float]]:
-    """
-    Ajoute les raies de combinaison pour systèmes fortement couplés.
-    
-    Dans un système AB, les 4 raies principales sont à:
-    - ν₁ = νₐ + ½(J + D)
-    - ν₂ = νₐ + ½(J - D)  
-    - ν₃ = νᵦ - ½(J - D)
-    - ν₄ = νᵦ - ½(J + D)
-    
-    où D = √(Δν² + J²)
-    
-    Les raies de combinaison (faible intensité) apparaissent à:
-    - ν₅ = ½(νₐ + νᵦ) + ½D  (transition "zéro-quantum")
-    - ν₆ = ½(νₐ + νᵦ) - ½D
-    
-    Référence: Günther, NMR Spectroscopy, Chapter 4
-    """
+
     if not lines or system_type is None:
         return lines
-    
-    # Seulement pour systèmes AB ou AA'BB'
+
     if system_type not in ["AA'BB'", "AA'XX'", "AB", "ABX"]:
         return lines
-    
+
     if J_AB is None or J_AB <= 0.0:
         return lines
-    
-    # Calculer D (paramètre de couplage effectif)
+
     if delta_nu_hz > 0.0:
         D = math.sqrt(delta_nu_hz ** 2 + J_AB ** 2)
     else:
-        D = J_AB  # Limite fortement couplée
-    
-    # Intensité des raies de combinaison (typiquement 1-5% des raies principales)
-    # I_comb = sin²(2θ)/4 où tan(2θ) = J/Δν
+        D = J_AB
+
     if delta_nu_hz > 0.0:
         tan_2theta = J_AB / delta_nu_hz
         theta_2 = math.atan(tan_2theta)
         I_comb = (math.sin(theta_2) ** 2) / 4.0
     else:
-        I_comb = 0.25  # Maximum quand Δν = 0
-    
-    # Seuil de visibilité (raies trop faibles non ajoutées)
+        I_comb = 0.25
+
     min_intensity = getattr(config, 'combination_line_threshold', 0.02)
-    
+
     if I_comb < min_intensity:
         return lines
-    
-    # Centre du multiplet (moyenne des positions)
+
     if len(lines) >= 2:
         center = sum(f for f, _ in lines) / len(lines)
     else:
         center = 0.0
-    
-    # Ajouter les raies de combinaison
+
     new_lines = list(lines)
     new_lines.append((center + D / 2.0, I_comb * 0.5))
     new_lines.append((center - D / 2.0, I_comb * 0.5))
-    
-    # Renormaliser
+
     total = sum(i for _, i in new_lines)
     if total > 0:
         new_lines = [(f, i / total) for f, i in new_lines]
-    
+
     return sorted(new_lines, key=lambda x: x[0])
 
-# ---------------------------
-# Résolution numérique adaptative
-# ---------------------------
 def _adaptive_digital_resolution(spectrometer_mhz: float) -> float:
-    """
-    Résolution numérique typique selon la fréquence.
-    """
+
     SW_hz = 16.0 * float(spectrometer_mhz)
     num_points = 32768
     resolution_hz = SW_hz / num_points
     return float(resolution_hz)
 
-# ---------------------------
-# Construction des raies 1er ordre
-# ---------------------------
 def _first_order_peak_positions(
     J_couplings: List[Dict[str, float]],
     base_multiplicity: str
 ) -> List[Tuple[float, float]]:
-    """
-    Construit les positions/intensités d'un multiplet 1er ordre
-    par convolution successive (Pascal).
-    """
+
     lines: List[Tuple[float, float]] = [(0.0, 1.0)]
 
     for c in J_couplings:
@@ -8433,126 +6051,84 @@ def _first_order_peak_positions(
     merged = [(f, i / s) for f, i in merged]
     return merged
 
-# ---------------------------
-# Config
-# ---------------------------
-
-# ==============================================================================
-# RÉSOLUTION FRÉQUENCE-DÉPENDANTE - SEUILS DE DÉTECTION RÉALISTES (CORRIGÉS)
-# ==============================================================================
-# Ces tables définissent les constantes J minimales résolues selon la fréquence
-# du spectromètre. CORRIGÉ selon l'expérience spectroscopiste réelle.
-#
-# IMPORTANT: Le seuil minimal est limité par la LARGEUR DE RAIE (T₂), pas par
-# la fréquence ! Une raie typique a 0.5-2 Hz de largeur à TOUTES les fréquences.
-#
-# Références:
-# - Claridge, High-Resolution NMR Techniques in Organic Chemistry, 3rd Ed.
-# - Günther, NMR Spectroscopy, 3rd Ed.
-# - Pratique expérimentale en labo (décennies d'expérience)
-#
-# CORRECTIONS APPLIQUÉES:
-# 1. Seuils abaissés: 1.0 Hz à 400 MHz (pas 2.5 Hz)
-# 2. ⁴J meta (1.5 Hz) est VISIBLE à 400 MHz dans benzènes dissymétriques
-# 3. Limite T₂: ~0.5-0.8 Hz même à très haut champ
-# 4. Ajout de "broadened": signal élargi mais visible (0.8-1.5 Hz à 400 MHz)
-# ==============================================================================
-
-# Largeur de raie typique (Hz) - INDÉPENDANT de la fréquence
-TYPICAL_LINEWIDTH_HZ = 0.8  # Typique pour petites molécules organiques
+TYPICAL_LINEWIDTH_HZ = 0.8
 
 FREQUENCY_RESOLUTION_THRESHOLDS: Dict[int, Dict[str, float]] = {
-    # Fréquence MHz: {
-    #   min_resolvable: seuil pour voir un couplage NET
-    #   min_broadened: seuil pour voir un couplage ÉLARGI (visible mais pas net)
-    #   4J_visible: seuil pour ⁴J (long-range)
-    #   5J_visible: seuil pour ⁵J (très rare)
-    #   delta_J_for_dd: écart minimal pour distinguer deux J différents
-    # }
-    
-    # 200 MHz: Très basse fréquence - forte superposition
+
     200: {
-        "min_resolvable": 1.5,      # CORRIGÉ: était 4.0
-        "min_broadened": 1.0,       # NOUVEAU: visible mais élargi
-        "4J_visible": 2.0,          # CORRIGÉ: était 5.0
-        "5J_visible": 999.0,        # Jamais visible
-        "delta_J_for_dd": 1.5,      # Écart pour distinguer dd vs t
+        "min_resolvable": 1.5,
+        "min_broadened": 1.0,
+        "4J_visible": 2.0,
+        "5J_visible": 999.0,
+        "delta_J_for_dd": 1.5,
     },
-    
-    # 300 MHz: Basse fréquence
+
     300: {
-        "min_resolvable": 1.2,      # CORRIGÉ: était 3.0
+        "min_resolvable": 1.2,
         "min_broadened": 0.8,
-        "4J_visible": 1.5,          # CORRIGÉ: était 4.0
+        "4J_visible": 1.5,
         "5J_visible": 999.0,
         "delta_J_for_dd": 1.2,
     },
-    
-    # 400 MHz: Routine (le plus courant en labo)
-    # CRITIQUE: J ≥ 1.0 Hz est VISIBLE (élargi), J ≥ 1.5 Hz est NET
+
     400: {
-        "min_resolvable": 1.0,      # CORRIGÉ: était 2.5 - trop élevé!
-        "min_broadened": 0.8,       # Limite T₂
-        "4J_visible": 1.0,          # CORRIGÉ: ⁴J meta (1.5 Hz) EST visible!
-        "5J_visible": 2.0,          # Rare mais possible
-        "delta_J_for_dd": 1.0,      # CORRIGÉ: était 1.5
+        "min_resolvable": 1.0,
+        "min_broadened": 0.8,
+        "4J_visible": 1.0,
+        "5J_visible": 2.0,
+        "delta_J_for_dd": 1.0,
     },
-    
-    # 500 MHz: Intermédiaire
+
     500: {
-        "min_resolvable": 0.8,      # CORRIGÉ: était 2.0
+        "min_resolvable": 0.8,
         "min_broadened": 0.6,
         "4J_visible": 0.8,
         "5J_visible": 1.5,
         "delta_J_for_dd": 0.8,
     },
-    
-    # 600 MHz: Recherche standard
+
     600: {
-        "min_resolvable": 0.8,      # CORRIGÉ: était 1.5 - limite T₂!
+        "min_resolvable": 0.8,
         "min_broadened": 0.5,
         "4J_visible": 0.6,
         "5J_visible": 1.0,
-        "delta_J_for_dd": 0.5,      # Meilleure séparation
+        "delta_J_for_dd": 0.5,
     },
-    
-    # 700 MHz: Haut champ
+
     700: {
-        "min_resolvable": 0.8,      # Limite T₂ atteinte
+        "min_resolvable": 0.8,
         "min_broadened": 0.5,
         "4J_visible": 0.5,
         "5J_visible": 0.8,
         "delta_J_for_dd": 0.5,
     },
-    
-    # 800 MHz: Très haut champ
+
     800: {
-        "min_resolvable": 0.8,      # Toujours limité par T₂
+        "min_resolvable": 0.8,
         "min_broadened": 0.4,
         "4J_visible": 0.4,
         "5J_visible": 0.6,
         "delta_J_for_dd": 0.4,
     },
-    
-    # 900+ MHz: Ultra-haut champ - même seuil qu'à 600 MHz (limite T₂)
+
     900: {
-        "min_resolvable": 0.8,      # CORRIGÉ: limite T₂, pas mieux que 600!
+        "min_resolvable": 0.8,
         "min_broadened": 0.4,
         "4J_visible": 0.4,
         "5J_visible": 0.5,
         "delta_J_for_dd": 0.4,
     },
-    
+
     1000: {
-        "min_resolvable": 0.8,      # Limite T₂
+        "min_resolvable": 0.8,
         "min_broadened": 0.3,
         "4J_visible": 0.3,
         "5J_visible": 0.5,
         "delta_J_for_dd": 0.3,
     },
-    
+
     1200: {
-        "min_resolvable": 0.8,      # Limite T₂
+        "min_resolvable": 0.8,
         "min_broadened": 0.3,
         "4J_visible": 0.3,
         "5J_visible": 0.4,
@@ -8560,31 +6136,15 @@ FREQUENCY_RESOLUTION_THRESHOLDS: Dict[int, Dict[str, float]] = {
     },
 }
 
-
 def get_resolution_thresholds(frequency_mhz: float) -> Dict[str, float]:
-    """
-    Retourne les seuils de résolution pour une fréquence donnée.
-    Interpole entre les valeurs tabulées si nécessaire.
-    
-    IMPORTANT: Les seuils sont limités par la largeur de raie (T₂), pas par
-    la fréquence. Au-delà de ~600 MHz, les seuils ne s'améliorent plus beaucoup.
-    
-    Args:
-        frequency_mhz: Fréquence du spectromètre en MHz
-        
-    Returns:
-        Dict avec les seuils: min_resolvable, min_broadened, 4J_visible, 
-                              5J_visible, delta_J_for_dd
-    """
+
     freqs = sorted(FREQUENCY_RESOLUTION_THRESHOLDS.keys())
-    
-    # Clamp aux valeurs extrêmes
+
     if frequency_mhz <= freqs[0]:
         return FREQUENCY_RESOLUTION_THRESHOLDS[freqs[0]]
     if frequency_mhz >= freqs[-1]:
         return FREQUENCY_RESOLUTION_THRESHOLDS[freqs[-1]]
-    
-    # Trouver les deux fréquences encadrantes
+
     lower_freq = freqs[0]
     upper_freq = freqs[-1]
     for i, f in enumerate(freqs):
@@ -8593,22 +6153,20 @@ def get_resolution_thresholds(frequency_mhz: float) -> Dict[str, float]:
         if f >= frequency_mhz:
             upper_freq = f
             break
-    
+
     if lower_freq == upper_freq:
         return FREQUENCY_RESOLUTION_THRESHOLDS[lower_freq]
-    
-    # Interpolation linéaire
+
     lower_vals = FREQUENCY_RESOLUTION_THRESHOLDS[lower_freq]
     upper_vals = FREQUENCY_RESOLUTION_THRESHOLDS[upper_freq]
-    
+
     ratio = (frequency_mhz - lower_freq) / (upper_freq - lower_freq)
-    
+
     result = {}
     for key in lower_vals:
         result[key] = lower_vals[key] + ratio * (upper_vals[key] - lower_vals[key])
-    
-    return result
 
+    return result
 
 def filter_J_by_frequency(
     J_values: List[float],
@@ -8617,83 +6175,58 @@ def filter_J_by_frequency(
     config: Optional["SimConfig"] = None,
     return_broadening_info: bool = False
 ) -> Union[Tuple[List[float], List[int]], Tuple[List[float], List[int], List[bool]]]:
-    """
-    Filtre les constantes de couplage selon la résolution du spectromètre.
-    
-    CORRIGÉ selon l'expérience spectroscopiste réelle:
-    - Les couplages trop faibles sont éliminés
-    - Les couplages entre min_broadened et min_resolvable sont marqués comme "élargis"
-    - La limite T₂ (~0.8 Hz) s'applique même à très haut champ
-    
-    Args:
-        J_values: Liste des constantes J en Hz
-        frequency_mhz: Fréquence du spectromètre en MHz
-        coupling_orders: Liste des ordres de couplage (2, 3, 4, 5) correspondant
-                        à chaque J. Si None, on suppose tous des ³J.
-        config: Configuration optionnelle pour override des seuils
-        return_broadening_info: Si True, retourne aussi la liste des J élargis
-        
-    Returns:
-        Si return_broadening_info=False:
-            Tuple (J_filtrés, indices_gardés) des couplages visibles
-        Si return_broadening_info=True:
-            Tuple (J_filtrés, indices_gardés, is_broadened) avec info élargissement
-    """
+
     if not J_values:
         if return_broadening_info:
             return [], [], []
         return [], []
-    
+
     thresholds = get_resolution_thresholds(frequency_mhz)
     min_resolvable = thresholds["min_resolvable"]
     min_broadened = thresholds.get("min_broadened", min_resolvable * 0.7)
     min_4J = thresholds["4J_visible"]
     min_5J = thresholds["5J_visible"]
-    
-    # Override par config si spécifié
+
     if config is not None:
         if hasattr(config, 'frequency_min_resolvable_override') and config.frequency_min_resolvable_override:
             min_resolvable = config.frequency_min_resolvable_override
-            min_broadened = min_resolvable * 0.7  # Ajuster proportionnellement
-    
+            min_broadened = min_resolvable * 0.7
+
     filtered_J = []
     kept_indices = []
-    is_broadened = []  # True si le couplage est visible mais élargi
-    
+    is_broadened = []
+
     for i, J in enumerate(J_values):
-        # Déterminer l'ordre de couplage
+
         order = coupling_orders[i] if coupling_orders and i < len(coupling_orders) else 3
-        
-        # Appliquer le seuil approprié selon l'ordre de couplage
-        if order == 2:  # ²J geminal - seuil standard
+
+        if order == 2:
             threshold_net = min_resolvable
             threshold_broad = min_broadened
-        elif order == 3:  # ³J vicinal - seuil standard
+        elif order == 3:
             threshold_net = min_resolvable
             threshold_broad = min_broadened
-        elif order == 4:  # ⁴J long-range (meta, W-coupling)
+        elif order == 4:
             threshold_net = min_4J
             threshold_broad = min_4J * 0.7
-        elif order >= 5:  # ⁵J et plus - très faible
+        elif order >= 5:
             threshold_net = min_5J
             threshold_broad = min_5J * 0.8
         else:
             threshold_net = min_resolvable
             threshold_broad = min_broadened
-        
+
         J_abs = abs(J)
-        
-        # Garder le couplage s'il dépasse le seuil d'élargissement
+
         if J_abs >= threshold_broad:
             filtered_J.append(J)
             kept_indices.append(i)
-            # Marquer comme élargi si entre threshold_broad et threshold_net
+
             is_broadened.append(J_abs < threshold_net)
-    
+
     if return_broadening_info:
         return filtered_J, kept_indices, is_broadened
     return filtered_J, kept_indices
-
 
 def compute_multiplicity_from_J(
     J_values: List[float],
@@ -8701,44 +6234,26 @@ def compute_multiplicity_from_J(
     coupling_orders: Optional[List[int]] = None,
     config: Optional["SimConfig"] = None
 ) -> str:
-    """
-    Détermine la multiplicité réelle selon la fréquence du spectromètre.
-    
-    Cette fonction simule ce qu'un spectroscopiste verrait réellement
-    sur un spectromètre de la fréquence donnée.
-    
-    Args:
-        J_values: Liste des constantes J en Hz
-        frequency_mhz: Fréquence du spectromètre en MHz
-        coupling_orders: Ordres de couplage (2, 3, 4, 5) pour chaque J
-        config: Configuration optionnelle
-        
-    Returns:
-        Label de multiplicité ('s', 'd', 't', 'q', 'dd', 'dt', 'td', 'm', etc.)
-    """
-    # Filtrer les J selon la résolution
+
     resolved_J, _ = filter_J_by_frequency(
         J_values, frequency_mhz, coupling_orders, config
     )
-    
+
     if not resolved_J:
-        return 's'  # Singulet si aucun couplage résolu
-    
-    # Obtenir les seuils pour cette fréquence
+        return 's'
+
     thresholds = get_resolution_thresholds(frequency_mhz)
     delta_J_min = thresholds["delta_J_for_dd"]
-    
-    # Trier par valeur décroissante
+
     resolved_J = sorted(resolved_J, reverse=True)
     n_J = len(resolved_J)
-    
+
     if n_J == 1:
-        return 'd'  # Doublet
-    
-    # Grouper les J similaires (écart < delta_J_min → même groupe)
+        return 'd'
+
     groups = []
     current_group = [resolved_J[0]]
-    
+
     for i in range(1, n_J):
         if abs(resolved_J[i] - current_group[-1]) < delta_J_min:
             current_group.append(resolved_J[i])
@@ -8746,13 +6261,12 @@ def compute_multiplicity_from_J(
             groups.append(current_group)
             current_group = [resolved_J[i]]
     groups.append(current_group)
-    
-    # Déterminer le label basé sur les groupes
+
     n_groups = len(groups)
     group_sizes = [len(g) for g in groups]
-    
+
     if n_groups == 1:
-        # Tous les J sont équivalents
+
         n_equiv = group_sizes[0]
         if n_equiv == 1:
             return 'd'
@@ -8761,15 +6275,15 @@ def compute_multiplicity_from_J(
         elif n_equiv == 3:
             return 'q'
         elif n_equiv >= 4:
-            # quin, sext, sept, etc. -> simplifié en 'm' (multiplet)
+
             return 'm'
         else:
             return 'm'
-    
+
     elif n_groups == 2:
-        # Deux groupes de J distincts
+
         s1, s2 = group_sizes[0], group_sizes[1]
-        
+
         if s1 == 1 and s2 == 1:
             return 'dd'
         elif s1 == 1 and s2 == 2:
@@ -8788,42 +6302,35 @@ def compute_multiplicity_from_J(
             return 'qt'
         else:
             return 'm'
-    
+
     elif n_groups == 3:
-        # Trois groupes de J distincts
+
         s1, s2, s3 = group_sizes[0], group_sizes[1], group_sizes[2]
-        
+
         if s1 == 1 and s2 == 1 and s3 == 1:
             return 'ddd'
         else:
-            # ddt, dtd, tdd, etc. -> simplifié en 'm' (multiplet)
+
             return 'm'
-    
+
     elif n_groups == 4:
         if all(s == 1 for s in group_sizes):
             return 'dddd'
         else:
             return 'm'
-    
-    else:
-        return 'm'  # Multiplet complexe
 
+    else:
+        return 'm'
 
 @dataclass
 class SimConfig:
-    # ===========================================================================
-    # RÉSOLUTION FRÉQUENCE-DÉPENDANTE - NOUVEAU SYSTÈME RÉALISTE
-    # ===========================================================================
-    # Active le filtrage des J selon la fréquence du spectromètre
+
     use_frequency_dependent_resolution: bool = True
-    # Override manuel du seuil de résolution (None = utiliser les tables)
+
     frequency_min_resolvable_override: Optional[float] = None
-    # Mode strict: collapse les multiplicités non résolues en 'm' élargi
+
     frequency_strict_mode: bool = False
-    
-    # Seuils de détection pour ⁿJ (n = ordre de couplage)
-    # ⁴J à 1.2 Hz (relevé pour éviter faux positifs homoallyliques)
-    # ⁵J à 1.0 Hz (relevé pour éviter faux positifs longue distance)
+
     min_j_detect: Dict[int, float] = field(default_factory=lambda: {2: 1.0, 3: 1.0, 4: 1.2, 5: 1.0})
     aro_j_forced: Dict[str, float] = field(default_factory=lambda: {"ortho": 7.8, "meta": 2.3, "para": 0.6})
     hetero_j_base: Dict[str, Dict[int, float]] = field(default_factory=lambda: {
@@ -8839,31 +6346,24 @@ class SimConfig:
     anisotropy_pct_high: float = 0.10
     viscosity_simplify_max_groups: int = 3
     viscosity_simplify_maxJ_hz: float = 1.5
-    # ³J vinyliques corrigés (Jackman & Sternhell)
-    # cis: H-C=C-H même côté (~10 Hz), trans: côtés opposés (~16 Hz)
+
     vinylic_J_defaults: Dict[str, float] = field(default_factory=lambda: {
-        'trans': 16.0,    # 14-18 Hz typique
-        'cis': 10.0,      # 8-12 Hz typique  
-        'geminal': 2.0,   # =CH₂ (0-3 Hz)
-        'gauche': 8.0,    # géométrie contrainte
+        'trans': 16.0,
+        'cis': 10.0,
+        'geminal': 2.0,
+        'gauche': 8.0,
     })
-    combination_line_threshold: float = 0.02  # Seuil visibilité raies de combinaison
+    combination_line_threshold: float = 0.02
     use_field_resolution_model: bool = True
     digital_resolution_hz: Optional[float] = None
     min_visibility_factor: float = 1.2
     grouping_tol_scale: float = 0.65
     grouping_tol_scale_auto: bool = True
-    # Seuil minimal pour fusionner deux J en un seul groupe
-    # Les J diastéréotopiques (ex: ASP Hα-Hβ2=5.2 Hz vs Hα-Hβ3=8.0 Hz, ΔJ=2.8 Hz)
-    # restent séparés car ΔJ > 2.5 Hz grâce aux populations rotamériques correctes
+
     never_merge_gap_hz: float = 2.5
-    
-    # ✅ NOUVEAU: Empêcher fusion J geminal / J vicinal pour diastéréotopiques
-    # Si True, les J géminaux (²J) ne seront JAMAIS fusionnés avec les vicinaux (³J)
-    # même si leurs valeurs sont identiques. Cela garantit label "ddd" au lieu de "td"
-    # pour les CH₂ diastéréotopiques avec J_gem ≈ J_vic.
+
     separate_geminal_vicinal_J: bool = True
-    
+
     detect_para_min_mhz: int = 600
     detect_para_min_j_hz: float = 0.45
     para_max_per_proton: Optional[int] = None
@@ -8872,7 +6372,7 @@ class SimConfig:
     rigid_W_boost: bool = False
     formyl_rule: bool = True
     amide_mode: bool = True
-    peptide_HNCH_coupling: bool = True  # ³J(H-N-C-H) Bystrov
+    peptide_HNCH_coupling: bool = True
     heteroHF_advanced: bool = True
     karplus_haasnoot: bool = True
     anomeric_preference: Optional[str] = None
@@ -8893,102 +6393,62 @@ class SimConfig:
     auto_bench_mode: bool = False
     protect_diastereotopes: bool = True
     random_seed: int = 0xF00D
-    
-    # === NOUVELLES OPTIONS AVANCÉES ===
-    
-    # Paramètres Karplus spécialisés
-    use_garbisch_alkenes: bool = True            # Équation Garbisch pour alcènes
-    use_bystrov_peptides: bool = True            # Équation Bystrov pour peptides
-    use_haasnoot_7_params: bool = True           # Haasnoot-Altona 7 paramètres complets
-    
-    # Moyenne conformationnelle multi-conformères
-    # IMPORTANT: Échantillonnage crucial pour CH₂-CH₂ flexibles et protons diastéréotopiques
-    # ACTIVÉ par défaut pour petites molécules, auto-désactivé au-dessus de 40 atomes lourds
-    use_conformational_averaging: bool = True  # ✅ Activé par défaut
-    n_conformers: int = 200                      # ✅ Augmenté pour meilleur échantillonnage rotamères
-    n_conformers_max: int = 300                  # ✅ Augmenté
-    conformer_energy_cutoff_kcal: float = 10.0  # ✅ Augmenté pour inclure g+/g-/trans
-    conformer_pruning_rmsd: float = 0.25         # ✅ Réduit pour plus de diversité
-    flexible_chain_boost: bool = True            # Boost pour chaînes flexibles
-    flexible_chain_min_rotatable: int = 4        # Seuil chaîne flexible
-    use_etkdg_v3: bool = True                    # Préférer ETKDGv3
-    conformer_random_seed: int = 42              # Reproductibilité
-    
-    # ✅ MODE RAPIDE: Désactiver automatiquement l'averaging pour grosses molécules
-    # Pour molécules > 50 atomes lourds, la génération de conformères devient très lente
-    # (ex: saponine 75 atomes → 5+ min pour 300 conformères)
-    # Ce paramètre désactive automatiquement use_conformational_averaging au-dessus du seuil
-    # ═══════════════════════════════════════════════════════════════════
-    # SEUIL UNIFIÉ POUR GROSSES MOLÉCULES: 40 atomes lourds
-    # ═══════════════════════════════════════════════════════════════════
-    # Au-delà de ce seuil, plusieurs optimisations s'activent:
-    # - Pas de moyennage conformationnel (trop lent)
-    # - Mode ultra-fast (J simplifiés)
-    # - Skip 3D optionnel (si > skip_3d_above_heavy_atoms)
-    LARGE_MOLECULE_THRESHOLD: int = 40  # Seuil unifié
 
-    auto_disable_averaging_above_atoms: int = 40  # = LARGE_MOLECULE_THRESHOLD
-    fast_mode_for_large_molecules: bool = True    # Activer le mode rapide automatique
+    use_garbisch_alkenes: bool = True
+    use_bystrov_peptides: bool = True
+    use_haasnoot_7_params: bool = True
 
-    # Sauter la génération 3D pour TRÈS grosses molécules (> 50 atomes)
-    # EmbedMolecule est TRÈS lent pour molécules avec cycles fusionnés
-    skip_3d_for_large_molecules: bool = True      # Activer le skip automatique
-    skip_3d_above_heavy_atoms: int = 50           # Seuil: > 50 atomes lourds → skip 3D
-    skip_3d_above_fused_rings: int = 5            # Seuil: > 5 cycles fusionnés → skip 3D
+    use_conformational_averaging: bool = True
+    n_conformers: int = 200
+    n_conformers_max: int = 300
+    conformer_energy_cutoff_kcal: float = 10.0
+    conformer_pruning_rmsd: float = 0.25
+    flexible_chain_boost: bool = True
+    flexible_chain_min_rotatable: int = 4
+    use_etkdg_v3: bool = True
+    conformer_random_seed: int = 42
 
-    # Mode ultra-rapide pour grosses molécules
-    # Skip les détections diastéréotopiques coûteuses
-    # Utilise J moyens (7.0 Hz pour vicinaux)
-    ultra_fast_mode: bool = True                  # Activer le mode ultra-rapide
-    ultra_fast_above_heavy_atoms: int = 40        # = LARGE_MOLECULE_THRESHOLD (aligné)
-    ultra_fast_default_vicinal_J: float = 7.0     # ✅ J vicinal moyen pour chaînes flexibles
-    
-    # ✅ MODE SMART CONFORMERS: Analyse intelligente du besoin de conformères
-    # Détecte si la molécule a vraiment besoin de conformères en vérifiant:
-    # - Tables couvrent-elles tous les couplages? (hétérocycles, sucres, vinyles, aromatiques)
-    # - Les liaisons flexibles sont-elles à rotation libre? (C(sp3)-C(sp2) → J=7 Hz fixe)
-    # - Y a-t-il des cycles semi-rigides nécessitant un échantillonnage? (cyclohexane, pipéridine)
-    # Si la molécule n'a pas besoin de conformères → skip la génération → gain de temps massif
-    smart_conformer_mode: bool = True  # ✅ NOUVEAU: Mode intelligent par défaut
-    
-    # Détection avancée systèmes second ordre
-    advanced_spin_system_detection: bool = True  # Détecter AB₂, ABX, A₂X₃, etc.
-    spin_system_delta_nu_J_threshold: float = 10.0  # Seuil Δν/J pour second ordre
-    
-    # Simulation exacte par Hamiltonien de spin (diagonalisation quantique)
-    use_exact_spin_simulation: bool = True       # Utiliser la diagonalisation exacte
-    exact_spin_max_spins: int = 8                # Limite max de spins (2^8 = 256×256)
-    exact_spin_intensity_threshold: float = 0.001  # Seuil intensité minimum
+    LARGE_MOLECULE_THRESHOLD: int = 40
 
-    # Fragmentation de systèmes de spins (Castillo et al. 2011)
-    use_spin_fragmentation: bool = True          # Activer la fragmentation automatique
-    fragmentation_threshold_ratio: float = 0.05  # Seuil |J/Δν| pour couper un fragment
-    
-    # Effets de solvant avancés
-    # ⚠️ DÉSACTIVÉ par défaut: les corrections de shift ne sont valables que si
-    # le modèle ML a été entraîné avec le solvant comme feature.
-    # Seule la VISIBILITÉ des protons échangeables est gérée (OH/NH dans D2O, etc.)
-    use_solvent_shift_corrections: bool = False  # ❌ DÉSACTIVÉ - pas de correction δ
-    use_solvent_linewidth: bool = True           # Largeur de raie selon solvant
-    use_solvent_J_corrections: bool = False      # ❌ DÉSACTIVÉ - pas de correction J
-    use_exchange_broadening: bool = True         # Élargissement OH/NH
-    use_exchange_visibility: bool = True         # ✅ ACTIVÉ: OH/NH invisibles dans D2O
-    pH: Optional[float] = None                   # pH pour échange acido-basique
-    
-    # Marquage des protons labiles (OH, NH, SH)
-    mark_labile_protons_broad: bool = True       # Ajouter "broadening" dans le résultat
-    labile_proton_linewidth_hz: float = 5.0      # Largeur de raie typique pour échange
-    
-    # Force field pour optimisation géométrique
-    # Options: "MMFF94", "MMFF94s" (meilleur pour petites molécules), "UFF"
-    force_field: str = "MMFF94s"                 # MMFF94s recommandé
-    force_field_max_iters: int = 200             # Itérations max pour optimisation
-    
-    # ✅ NOUVEAU: Inférence automatique stéréochimie E/Z
-    infer_double_bond_stereo: bool = True        # Inférer E/Z pour doubles liaisons non définies
-    infer_stereo_default: str = "E"              # "E" (trans) ou "Z" (cis) - trans plus stable
-    infer_stereo_log: bool = True                # Logger les modifications
+    auto_disable_averaging_above_atoms: int = 40
+    fast_mode_for_large_molecules: bool = True
 
+    skip_3d_for_large_molecules: bool = True
+    skip_3d_above_heavy_atoms: int = 50
+    skip_3d_above_fused_rings: int = 5
+
+    ultra_fast_mode: bool = True
+    ultra_fast_above_heavy_atoms: int = 40
+    ultra_fast_default_vicinal_J: float = 7.0
+
+    smart_conformer_mode: bool = True
+
+    advanced_spin_system_detection: bool = True
+    spin_system_delta_nu_J_threshold: float = 10.0
+
+    use_exact_spin_simulation: bool = True
+    exact_spin_max_spins: int = 8
+    exact_spin_intensity_threshold: float = 0.001
+
+    use_spin_fragmentation: bool = True
+    fragmentation_threshold_ratio: float = 0.05
+
+    use_solvent_shift_corrections: bool = False
+    use_solvent_linewidth: bool = True
+    use_solvent_J_corrections: bool = False
+    use_exchange_broadening: bool = True
+    use_exchange_visibility: bool = True
+    pH: Optional[float] = None
+
+    mark_labile_protons_broad: bool = True
+    labile_proton_linewidth_hz: float = 5.0
+
+    force_field: str = "MMFF94s"
+    force_field_max_iters: int = 200
+
+    infer_double_bond_stereo: bool = True
+    infer_stereo_default: str = "E"
+    infer_stereo_log: bool = True
 
 def _optimize_molecule_geometry(
     mol: Chem.Mol,
@@ -8996,31 +6456,19 @@ def _optimize_molecule_geometry(
     max_iters: int = 200,
     conf_id: int = -1
 ) -> bool:
-    """
-    Optimise la géométrie d'une molécule avec le force field spécifié.
-    
-    Args:
-        mol: Molécule RDKit avec coordonnées 3D
-        force_field: "MMFF94", "MMFF94s", ou "UFF"
-        max_iters: Nombre maximum d'itérations
-        conf_id: ID du conformère (-1 = tous)
-    
-    Returns:
-        True si optimisation réussie, False sinon
-    """
+
     try:
         if force_field.upper() in ("MMFF94", "MMFF94S"):
-            # MMFF94s est meilleur pour les petites molécules organiques
+
             variant = "MMFF94s" if "S" in force_field.upper() else "MMFF94"
-            
-            # Vérifier si MMFF est applicable
+
             mmff_props = AllChem.MMFFGetMoleculeProperties(mol, mmffVariant=variant)
             if mmff_props is None:
-                # Fallback vers UFF
+
                 return _optimize_molecule_geometry(mol, "UFF", max_iters, conf_id)
-            
+
             if conf_id < 0:
-                # Optimiser tous les conformères
+
                 results = AllChem.MMFFOptimizeMoleculeConfs(mol, mmffVariant=variant, maxIters=max_iters)
                 return all(r[0] == 0 for r in results) if results else False
             else:
@@ -9029,7 +6477,7 @@ def _optimize_molecule_geometry(
                     return _optimize_molecule_geometry(mol, "UFF", max_iters, conf_id)
                 ff.Minimize(maxIts=max_iters)
                 return True
-                
+
         elif force_field.upper() == "UFF":
             if conf_id < 0:
                 for cid in range(mol.GetNumConformers()):
@@ -9038,11 +6486,11 @@ def _optimize_molecule_geometry(
                 AllChem.UFFOptimizeMolecule(mol, confId=conf_id, maxIters=max_iters)
             return True
         else:
-            # Force field inconnu, utiliser MMFF94s
+
             return _optimize_molecule_geometry(mol, "MMFF94s", max_iters, conf_id)
-            
+
     except Exception:
-        # Dernier recours: UFF
+
         try:
             if conf_id < 0:
                 for cid in range(mol.GetNumConformers()):
@@ -9053,105 +6501,82 @@ def _optimize_molecule_geometry(
         except Exception:
             return False
 
-
 def _estimate_labile_proton_broadening(
     mol: Chem.Mol,
     heavy_idx: int,
     solvent_name: str = "CDCl3",
     temperature_k: float = 298.15
 ) -> Optional[str]:
-    """
-    Estime le type d'élargissement pour les protons labiles (OH, NH, SH).
-    
-    Returns:
-        None si proton non labile
-        "sharp" si échange lent (DMSO, basse T)
-        "broad" si échange modéré (CDCl3)
-        "very_broad" si échange rapide (D2O, MeOD)
-        "exchanged" si proton échangé (invisible)
-    """
+
     atom = mol.GetAtomWithIdx(heavy_idx)
     symbol = atom.GetSymbol()
-    
-    # Vérifier si c'est un hétéroatome avec H
+
     if symbol not in ("O", "N", "S"):
         return None
-    
-    # Vérifier qu'il y a des H attachés
+
     has_h = any(n.GetSymbol() == "H" for n in atom.GetNeighbors())
     if not has_h:
         return None
-    
-    # Déterminer le type de proton labile
+
     proton_type = None
     if symbol == "O":
-        # OH: alcool, phénol, acide carboxylique
+
         is_carboxylic = any(
-            n.GetSymbol() == "C" and 
-            any(b.GetBondType() == rdchem.BondType.DOUBLE and b.GetOtherAtom(n).GetSymbol() == "O" 
+            n.GetSymbol() == "C" and
+            any(b.GetBondType() == rdchem.BondType.DOUBLE and b.GetOtherAtom(n).GetSymbol() == "O"
                 for b in n.GetBonds())
             for n in atom.GetNeighbors() if n.GetSymbol() == "C"
         )
         proton_type = "COOH" if is_carboxylic else "OH"
     elif symbol == "N":
-        # NH: amine, amide, indole
+
         is_amide = any(
-            n.GetSymbol() == "C" and 
-            any(b.GetBondType() == rdchem.BondType.DOUBLE and b.GetOtherAtom(n).GetSymbol() == "O" 
+            n.GetSymbol() == "C" and
+            any(b.GetBondType() == rdchem.BondType.DOUBLE and b.GetOtherAtom(n).GetSymbol() == "O"
                 for b in n.GetBonds())
             for n in atom.GetNeighbors() if n.GetSymbol() == "C"
         )
         proton_type = "amide_NH" if is_amide else "NH"
     elif symbol == "S":
         proton_type = "SH"
-    
-    # Comportement selon solvant
+
     solvent_upper = solvent_name.upper().replace("-", "")
-    
+
     if solvent_upper in ("D2O", "CD3OD", "MEOD"):
-        # Solvants protiques → échange rapide
+
         if proton_type in ("OH", "COOH", "NH", "SH"):
             return "exchanged"
         elif proton_type == "amide_NH":
-            return "very_broad"  # Amides échangent plus lentement
-    
+            return "very_broad"
+
     elif solvent_upper in ("DMSOD6", "DMSO"):
-        # DMSO → échange lent, pics visibles
+
         if proton_type == "OH":
-            return "sharp"  # OH alcoolique visible et sharp en DMSO
+            return "sharp"
         elif proton_type == "COOH":
-            return "broad"  # COOH peut échanger
+            return "broad"
         elif proton_type in ("NH", "amide_NH"):
-            return "sharp"  # NH visible en DMSO
+            return "sharp"
         elif proton_type == "SH":
             return "broad"
-    
+
     elif solvent_upper in ("CDCL3", "CDCl3"):
-        # CDCl3 → intermédiaire
+
         if proton_type == "OH":
-            return "broad"  # OH souvent large en CDCl3
+            return "broad"
         elif proton_type == "COOH":
-            return "very_broad"  # Acides très larges
+            return "very_broad"
         elif proton_type == "NH":
             return "broad"
         elif proton_type == "amide_NH":
-            return "sharp"  # NH amide souvent visible
+            return "sharp"
         elif proton_type == "SH":
             return "broad"
-    
-    # Par défaut
+
     return "broad" if proton_type else None
 
-
-# ---------------------------
-# Helpers: topology (avec cache intelligent)
-# ---------------------------
 def _topological_distances(mol: Chem.Mol) -> np.ndarray:
-    """
-    Calcule les distances topologiques entre tous les atomes.
-    
-    AMÉLIORATION: Utilise MoleculeCache pour éviter les recalculs.
-    """
+
     return MoleculeCache.get_topological_distances(mol)
 
 def _precompute_aromatic_distance_map(mol: Chem.Mol) -> List[Dict[int, int]]:
@@ -9186,22 +6611,12 @@ def _is_sp2_like(atom: Chem.Atom) -> bool:
     hyb = str(atom.GetHybridization())
     return ("SP2" in hyb) or atom.GetIsAromatic() or any(b.GetBondTypeAsDouble() == 2 for b in atom.GetBonds())
 
-# ---------------------------
-# Equivalence helpers (avec cache intelligent)
-# ---------------------------
 def _canonical_ranks(mol_noH: Chem.Mol) -> List[int]:
-    """
-    Calcule les rangs canoniques des atomes.
-    
-    AMÉLIORATION: Utilise MoleculeCache pour éviter les recalculs.
-    """
+
     return MoleculeCache.get_canonical_ranks(mol_noH)
 
 def _get_atom_invariant(atom: Chem.Atom) -> Tuple:
-    """
-    Calcule un invariant atomique pour détecter l'équivalence magnétique.
-    Deux atomes avec le même invariant sont potentiellement homotopes/équivalents.
-    """
+
     return (
         atom.GetSymbol(),
         atom.GetIsAromatic(),
@@ -9211,7 +6626,6 @@ def _get_atom_invariant(atom: Chem.Atom) -> Tuple:
         atom.IsInRing(),
     )
 
-
 def _are_heavy_equivalent(
     ranks: List[int], i: int, j: int,
     heavy_to_H: Dict[int, List[int]],
@@ -9219,42 +6633,28 @@ def _are_heavy_equivalent(
     tol_ppm: float,
     mol: Optional[Chem.Mol] = None,
 ) -> bool:
-    """
-    Détermine si deux centres lourds sont magnétiquement équivalents.
-    
-    Utilise les CLASSES DE SYMÉTRIE (breakTies=False) comme source de vérité.
-    
-    IMPORTANT: Pour benzène para-substitué (ex: acide p-hydroxybenzoïque),
-    les positions ortho-COOH (2,6) et ortho-OH (3,5) sont NON équivalentes
-    et doivent montrer un couplage 3J entre elles → doublets.
-    
-    Note: Pour benzène non-substitué, tous les C sont équivalents.
-    """
+
     if i == j:
         return True
-    
-    # ✅ UTILISER LES CLASSES DE SYMÉTRIE (breakTies=False) comme source de vérité
-    # C'est la méthode la plus fiable pour déterminer l'équivalence chimique
+
     if mol is not None:
         try:
             symmetry_classes = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
             if i < len(symmetry_classes) and j < len(symmetry_classes):
-                # Si les classes de symétrie sont égales → équivalents
+
                 if symmetry_classes[i] == symmetry_classes[j]:
                     return True
-                # Si différentes → PAS équivalents (couplage visible)
+
                 else:
                     return False
         except Exception:
             pass
-    
-    # Fallback sur les rangs canoniques si mol non disponible
+
     if ranks is not None and i < len(ranks) and j < len(ranks):
         if ranks[i] == ranks[j]:
             return True
-    
-    return False
 
+    return False
 
 def _are_protons_on_equivalent_carbons(
     mol: Chem.Mol,
@@ -9262,49 +6662,29 @@ def _are_protons_on_equivalent_carbons(
     heavy_idx_1: int,
     heavy_idx_2: int,
 ) -> bool:
-    """
-    Vérifie si deux carbones portant des protons sont magnétiquement équivalents.
-    
-    Si oui, les protons sur ces carbones ne montrent pas de couplage mutuel
-    (le couplage existe mais est invisible car les protons sont isochroniques).
-    
-    Utilisé pour:
-    - 1,2-Dichloroéthane: Cl-CH2-CH2-Cl (les 2 CH2 sont équivalents → singulet)
-    - Cyclohexane: tous les CH2 équivalents
-    - Cyclopentane: tous les CH2 équivalents
-    
-    IMPORTANT: Utilise breakTies=False pour obtenir les vraies classes de symétrie,
-    pas les rangs canoniques uniques.
-    """
+
     if mol is None:
         return False
-    
+
     if heavy_idx_1 == heavy_idx_2:
-        return False  # Même carbone, pas d'équivalence inter-carbone
-    
-    # ✅ CRUCIAL: Utiliser breakTies=False pour obtenir les classes de symétrie
-    # Cela regroupe les atomes chimiquement équivalents avec la même valeur
+        return False
+
     try:
         symmetry_classes = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
     except Exception:
-        # Fallback sur les rangs fournis
+
         if ranks is None:
             return False
         symmetry_classes = ranks
-    
+
     if heavy_idx_1 >= len(symmetry_classes) or heavy_idx_2 >= len(symmetry_classes):
         return False
-    
-    # Si les classes de symétrie sont égales, les carbones sont équivalents
+
     if symmetry_classes[heavy_idx_1] == symmetry_classes[heavy_idx_2]:
         return True
-    
+
     return False
 
-
-# ---------------------------
-# Exchangeable protons
-# ---------------------------
 _SMARTS_COOH_OH = Chem.MolFromSmarts('[OX2H][CX3](=O)[#6,#7,#8]')
 _SMARTS_OH      = Chem.MolFromSmarts('[OX2H]')
 _SMARTS_NH      = Chem.MolFromSmarts('[NX3H2,NX3H1]')
@@ -9342,200 +6722,135 @@ def _has_quadrupolar_neighbor(mol: Chem.Mol, heavy_idx: int) -> bool:
         if sym in {"B","Al","Cl"}: return True
     return False
 
-
 def _is_isolated_methyl(mol: Chem.Mol, heavy_idx: int, heavy_to_H: Dict[int, List[int]]) -> bool:
-    """
-    Détecte si un carbone porte un CH₃ "isolé" qui ne devrait pas montrer de couplage visible.
-    
-    Cas typiques:
-    - CH₃ benzylique (toluène): Ar-CH₃ → singulet
-    - OCH₃ (méthoxy): O-CH₃ → singulet  
-    - N-CH₃ (N-méthyl): N-CH₃ → singulet
-    - Acétyle: CH₃-C=O → singulet (sauf aldéhyde)
-    
-    Ces groupes ont des couplages ⁴J ou ⁵J très faibles (< 0.8 Hz) généralement
-    non résolus expérimentalement.
-    """
+
     atom = mol.GetAtomWithIdx(heavy_idx)
-    
-    # Doit être un carbone sp3 avec 3 H (CH₃)
+
     if atom.GetSymbol() != "C":
         return False
-    
+
     n_H = len(heavy_to_H.get(heavy_idx, []))
     if n_H != 3:
         return False
-    
-    # Vérifier hybridation sp3
+
     if _is_sp2_like(atom):
         return False
-    
-    # Vérifier les voisins LOURDS (exclure les H explicites après AddHs)
+
     neighbors = [n for n in atom.GetNeighbors() if n.GetSymbol() != "H"]
     if len(neighbors) != 1:
-        return False  # CH₃ a exactement 1 voisin lourd
-    
+        return False
+
     neighbor = neighbors[0]
     neighbor_sym = neighbor.GetSymbol()
-    
-    # Cas 1: CH₃ benzylique (Ar-CH₃)
+
     if neighbor_sym == "C" and neighbor.GetIsAromatic():
         return True
-    
-    # Cas 2: OCH₃ (O-CH₃)
+
     if neighbor_sym == "O":
         return True
-    
-    # Cas 3: N-CH₃
+
     if neighbor_sym == "N":
         return True
-    
-    # Cas 4: CH₃-C=O (acétyle, mais pas aldéhyde)
+
     if neighbor_sym == "C" and _is_sp2_like(neighbor):
-        # Vérifier si c'est un carbonyle
+
         for n2 in neighbor.GetNeighbors():
             if n2.GetSymbol() == "O":
                 bond = mol.GetBondBetweenAtoms(neighbor.GetIdx(), n2.GetIdx())
                 if bond and bond.GetBondTypeAsDouble() >= 2.0:
-                    # C'est un carbonyle - CH₃ est isolé SAUF si l'autre côté est H (aldéhyde)
-                    other_neighbors = [x for x in neighbor.GetNeighbors() 
+
+                    other_neighbors = [x for x in neighbor.GetNeighbors()
                                        if x.GetIdx() != heavy_idx and x.GetSymbol() not in ("O", "H")]
                     if other_neighbors:
-                        return True  # CH₃-CO-X (pas aldéhyde)
-    
-    # Cas 5: Gem-diméthyle C(CH₃)₂ - deux CH₃ sur un carbone quaternaire sp3
-    # Les gem-diméthyles sont équivalents et ne couplent pas entre eux
+                        return True
+
     if neighbor_sym == "C" and not _is_sp2_like(neighbor):
-        # Vérifier si le voisin est un carbone quaternaire (pas de H) avec au moins 2 CH₃
+
         neighbor_idx = neighbor.GetIdx()
         n_H_on_neighbor = len(heavy_to_H.get(neighbor_idx, []))
-        if n_H_on_neighbor == 0:  # Carbone quaternaire
-            # Compter les CH₃ attachés au même carbone
+        if n_H_on_neighbor == 0:
+
             n_methyl_neighbors = 0
             for n2 in neighbor.GetNeighbors():
                 if n2.GetSymbol() == "C" and not _is_sp2_like(n2):
                     n2_idx = n2.GetIdx()
                     n_H_on_n2 = len(heavy_to_H.get(n2_idx, []))
-                    # CH₃ = 3 H et exactement 1 voisin lourd (exclure H)
+
                     n_heavy_neighbors = len([x for x in n2.GetNeighbors() if x.GetSymbol() != "H"])
                     if n_H_on_n2 == 3 and n_heavy_neighbors == 1:
                         n_methyl_neighbors += 1
             if n_methyl_neighbors >= 2:
-                # C'est un gem-diméthyle - les CH₃ sont isolés
+
                 return True
-    
+
     return False
 
-
 def _is_benzylic_CH2_4J_coupling(
-    mol: Chem.Mol, 
-    heavy_idx1: int, 
-    heavy_idx2: int, 
+    mol: Chem.Mol,
+    heavy_idx1: int,
+    heavy_idx2: int,
     heavy_to_H: Dict[int, List[int]]
 ) -> bool:
-    """
-    Détecte si le couplage est un ⁴J benzylique entre CH₂ (ou CH) et H aromatique ortho.
-    
-    Pattern: H₂C-Ar-H (ortho) où Ar est un cycle aromatique
-    
-    Ce couplage ⁴J est très faible (~0.5-1.5 Hz) et généralement non résolu.
-    Le CH₂ benzylique apparaît typiquement comme un singulet (éventuellement élargi).
-    
-    Exemples:
-    - Benzyl alcohol: HOCH₂-Ph → CH₂ = singulet
-    - Benzyl chloride: ClCH₂-Ph → CH₂ = singulet  
-    - Benzylamine: H₂NCH₂-Ph → CH₂ = singulet
-    
-    Args:
-        mol: Molécule RDKit
-        heavy_idx1, heavy_idx2: Indices des carbones porteurs des H
-        heavy_to_H: Mapping carbone → liste de H
-    
-    Returns:
-        True si c'est un couplage ⁴J benzylique à ignorer
-    """
-    # Identifier quel est le carbone benzylique et quel est l'aromatique
+
     atom1 = mol.GetAtomWithIdx(heavy_idx1)
     atom2 = mol.GetAtomWithIdx(heavy_idx2)
-    
+
     benzylic_c = None
     aromatic_c = None
-    
-    # Cas 1: atom1 est benzylique sp3, atom2 est aromatique
+
     if (atom1.GetSymbol() == "C" and not atom1.GetIsAromatic() and
         atom2.GetSymbol() == "C" and atom2.GetIsAromatic()):
         benzylic_c = atom1
         aromatic_c = atom2
-    # Cas 2: atom2 est benzylique sp3, atom1 est aromatique
+
     elif (atom2.GetSymbol() == "C" and not atom2.GetIsAromatic() and
           atom1.GetSymbol() == "C" and atom1.GetIsAromatic()):
         benzylic_c = atom2
         aromatic_c = atom1
     else:
         return False
-    
-    # Le carbone benzylique doit être sp3 (non sp2)
+
     if _is_sp2_like(benzylic_c):
         return False
-    
-    # Le carbone benzylique doit avoir au moins 1 H (CH, CH₂ ou CH₃)
+
     n_H_benzylic = len(heavy_to_H.get(benzylic_c.GetIdx(), []))
     if n_H_benzylic == 0:
         return False
-    
-    # Vérifier que le carbone benzylique est directement lié à un aromatique
+
     benzylic_attached_to_aromatic = False
     for neighbor in benzylic_c.GetNeighbors():
         if neighbor.GetIsAromatic():
             benzylic_attached_to_aromatic = True
             break
-    
+
     if not benzylic_attached_to_aromatic:
         return False
-    
-    # Vérifier que l'aromatique est un H ortho (adjacent au carbone ipso)
-    # Le carbone aromatique porteur du H doit être à distance 2 du benzylique
-    # c'est-à-dire en position ortho par rapport au carbone ipso
-    # Cette condition est déjà satisfaite si on est dans dist==2
-    
-    # Vérifier que le carbone aromatique porte bien un H
+
     n_H_aromatic = len(heavy_to_H.get(aromatic_c.GetIdx(), []))
     if n_H_aromatic == 0:
         return False
-    
-    # Tout est vérifié - c'est un couplage ⁴J benzylique à ignorer
+
     return True
 
-
 def _is_aldehyde_CHO(mol: Chem.Mol, heavy_idx: int, heavy_to_H: Dict[int, List[int]]) -> bool:
-    """
-    Détecte si un carbone porte un CHO d'aldéhyde (R-C=O-H).
-    
-    Pattern: H-C(=O)-R où R est un carbone (pas N, pas O)
-    
-    Returns:
-        True si c'est un aldéhyde CHO
-    """
+
     atom = mol.GetAtomWithIdx(heavy_idx)
-    
-    # Doit être un carbone sp2 avec 1 H (CHO)
+
     if atom.GetSymbol() != "C":
         return False
-    
+
     n_H = len(heavy_to_H.get(heavy_idx, []))
     if n_H != 1:
         return False
-    
-    # Vérifier hybridation sp2 (carbonyle)
+
     if not _is_sp2_like(atom):
         return False
-    
-    # Vérifier les voisins: doit avoir O (=O) et un carbone (R)
+
     has_carbonyl_O = False
     has_C_neighbor = False
-    
+
     neighbors = [n for n in atom.GetNeighbors() if n.GetSymbol() != "H"]
-    
+
     for neighbor in neighbors:
         if neighbor.GetSymbol() == "O":
             bond = mol.GetBondBetweenAtoms(heavy_idx, neighbor.GetIdx())
@@ -9543,9 +6858,8 @@ def _is_aldehyde_CHO(mol: Chem.Mol, heavy_idx: int, heavy_to_H: Dict[int, List[i
                 has_carbonyl_O = True
         elif neighbor.GetSymbol() == "C":
             has_C_neighbor = True
-    
-    return has_carbonyl_O and has_C_neighbor
 
+    return has_carbonyl_O and has_C_neighbor
 
 def _is_aldehyde_4J_coupling(
     mol: Chem.Mol,
@@ -9554,296 +6868,192 @@ def _is_aldehyde_4J_coupling(
     heavy_to_H: Dict[int, List[int]],
     D: Any
 ) -> bool:
-    """
-    Détecte si le couplage entre heavy_idx et other_heavy représente un 
-    couplage ⁴J aldéhyde CHO ↔ β-H qui devrait être ignoré.
-    
-    Les couplages ⁴J dans les aldéhydes aliphatiques sont typiquement < 1 Hz
-    et non observables en routine. Le CHO ne couple qu'avec les α-H.
-    
-    Chemin ignoré: H-C(=O)-C-C-H (⁴J entre CHO et β-H)
-    
-    Returns:
-        True si ce couplage ⁴J aldéhyde devrait être ignoré
-    """
-    # Distance topologique entre les carbones lourds
+
     dist = int(D[heavy_idx, other_heavy]) if D is not None else 99
-    
-    # Ce filtre ne s'applique qu'aux distances 2 (qui correspondent à ⁴J)
+
     if dist != 2:
         return False
-    
-    # Vérifier si heavy_idx est un aldéhyde CHO
+
     if _is_aldehyde_CHO(mol, heavy_idx, heavy_to_H):
-        # L'autre atome doit être un carbone sp3 (β-carbone)
+
         other_atom = mol.GetAtomWithIdx(other_heavy)
         if other_atom.GetSymbol() == "C" and not _is_sp2_like(other_atom):
-            return True  # Ignorer le couplage CHO ↔ β-H
-    
-    # Vérifier le cas inverse
+            return True
+
     if _is_aldehyde_CHO(mol, other_heavy, heavy_to_H):
         atom = mol.GetAtomWithIdx(heavy_idx)
         if atom.GetSymbol() == "C" and not _is_sp2_like(atom):
-            return True  # Ignorer le couplage β-H ↔ CHO
-    
+            return True
+
     return False
 
-
 def _is_formamide_CHO(mol: Chem.Mol, heavy_idx: int, heavy_to_H: Dict[int, List[int]]) -> bool:
-    """
-    Détecte si un carbone porte un CHO de formamide (N-C=O-H).
-    
-    Le CHO d'un formamide (comme dans DMF, N,N-Dimethylformamide) ne devrait pas 
-    montrer de couplage avec les N-CH₃ car le chemin H-C=O-N-CH₃ représente un 
-    couplage ⁴J à travers l'azote, qui est typiquement < 0.5 Hz et non observable.
-    
-    Pattern détecté: H-C(=O)-N
-    
-    Exemples:
-    - DMF (N,N-Dimethylformamide): CN(C)C=O → CHO = singulet
-    - N-Methylformamide: CNC=O → CHO = singulet
-    - Formamide: NC=O → CHO = singulet
-    """
+
     atom = mol.GetAtomWithIdx(heavy_idx)
-    
-    # Doit être un carbone sp2 avec 1 H (CHO)
+
     if atom.GetSymbol() != "C":
         return False
-    
+
     n_H = len(heavy_to_H.get(heavy_idx, []))
     if n_H != 1:
         return False
-    
-    # Vérifier hybridation sp2 (carbonyle)
+
     if not _is_sp2_like(atom):
         return False
-    
-    # Vérifier les voisins: doit avoir O (=O) et N
+
     has_carbonyl_O = False
     has_N_neighbor = False
-    
+
     neighbors = [n for n in atom.GetNeighbors() if n.GetSymbol() != "H"]
-    
+
     for neighbor in neighbors:
         if neighbor.GetSymbol() == "O":
-            # Vérifier double liaison C=O
+
             bond = mol.GetBondBetweenAtoms(heavy_idx, neighbor.GetIdx())
             if bond and bond.GetBondTypeAsDouble() >= 2.0:
                 has_carbonyl_O = True
         elif neighbor.GetSymbol() == "N":
             has_N_neighbor = True
-    
-    # C'est un formamide si on a C(=O)-N avec un H sur le C
+
     return has_carbonyl_O and has_N_neighbor
 
-
 def _is_NCH3_coupling_to_formamide_CHO(
-    mol: Chem.Mol, 
-    heavy_idx: int, 
-    other_heavy: int, 
+    mol: Chem.Mol,
+    heavy_idx: int,
+    other_heavy: int,
     heavy_to_H: Dict[int, List[int]]
 ) -> bool:
-    """
-    Détecte si le couplage entre heavy_idx et other_heavy représente un 
-    couplage formamide CHO ↔ N-CH₃ qui devrait être ignoré.
-    
-    Le chemin H-C(=O)-N-CH₃ est un couplage ⁴J à travers l'azote,
-    typiquement < 0.5 Hz et non observable en RMN standard.
-    
-    Returns:
-        True si ce couplage devrait être ignoré (formamide CHO ↔ N-CH₃)
-    """
-    # Vérifier si heavy_idx est un formamide CHO
+
     if _is_formamide_CHO(mol, heavy_idx, heavy_to_H):
-        # Vérifier si other_heavy est un N-CH₃
+
         other_atom = mol.GetAtomWithIdx(other_heavy)
         if other_atom.GetSymbol() != "C":
             return False
-        
-        # Vérifier si c'est un CH₃ (3 H)
+
         n_H_other = len(heavy_to_H.get(other_heavy, []))
         if n_H_other != 3:
             return False
-        
-        # Vérifier si attaché à N
+
         for neighbor in other_atom.GetNeighbors():
             if neighbor.GetSymbol() == "N":
-                return True  # C'est un N-CH₃, ignorer le couplage
-        
+                return True
+
         return False
-    
-    # Vérifier le cas inverse: heavy_idx est N-CH₃ et other_heavy est formamide CHO
+
     if _is_formamide_CHO(mol, other_heavy, heavy_to_H):
         atom = mol.GetAtomWithIdx(heavy_idx)
         if atom.GetSymbol() != "C":
             return False
-        
-        # Vérifier si c'est un CH₃ attaché à N
+
         n_H = len(heavy_to_H.get(heavy_idx, []))
         if n_H != 3:
             return False
-        
+
         for neighbor in atom.GetNeighbors():
             if neighbor.GetSymbol() == "N":
-                return True  # C'est un N-CH₃, ignorer le couplage
-    
+                return True
+
     return False
 
-
-# ---------------------------
-# Allylic/W path
-# ---------------------------
-
 def _is_geminal_methyl(base: Chem.Mol, methyl_c_idx: int, heavy_to_H: Dict[int, List[int]]) -> bool:
-    """
-    Détecte si un carbone est un méthyle geminal (partie d'un groupe C(CH₃)₂).
-    
-    Un méthyle geminal est un CH₃ attaché à un carbone quaternaire qui porte
-    un autre CH₃ (ex: C(CH₃)₂, tert-butyl, isopropylidène).
-    
-    Args:
-        base: Molécule sans H
-        methyl_c_idx: Index du carbone potentiellement méthyle
-        heavy_to_H: Mapping carbone → hydrogènes
-    
-    Returns:
-        True si c'est un méthyle geminal
-    """
-    # Vérifier que c'est un CH₃
+
     n_H = len(heavy_to_H.get(methyl_c_idx, []))
     if n_H != 3:
         return False
-    
+
     methyl_atom = base.GetAtomWithIdx(methyl_c_idx)
     if methyl_atom.GetSymbol() != "C":
         return False
-    
-    # Trouver le carbone parent (le C quaternaire)
+
     for neighbor in methyl_atom.GetNeighbors():
         if neighbor.GetSymbol() != "C":
             continue
         parent_idx = neighbor.GetIdx()
-        
-        # Compter les CH₃ attachés au parent
+
         n_methyl_siblings = 0
         for sibling in neighbor.GetNeighbors():
             if sibling.GetIdx() == methyl_c_idx:
-                continue  # Pas soi-même
+                continue
             if sibling.GetSymbol() != "C":
                 continue
-            # Vérifier si c'est aussi un CH₃
+
             n_H_sibling = len(heavy_to_H.get(sibling.GetIdx(), []))
             if n_H_sibling == 3:
                 n_methyl_siblings += 1
-        
+
         if n_methyl_siblings >= 1:
-            return True  # Au moins un autre CH₃ sur le même carbone
-    
+            return True
+
     return False
 
-
 def _is_homoallylic_4J(base: Chem.Mol, i: int, j: int, mol3d: Optional[Chem.Mol] = None) -> Tuple[bool, float]:
-    """
-    Détecte le couplage homoallylique ⁴J entre un H vinylique et un CH₃ adjacent.
-    Chemin: H-C=C-CH₃ (4 liaisons)
-    
-    Exemples:
-    - Groupe prényl: CH₂-CH=C(CH₃)₂ → H vinylique couple avec CH₃ (~1.0-1.5 Hz)
-    - Groupe isopropylidène: =C(CH₃)₂ → H couple avec les 2 CH₃
-    
-    ✅ AMÉLIORATION: Différencie les J des CH₃ cis vs trans sur C=C géminaux
-    - CH₃ cis par rapport à la chaîne principale: J ≈ 1.5-1.6 Hz
-    - CH₃ trans par rapport à la chaîne principale: J ≈ 1.0-1.2 Hz
-    
-    Retourne: (is_homoallylic, J_value)
-    """
-    Ai = base.GetAtomWithIdx(i)  # Carbone portant H1
-    Aj = base.GetAtomWithIdx(j)  # Carbone portant H2
-    
+
+    Ai = base.GetAtomWithIdx(i)
+    Aj = base.GetAtomWithIdx(j)
+
     if Ai.GetSymbol() != "C" or Aj.GetSymbol() != "C":
         return False, 0.0
-    
-    def _get_geminal_methyl_J(base: Chem.Mol, vinyl_C_idx: int, double_bond_C_idx: int, 
+
+    def _get_geminal_methyl_J(base: Chem.Mol, vinyl_C_idx: int, double_bond_C_idx: int,
                                methyl_C_idx: int, mol3d: Optional[Chem.Mol] = None) -> float:
-        """
-        Calcule le J homoallylique en différenciant les méthyles géminaux.
-        
-        Pour C=C(CH₃)₂ (isopropylidène), les deux CH₃ sont stéréodifférenciés:
-        - L'un est cis par rapport au substituant de l'autre C=
-        - L'autre est trans
-        
-        Convention: On utilise l'index atomique pour différencier (arbitraire mais reproductible)
-        """
+
         double_bond_atom = base.GetAtomWithIdx(double_bond_C_idx)
-        
-        # Trouver tous les CH₃ sur le C= porteur du méthyle
-        # ✅ CORRECTION: Utiliser GetTotalNumHs() au lieu de compter les voisins H (base n'a pas de H explicites)
+
         methyls_on_same_C = []
         for neigh in double_bond_atom.GetNeighbors():
             if neigh.GetSymbol() == "C" and not _is_sp2_like(neigh):
-                # Vérifier si c'est un CH₃ en utilisant GetTotalNumHs()
+
                 n_H = neigh.GetTotalNumHs()
                 if n_H == 3:
                     methyls_on_same_C.append(neigh.GetIdx())
-        
-        # Si 2+ CH₃ géminaux (isopropylidène), différencier par position
+
         if len(methyls_on_same_C) >= 2:
-            # Trier par index pour reproductibilité
+
             methyls_on_same_C.sort()
-            
-            # Utiliser géométrie 3D si disponible (mol3d a les H explicites)
+
             if mol3d is not None and mol3d.GetNumConformers() > 0:
                 try:
                     conf = mol3d.GetConformer()
-                    # Calculer l'angle dièdre H(vinyl)-C(vinyl)=C(db)-CH₃
-                    # Pour trouver un H sur le carbone vinylique dans mol3d
+
                     vinyl_atom_3d = mol3d.GetAtomWithIdx(vinyl_C_idx)
                     vinyl_H_idx = None
                     for nn in vinyl_atom_3d.GetNeighbors():
                         if nn.GetSymbol() == "H":
                             vinyl_H_idx = nn.GetIdx()
                             break
-                    
+
                     if vinyl_H_idx is not None:
                         dihedral = abs(AllChem.GetDihedralDeg(
                             conf, vinyl_H_idx, vinyl_C_idx, double_bond_C_idx, methyl_C_idx))
-                        # dièdre ≈ 0° → cis → J plus grand (1.4-1.6 Hz)
-                        # dièdre ≈ 180° → trans → J plus petit (1.2-1.4 Hz)
-                        # ✅ CORRECTION: Garder les J au-dessus du seuil de détection (1.2 Hz)
+
                         if dihedral < 90:
-                            return 1.50  # Cis: couplage plus fort
+                            return 1.50
                         else:
-                            return 1.25  # Trans: couplage plus faible (mais > 1.2 Hz)
+                            return 1.25
                 except Exception:
                     pass
-            
-            # Sans 3D: utiliser index atomique (arbitraire mais reproductible)
-            # ✅ CORRECTION: Utiliser des J au-dessus du seuil de détection (1.2 Hz)
+
             if methyl_C_idx == methyls_on_same_C[0]:
-                return 1.50  # Premier CH₃ → J plus grand (cis conventionnel)
+                return 1.50
             else:
-                return 1.25  # Deuxième CH₃ → J plus petit (trans conventionnel)
-        
-        # Un seul CH₃ ou cas simple: valeur par défaut
+                return 1.25
+
         return 1.3
-    
-    # Cas 1: i est sp2 (vinylique), j est sp3 (méthyle sur C=C)
-    # Chemin: H-C(sp2)=C(sp2)-C(sp3)-H
+
     if _is_sp2_like(Ai) and not _is_sp2_like(Aj):
-        # Chercher C=C où Ai est impliqué
+
         for n1 in Ai.GetNeighbors():
             if n1.GetSymbol() != "C" or not _is_sp2_like(n1):
                 continue
             bond = base.GetBondBetweenAtoms(Ai.GetIdx(), n1.GetIdx())
             if not bond or bond.GetBondTypeAsDouble() < 1.5:
                 continue
-            # n1 est l'autre C du C=C, vérifier si Aj est attaché
+
             if base.GetBondBetweenAtoms(n1.GetIdx(), Aj.GetIdx()):
-                # Homoallylique confirmé: H-C=C-CH₃
+
                 J = _get_geminal_methyl_J(base, Ai.GetIdx(), n1.GetIdx(), Aj.GetIdx(), mol3d)
                 return True, J
-    
-    # Cas 2: j est sp2 (vinylique), i est sp3 (méthyle sur C=C)
+
     if _is_sp2_like(Aj) and not _is_sp2_like(Ai):
         for n1 in Aj.GetNeighbors():
             if n1.GetSymbol() != "C" or not _is_sp2_like(n1):
@@ -9854,52 +7064,40 @@ def _is_homoallylic_4J(base: Chem.Mol, i: int, j: int, mol3d: Optional[Chem.Mol]
             if base.GetBondBetweenAtoms(n1.GetIdx(), Ai.GetIdx()):
                 J = _get_geminal_methyl_J(base, Aj.GetIdx(), n1.GetIdx(), Ai.GetIdx(), mol3d)
                 return True, J
-    
+
     return False, 0.0
 
-
 def _is_allylic_4J(base: Chem.Mol, i: int, j: int, mol3d: Optional[Chem.Mol] = None) -> Tuple[bool, float]:
-    """
-    Détecte le couplage allylique ⁴J classique: H-C-C=C-H (4 liaisons)
-    
-    Le proton sur le CH₂ allylique couple avec le H vinylique.
-    J varie selon l'angle dièdre (0.5-3.0 Hz typique).
-    
-    Retourne: (is_allylic, J_value)
-    """
+
     Ai = base.GetAtomWithIdx(i)
     Aj = base.GetAtomWithIdx(j)
-    
+
     if Ai.GetSymbol() != "C" or Aj.GetSymbol() != "C":
         return False, 0.0
-    
-    # Cas: i est sp3 (allylique), j est sp2 (vinylique)
-    # Chemin: H-C(sp3)-C(sp2)=C(sp2)-H
+
     if not _is_sp2_like(Ai) and _is_sp2_like(Aj):
         for n1 in Ai.GetNeighbors():
             if n1.GetSymbol() != "C" or not _is_sp2_like(n1):
                 continue
-            # n1 est sp2, vérifier double liaison avec Aj
+
             bond = base.GetBondBetweenAtoms(n1.GetIdx(), Aj.GetIdx())
             if bond and bond.GetBondTypeAsDouble() >= 1.5:
-                # Allylique confirmé: H-CH₂-C=C-H
-                # J dépend de la géométrie - utiliser 3D si disponible
-                J = 1.8  # Valeur par défaut
+
+                J = 1.8
                 if mol3d is not None and mol3d.GetNumConformers() > 0:
                     try:
                         conf = mol3d.GetConformer()
-                        # Angle dièdre H-C-C=C
+
                         dihedral = abs(AllChem.GetDihedralDeg(conf, i, n1.GetIdx(), Aj.GetIdx(), j))
-                        # J ∝ cos²(angle) pour allylique
+
                         if dihedral < 30 or dihedral > 150:
-                            J = 2.5  # Cisoid ou transoid
+                            J = 2.5
                         else:
-                            J = 1.2  # Perpendiculaire
+                            J = 1.2
                     except Exception:
                         pass
                 return True, J
-    
-    # Cas inverse: j est sp3 (allylique), i est sp2 (vinylique)
+
     if not _is_sp2_like(Aj) and _is_sp2_like(Ai):
         for n1 in Aj.GetNeighbors():
             if n1.GetSymbol() != "C" or not _is_sp2_like(n1):
@@ -9918,30 +7116,17 @@ def _is_allylic_4J(base: Chem.Mol, i: int, j: int, mol3d: Optional[Chem.Mol] = N
                     except Exception:
                         pass
                 return True, J
-    
+
     return False, 0.0
 
-
 def _is_W_coupling_5J(base: Chem.Mol, i: int, j: int) -> Tuple[bool, float]:
-    """
-    Détecte le couplage ⁵J en W (zigzag) pour systèmes rigides.
-    
-    Chemin: H-C-C-C-C-H en configuration W planaire.
-    Typique dans les systèmes bicycliques, stéroïdes, etc.
-    
-    J typique: 1.0-2.0 Hz si rigide et planaire.
-    
-    Retourne: (is_W, J_value)
-    """
+
     Ai = base.GetAtomWithIdx(i)
     Aj = base.GetAtomWithIdx(j)
-    
-    # Les deux doivent être dans un cycle pour être rigides
+
     if not (Ai.IsInRing() and Aj.IsInRing()):
         return False, 0.0
-    
-    # Chercher un chemin de 4 carbones entre i et j (5 liaisons total avec H)
-    # Chemin: i - C1 - C2 - C3 - j
+
     for n1 in Ai.GetNeighbors():
         if n1.GetSymbol() != "C" or n1.GetIdx() == j:
             continue
@@ -9952,20 +7137,14 @@ def _is_W_coupling_5J(base: Chem.Mol, i: int, j: int) -> Tuple[bool, float]:
                 if n3.GetIdx() in {n1.GetIdx(), i} or n3.GetSymbol() != "C":
                     continue
                 if base.GetBondBetweenAtoms(n3.GetIdx(), j):
-                    # Chemin trouvé, vérifier si tous dans le même cycle
+
                     if n1.IsInRing() and n2.IsInRing() and n3.IsInRing():
                         return True, 1.2
-    
+
     return False, 0.0
 
-
 def _is_W_allylic(base: Chem.Mol, i: int, j: int) -> Tuple[bool, bool]:
-    """
-    Détecte un couplage ⁴J de type W-allylique.
-    Chemin: H-C(sp3)-C(sp2)=C(sp2)-H (4 liaisons, forme W)
-    
-    Retourne: (is_W, is_rigid)
-    """
+
     Ai = base.GetAtomWithIdx(i)
     Aj = base.GetAtomWithIdx(j)
 
@@ -9982,8 +7161,7 @@ def _is_W_allylic(base: Chem.Mol, i: int, j: int) -> Tuple[bool, bool]:
                 continue
             if not (_is_sp2_like(n2) and n2.GetSymbol() == "C"):
                 continue
-            # ✅ CORRECTION: Exclure le cas où j est le même que n2
-            # Cela évite les faux positifs pour CH3-C-C=C où le =C est j
+
             if n2.GetIdx() == Aj.GetIdx():
                 continue
             for n3 in n2.GetNeighbors():
@@ -10023,101 +7201,50 @@ def _is_W_allylic(base: Chem.Mol, i: int, j: int) -> Tuple[bool, bool]:
 
     return False, rigid
 
-# ---------------------------
-# Karplus models
-# ---------------------------
-
-# Coefficients Karplus classiques pour différents types de liaisons
 _KARPLUS_COEFFICIENTS = {
-    # Type: (A, B, C) pour J = A·cos²θ + B·cosθ + C
-    'HCCH_sp3': (7.76, -1.10, 1.40),      # Bothner-By (1965)
-    'HCCH_alkane': (9.50, -1.00, 0.50),   # Karplus original
-    'HCCH_altona': (13.70, -0.73, 0.00),  # Haasnoot-Altona (1980)
-    'HCCH_sugar': (10.40, -1.50, 0.20),   # Optimisé sucres (Tvaroska)
-    'HNCH': (6.40, -1.40, 1.90),          # Bystrov (1976) peptides
-    'HCOH': (10.40, -1.50, 0.20),         # Fraser (1971)
-    'HCNH': (8.00, -1.00, 0.00),          # Barfield
+
+    'HCCH_sp3': (7.76, -1.10, 1.40),
+    'HCCH_alkane': (9.50, -1.00, 0.50),
+    'HCCH_altona': (13.70, -0.73, 0.00),
+    'HCCH_sugar': (10.40, -1.50, 0.20),
+    'HNCH': (6.40, -1.40, 1.90),
+    'HCOH': (10.40, -1.50, 0.20),
+    'HCNH': (8.00, -1.00, 0.00),
 }
 
 def _karplus_simple(theta_deg: float, bond_type: str = 'HCCH_altona') -> float:
-    """
-    Équation Karplus avec coefficients sélectionnables.
-    
-    Args:
-        theta_deg: Angle dièdre en degrés
-        bond_type: Type de liaison pour sélectionner les coefficients
-    
-    Returns:
-        ³J en Hz
-    
-    Références:
-        - Karplus M., J. Chem. Phys. 30, 11 (1959)
-        - Haasnoot et al., Tetrahedron 36, 2783 (1980)
-        - Bystrov V.F., Prog. NMR Spectrosc. 10, 41 (1976)
-    """
+
     A, B, C = _KARPLUS_COEFFICIENTS.get(bond_type, _KARPLUS_COEFFICIENTS['HCCH_altona'])
     theta = math.radians(theta_deg)
     return max(0.0, A * (math.cos(theta) ** 2) + B * math.cos(theta) + C)
 
 def _karplus_haasnoot_altona(theta_deg: float, electroneg_corr: float = 0.0) -> float:
-    """
-    Wrapper simple autour de _karplus_with_substituent_correction.
-    """
+
     return _karplus_with_substituent_correction(theta_deg, alpha_EN=electroneg_corr, beta_EN=0.0)
 
-
 def _get_substituents_on_carbon(mol: Chem.Mol, c_idx: int, exclude_idx: int) -> List[str]:
-    """
-    Récupère les symboles des substituants sur un carbone, excluant un atome donné.
-    
-    Args:
-        mol: Molécule RDKit
-        c_idx: Index du carbone
-        exclude_idx: Index de l'atome à exclure (généralement H observé ou C voisin)
-    
-    Returns:
-        Liste des symboles atomiques des substituants (excluant H)
-    """
+
     c_atom = mol.GetAtomWithIdx(c_idx)
     substituents = []
     for nb in c_atom.GetNeighbors():
         if nb.GetIdx() == exclude_idx:
             continue
         sym = nb.GetSymbol()
-        if sym != 'H':  # Exclure les H pour les corrections EN
+        if sym != 'H':
             substituents.append(sym)
     return substituents
-
 
 def _get_flexible_chain_fallback_J(
     mol: Chem.Mol,
     heavy_idx1: int,
     heavy_idx2: int
 ) -> Tuple[float, str]:
-    """
-    Calcule le J fallback pour une chaîne sp3-sp3 flexible acyclique.
 
-    Prend en compte l'effet des substituants sur l'équilibre rotamérique:
-    - Effet gauche (O, F) → favorise rotamère gauche → J réduit
-    - Charges positives (NH3+) → favorise rotamère trans → J augmenté
-
-    Args:
-        mol: Molécule RDKit
-        heavy_idx1, heavy_idx2: Indices des deux carbones sp3
-
-    Returns:
-        (J_hz, source_type) tuple
-
-    Références:
-        - Haasnoot et al. 1980 (effet électronégativité)
-        - Altona et al. 1994 (effet gauche)
-    """
-    # Collecter les hétéroatomes voisins des deux carbones
     heteroatoms_1 = []
     charges_1 = []
     for nb in mol.GetAtomWithIdx(heavy_idx1).GetNeighbors():
         if nb.GetIdx() == heavy_idx2:
-            continue  # Exclure le partenaire
+            continue
         sym = nb.GetSymbol()
         if sym in ('O', 'N', 'F', 'Cl', 'S'):
             heteroatoms_1.append(sym)
@@ -10133,12 +7260,6 @@ def _get_flexible_chain_fallback_J(
             heteroatoms_2.append(sym)
             charges_2.append(nb.GetFormalCharge())
 
-    # ═══════════════════════════════════════════════════════════════════════════════
-    # RÈGLES DE DÉCISION basées sur l'équilibre rotamérique
-    # ═══════════════════════════════════════════════════════════════════════════════
-
-    # Cas 1: Double effet gauche (O des deux côtés) → glycol, PEG, sucres ouverts
-    # O-CH2-CH2-O : les deux O favorisent chacun un rotamère gauche → J ≈ 5.0 Hz
     has_O_side1 = 'O' in heteroatoms_1
     has_O_side2 = 'O' in heteroatoms_2
     has_F_side1 = 'F' in heteroatoms_1
@@ -10147,25 +7268,18 @@ def _get_flexible_chain_fallback_J(
     if (has_O_side1 and has_O_side2) or (has_F_side1 and has_F_side2):
         return (5.0, "gauche_effect_double")
 
-    # Cas 2: Effet gauche simple (un seul O ou F adjacent)
-    # CH2-CH2-O ou CH2-CH2-F : O/F favorise rotamère gauche → J ≈ 6.0-6.5 Hz
     if has_O_side1 or has_O_side2 or has_F_side1 or has_F_side2:
-        # F a un effet gauche plus fort que O
+
         if has_F_side1 or has_F_side2:
             return (5.5, "gauche_effect_F")
         else:
             return (6.5, "gauche_effect_O")
 
-    # Cas 3: Charge positive adjacente (NH3+, NR3+) → favorise trans
-    # CH2-CH2-NH3+ : répulsion stérique/charge → chaîne étendue → J ≈ 7.5 Hz
     has_cation = any(c > 0 for c in charges_1 + charges_2)
     if has_cation:
         return (7.5, "extended_chain_cation")
 
-    # Cas 4: Chaîne alkyle simple ou substituants sans effet spécial
-    # Rotation quasi-libre, légère préférence trans → J ≈ 7.0 Hz
     return (7.0, "fallback_average")
-
 
 def _estimate_vicinal_sp3_J(
     mol3d: Chem.Mol,
@@ -10175,58 +7289,38 @@ def _estimate_vicinal_sp3_J(
     electroneg_corr: float = 0.0,
     use_full_haasnoot: bool = True,
 ) -> Optional[float]:
-    """
-    Estime ³J(H-C-C-H) vicinal avec l'équation Haasnoot-Altona complète (7 paramètres).
-    
-    Cette version améliorée:
-    1. Détecte automatiquement les substituants sur Cα et Cβ
-    2. Calcule les signes d'orientation à partir de la géométrie 3D
-    3. Applique l'équation Haasnoot-Altona complète avec le terme P7
-    
-    Args:
-        mol3d: Molécule RDKit avec coordonnées 3D
-        h1, h2: Indices des deux protons
-        use_haasnoot: Si True, utilise l'équation Haasnoot (obsolète, voir use_full_haasnoot)
-        electroneg_corr: Correction EN manuelle (obsolète)
-        use_full_haasnoot: Si True, utilise l'équation complète à 7 paramètres
-    
-    Returns:
-        ³J en Hz ou None si calcul impossible
-    """
+
     try:
         c1 = next(n.GetIdx() for n in mol3d.GetAtomWithIdx(h1).GetNeighbors() if n.GetSymbol() == "C")
         c2 = next(n.GetIdx() for n in mol3d.GetAtomWithIdx(h2).GetNeighbors() if n.GetSymbol() == "C")
-        
-        if not mol3d.GetBondBetweenAtoms(c1, c2): 
+
+        if not mol3d.GetBondBetweenAtoms(c1, c2):
             return None
-        
+
         conf = mol3d.GetConformer()
         dihed = AllChem.GetDihedralDeg(conf, h1, c1, c2, h2)
-        
+
         if use_full_haasnoot:
-            # Récupérer les substituants sur chaque carbone
-            subs_alpha = _get_substituents_on_carbon(mol3d, c1, c2)  # Sur C1, excluant C2
-            subs_beta = _get_substituents_on_carbon(mol3d, c2, c1)   # Sur C2, excluant C1
-            
-            # Calculer les signes d'orientation pour chaque substituant
+
+            subs_alpha = _get_substituents_on_carbon(mol3d, c1, c2)
+            subs_beta = _get_substituents_on_carbon(mol3d, c2, c1)
+
             orientation_signs = []
-            
-            # Substituants sur C1 (alpha)
+
             c1_atom = mol3d.GetAtomWithIdx(c1)
             for nb in c1_atom.GetNeighbors():
                 if nb.GetIdx() == c2 or nb.GetSymbol() == 'H':
                     continue
                 sign = _haasnoot_orientation_sign(mol3d, h1, c1, c2, nb.GetIdx())
                 orientation_signs.append(sign)
-            
-            # Substituants sur C2 (beta)
+
             c2_atom = mol3d.GetAtomWithIdx(c2)
             for nb in c2_atom.GetNeighbors():
                 if nb.GetIdx() == c1 or nb.GetSymbol() == 'H':
                     continue
                 sign = _haasnoot_orientation_sign(mol3d, h1, c1, c2, nb.GetIdx())
                 orientation_signs.append(sign)
-            
+
             return _karplus_haasnoot_altona_full(
                 dihed,
                 substituents_alpha=subs_alpha,
@@ -10238,79 +7332,61 @@ def _estimate_vicinal_sp3_J(
             return _karplus_haasnoot_altona(dihed, electroneg_corr)
         else:
             return _karplus_simple(dihed)
-            
+
     except Exception:
         return None
 
-
 def _is_peptide_backbone(mol: Chem.Mol, h_idx: int, n_idx: int) -> Tuple[bool, Optional[float]]:
-    """
-    Détecte si un couplage H-N fait partie d'un backbone peptidique.
-    
-    Recherche le motif: H-N-C(=O)-C ou N-CH(R)-C(=O)
-    
-    Args:
-        mol: Molécule RDKit
-        h_idx: Index du proton (sur N)
-        n_idx: Index de l'azote
-    
-    Returns:
-        (is_peptide, phi_angle_deg) où phi est l'angle dièdre du backbone
-    """
+
     try:
         n_atom = mol.GetAtomWithIdx(n_idx)
-        
-        # Chercher C(=O) adjacent à N (carbonyle du résidu précédent)
+
         carbonyl_c = None
         alpha_c = None
-        
+
         for nb in n_atom.GetNeighbors():
             if nb.GetSymbol() != 'C':
                 continue
-            
-            # Vérifier si c'est un carbonyle
+
             is_carbonyl = False
             for bond in nb.GetBonds():
                 other = bond.GetOtherAtom(nb)
                 if other.GetSymbol() == 'O' and bond.GetBondTypeAsDouble() >= 2:
                     is_carbonyl = True
                     break
-            
+
             if is_carbonyl:
                 carbonyl_c = nb
             else:
-                # Potentiel Cα (carbone sp³ avec H)
+
                 if any(n2.GetSymbol() == 'H' for n2 in nb.GetNeighbors()):
                     alpha_c = nb
-        
+
         if carbonyl_c is None or alpha_c is None:
             return False, None
-        
-        # Trouver le Hα
+
         h_alpha = None
         for nb in alpha_c.GetNeighbors():
             if nb.GetSymbol() == 'H':
                 h_alpha = nb
                 break
-        
+
         if h_alpha is None:
             return False, None
-        
-        # Calculer l'angle φ si on a une géométrie 3D
+
         if mol.GetNumConformers() > 0:
             conf = mol.GetConformer()
-            # φ = C'-N-Cα-C' (ou approximation H-N-Cα-Hα)
+
             try:
                 phi = AllChem.GetDihedralDeg(conf, h_idx, n_idx, alpha_c.GetIdx(), h_alpha.GetIdx())
                 return True, phi
             except Exception:
                 return True, None
-        
+
         return True, None
-        
+
     except Exception:
         return False, None
-
 
 def _estimate_peptide_coupling(
     mol: Chem.Mol,
@@ -10319,134 +7395,80 @@ def _estimate_peptide_coupling(
     n_idx: int,
     coupling_type: str = 'HNCH_alpha'
 ) -> Optional[float]:
-    """
-    Estime les couplages peptidiques avec l'équation Bystrov.
-    
-    Cette fonction est spécifiquement optimisée pour les peptides et protéines.
-    
-    Types de couplages supportés:
-    - HNCH_alpha: ³J(HN-Cα-Hα) - utilisé pour déterminer φ
-    - HNCH_psi: ³J(HN-C'-N) - utilisé pour déterminer ψ
-    - HCCH_peptide: ³J(Hα-Cα-Cβ-Hβ) - chaînes latérales
-    
-    Args:
-        mol: Molécule RDKit avec coordonnées 3D
-        h_idx: Index du proton NH
-        partner_h_idx: Index du proton partenaire (Hα)
-        n_idx: Index de l'azote
-        coupling_type: Type de couplage peptidique
-    
-    Returns:
-        ³J en Hz ou None
-    """
+
     try:
         is_peptide, phi = _is_peptide_backbone(mol, h_idx, n_idx)
-        
+
         if not is_peptide:
             return None
-        
+
         if phi is not None:
             return _karplus_bystrov_peptide(phi, coupling_type=coupling_type)
         else:
-            # Sans géométrie 3D, utiliser une valeur moyenne
-            # φ typique en feuillet β: ~-120° → ³J ~8-9 Hz
-            # φ typique en hélice α: ~-60° → ³J ~3-4 Hz
-            return 6.0  # Valeur moyenne
-            
+
+            return 6.0
+
     except Exception:
         return None
 
 def _estimate_vinylic_J(mol3d: Chem.Mol, h1: int, h2: int, config: Optional[SimConfig]=None) -> Optional[float]:
-    """
-    Estime ³J(H-C=C-H) vinylique avec l'équation Karplus-Garbisch.
-    
-    Utilise l'équation Garbisch (1968) spécialement paramétrée pour les alcènes:
-    ³J = A + B·cos(θ) + C·cos(2θ)
-    
-    Valeurs typiques:
-    - cis (θ ≈ 0°): 6-12 Hz (typiquement 10 Hz)
-    - trans (θ ≈ 180°): 12-18 Hz (typiquement 16 Hz)  
-    - geminal (=CH₂): 0-3 Hz
-    
-    Références:
-        - Garbisch E.W., J. Am. Chem. Soc. 90, 6543 (1968)
-        - Bothner-By A.A., Adv. Magn. Reson. 1, 195 (1965)
-    """
+
     config = config or SimConfig()
     try:
         c1 = next(n.GetIdx() for n in mol3d.GetAtomWithIdx(h1).GetNeighbors() if n.GetSymbol() == "C")
         c2 = next(n.GetIdx() for n in mol3d.GetAtomWithIdx(h2).GetNeighbors() if n.GetSymbol() == "C")
-        if not mol3d.GetBondBetweenAtoms(c1, c2): 
+        if not mol3d.GetBondBetweenAtoms(c1, c2):
             return None
         b = mol3d.GetBondBetweenAtoms(c1, c2)
-        if not b or b.GetBondTypeAsDouble() < 2.0: 
+        if not b or b.GetBondTypeAsDouble() < 2.0:
             return None
-        
-        # Vérifier si geminal (même carbone)
+
         if c1 == c2:
             return config.vinylic_J_defaults.get('geminal', 2.0)
-        
+
         conf = mol3d.GetConformer()
         phi = AllChem.GetDihedralDeg(conf, h1, c1, c2, h2)
-        
-        # Déterminer le type d'alcène pour les paramètres Garbisch
+
         c1_atom = mol3d.GetAtomWithIdx(c1)
         c2_atom = mol3d.GetAtomWithIdx(c2)
-        
-        # Vérifier si conjugué (adjacent à un autre C sp² ou aromatique)
+
         is_conjugated = False
         has_electroneg_sub = False
         substituents = []
-        
+
         for c_atom in [c1_atom, c2_atom]:
             for nb in c_atom.GetNeighbors():
                 if nb.GetIdx() in (h1, h2, c1, c2):
                     continue
                 sym = nb.GetSymbol()
                 substituents.append(sym)
-                
-                # Vérifier conjugaison
+
                 if sym == 'C' and (_is_sp2_like(nb) or nb.GetIsAromatic()):
                     is_conjugated = True
-                
-                # Vérifier électronégativité
+
                 if sym in ('O', 'N', 'F', 'Cl', 'Br'):
                     has_electroneg_sub = True
-        
-        # Sélectionner le type d'alcène pour Garbisch
+
         if has_electroneg_sub:
             alkene_type = 'electronegative'
         elif is_conjugated:
             alkene_type = 'conjugated'
         else:
             alkene_type = 'standard'
-        
-        # Utiliser l'équation Garbisch
+
         J = _karplus_garbisch_alkene(phi, alkene_type=alkene_type, substituents=substituents)
-        
+
         return J
-            
+
     except Exception:
         return None
 
-
 def _estimate_alkyne_J(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
-    """
-    Estime ⁴J(H-C≡C-H) ou ⁵J(H-C-C≡C-H) pour les alcynes.
-    
-    Couplages alcynes typiques:
-    - ⁴J(H-C≡C-H) terminaux: 2.5-3.5 Hz (via liaison triple)
-    - ⁵J(H-C-C≡C-H): 1.5-2.5 Hz
-    - ³J propargylique (H-C-C≡C): 2-3 Hz
-    
-    Références:
-        - Günther, NMR Spectroscopy, 3rd Ed.
-        - Stothers, Carbon-13 NMR Spectroscopy
-    """
+
     try:
-        # ✅ NOUVEAU: Essayer d'abord la table complète si disponible
+
         if COUPLING_TABLES_MODULE_AVAILABLE:
-            # Calculer le chemin d'atomes entre les deux H
+
             try:
                 path = Chem.GetShortestPath(mol, h1_idx, h2_idx)
                 if path and len(path) >= 2:
@@ -10455,85 +7477,64 @@ def _estimate_alkyne_J(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[floa
                         return J_table
             except Exception:
                 pass
-        
-        # Trouver les carbones parents
+
         h1_atom = mol.GetAtomWithIdx(h1_idx)
         h2_atom = mol.GetAtomWithIdx(h2_idx)
-        
+
         c1_neighbors = [n for n in h1_atom.GetNeighbors() if n.GetSymbol() == 'C']
         c2_neighbors = [n for n in h2_atom.GetNeighbors() if n.GetSymbol() == 'C']
-        
+
         if not c1_neighbors or not c2_neighbors:
             return None
-        
+
         c1 = c1_neighbors[0]
         c2 = c2_neighbors[0]
-        
-        # Vérifier si un des carbones est sp (alcyne)
+
         def is_alkyne_carbon(atom):
             for bond in atom.GetBonds():
                 if bond.GetBondTypeAsDouble() == 3.0:
                     return True
             return False
-        
-        # Cas 1: H-C≡C-H (⁴J direct, rare)
+
         if is_alkyne_carbon(c1) and is_alkyne_carbon(c2):
-            return 2.5  # Très rare mais observable
-        
-        # Cas 2: H-C-C≡C-H (⁵J propargylique)
-        # Chercher un chemin via une triple liaison
+            return 2.5
+
         for nb1 in c1.GetNeighbors():
             if nb1.GetSymbol() != 'C':
                 continue
             bond_c1_nb1 = mol.GetBondBetweenAtoms(c1.GetIdx(), nb1.GetIdx())
             if bond_c1_nb1 and bond_c1_nb1.GetBondTypeAsDouble() == 3.0:
-                # C1 est lié à un alcyne
+
                 for nb2 in nb1.GetNeighbors():
                     if nb2.GetIdx() == c1.GetIdx():
                         continue
                     if nb2.GetSymbol() == 'C':
-                        # Vérifier si c2 est connecté
+
                         bond_nb1_nb2 = mol.GetBondBetweenAtoms(nb1.GetIdx(), nb2.GetIdx())
                         if bond_nb1_nb2 and bond_nb1_nb2.GetBondTypeAsDouble() == 3.0:
                             if nb2.GetIdx() == c2.GetIdx():
-                                return 2.5  # ⁴J(H-C≡C-H)
-                            # Vérifier liaison nb2-c2
+                                return 2.5
+
                             if mol.GetBondBetweenAtoms(nb2.GetIdx(), c2.GetIdx()):
-                                return 2.0  # ⁵J propargylique
-        
-        # Cas 3: H adjacent à alcyne (propargylique)
+                                return 2.0
+
         for nb in c1.GetNeighbors():
             if nb.GetSymbol() == 'C':
                 for bond in nb.GetBonds():
                     if bond.GetBondTypeAsDouble() == 3.0:
-                        # c1 est propargylique
+
                         return 2.5
-        
+
         return None
-        
+
     except Exception:
         return None
 
-
 def _estimate_31P_1H_coupling(mol: Chem.Mol, h_idx: int, p_idx: int, dist: int) -> Optional[float]:
-    """
-    Estime les couplages ³¹P-¹H avancés.
-    
-    Couplages typiques:
-    - ²J(P-C-H): 2-20 Hz (dépend de l'angle)
-    - ³J(P-C-C-H): 5-20 Hz (relation Karplus)
-    - ³J(P-O-C-H): 8-12 Hz (phosphates)
-    - ⁴J(P-O-C-C-H): 0-3 Hz
-    
-    Très importants pour:
-    - Nucléotides (ATP, ADN, ARN)
-    - Phospholipides
-    - Composés organophosphorés
-    """
+
     try:
         p_atom = mol.GetAtomWithIdx(p_idx)
-        
-        # Déterminer le type de phosphore
+
         has_double_O = False
         n_oxygen_neighbors = 0
         for nb in p_atom.GetNeighbors():
@@ -10542,114 +7543,68 @@ def _estimate_31P_1H_coupling(mol: Chem.Mol, h_idx: int, p_idx: int, dist: int) 
                 bond = mol.GetBondBetweenAtoms(p_idx, nb.GetIdx())
                 if bond and bond.GetBondTypeAsDouble() >= 2:
                     has_double_O = True
-        
+
         is_phosphate = has_double_O and n_oxygen_neighbors >= 2
         is_phosphine = n_oxygen_neighbors == 0
-        
+
         if dist == 2:
-            # ²J(P-C-H) ou ²J(P-O-H)
+
             if is_phosphate:
-                return 8.0  # P(O)-C-H
+                return 8.0
             else:
-                return 12.0  # P-C-H (phosphine)
+                return 12.0
         elif dist == 3:
-            # ³J(P-C-C-H) ou ³J(P-O-C-H)
+
             if is_phosphate:
-                return 10.0  # Phosphate typique
+                return 10.0
             else:
-                return 15.0  # Phosphine
+                return 15.0
         elif dist == 4:
-            # ⁴J longue portée
+
             return 2.0
-        
+
         return None
-        
+
     except Exception:
         return None
 
-
 def _estimate_HNCH_J(mol3d: Chem.Mol, h_idx: int, n_idx: int, c_idx: int, h2_idx: int) -> Optional[float]:
-    """
-    Estime ³J(H-N-C-H) pour peptides/amides.
-    
-    Utilise l'équation Karplus de Bystrov (1976):
-    ³J = A·cos²θ + B·cosθ + C
-    
-    Paramètres Bystrov: A=6.4, B=-1.4, C=1.9 Hz
-    
-    Très important pour:
-    - Peptides (φ, ψ angles)
-    - Nucléosides
-    - Amides cycliques
-    
-    Référence: Bystrov V.F., Prog. NMR Spectrosc. 10, 41-82 (1976)
-    """
+
     try:
         conf = mol3d.GetConformer()
         phi = AllChem.GetDihedralDeg(conf, h_idx, n_idx, c_idx, h2_idx)
-        
-        # Équation Karplus-Bystrov pour H-N-C-H
+
         return _karplus_simple(phi, bond_type='HNCH')
-        
+
     except Exception:
         return None
 
-
-# ---------------------------
-# ✅ INFÉRENCE STÉRÉOCHIMIE E/Z POUR DOUBLES LIAISONS NON DÉFINIES
-# ---------------------------
 def _infer_double_bond_stereo(mol: Chem.Mol, default_stereo: str = "E") -> Chem.Mol:
-    """
-    Infère la stéréochimie E/Z pour les doubles liaisons C=C non définies.
-    
-    Pour les chaînes polyéniques (comme les caroténoïdes), les doubles liaisons
-    naturelles sont généralement en configuration trans (E). Cette fonction
-    assigne automatiquement la stéréochimie E aux doubles liaisons non définies
-    dans les systèmes conjugués.
-    
-    STRATÉGIE AMÉLIORÉE:
-    1. Générer une conformation 3D (skip pour mol > 50 atomes)
-    2. Pour chaque double liaison non définie, forcer la géométrie trans (φ ≈ 180°)
-    3. Ré-optimiser pour stabiliser
-    
-    Args:
-        mol: Molécule RDKit
-        default_stereo: "E" (trans) ou "Z" (cis) - défaut "E" car plus stable
-        
-    Returns:
-        Molécule avec stéréochimie inférée et géométrie cohérente
-        
-    Référence: Caroténoïdes naturels sont typiquement all-trans (E)
-               IUPAC-IUB Nomenclature of Carotenoids (1974)
-    """
+
     import logging
-    
-    # Ajouter les H et générer la 3D
+
     molH = Chem.AddHs(mol)
-    
-    # ✅ OPTIMIZATION: Skip EmbedMolecule pour molecules > 50 atomes (trop couteux)
+
     n_heavy = molH.GetNumHeavyAtoms()
     if n_heavy > 50:
         logging.info(f"[SKIP 3D] Molecule trop grande ({n_heavy} atomes), pas d'EmbedMolecule")
         return mol
-    
-    # Générer une conformation 3D (seulement pour petites molecules)
+
     try:
-        try: 
+        try:
             ps = AllChem.ETKDGv3()
-        except: 
+        except:
             ps = AllChem.ETKDG()
         ps.randomSeed = 42
         ps.useRandomCoords = True
         res = AllChem.EmbedMolecule(molH, ps)
         if res != 0:
-            # Fallback avec coordonnées aléatoires
+
             AllChem.EmbedMolecule(molH, AllChem.ETKDG())
     except Exception as e:
         logging.warning(f"Impossible de générer la 3D: {e}")
         return mol
-    
-    # Optimiser la géométrie
+
     try:
         AllChem.MMFFOptimizeMolecule(molH, maxIters=200)
     except:
@@ -10657,33 +7612,30 @@ def _infer_double_bond_stereo(mol: Chem.Mol, default_stereo: str = "E") -> Chem.
             AllChem.UFFOptimizeMolecule(molH, maxIters=200)
         except:
             pass
-    
-    # Identifier les doubles liaisons C=C non définies
+
     modified_count = 0
     double_bonds_to_fix = []
-    
+
     for bond in molH.GetBonds():
         if bond.GetBondType() != Chem.BondType.DOUBLE:
             continue
-            
+
         atom1 = bond.GetBeginAtom()
         atom2 = bond.GetEndAtom()
-        
+
         if atom1.GetSymbol() != "C" or atom2.GetSymbol() != "C":
             continue
-            
-        # Vérifier si stéréochimie déjà définie
+
         current_stereo = bond.GetStereo()
         if current_stereo not in (Chem.BondStereo.STEREONONE,):
             continue
-        
-        # Trouver les H ou substituants attachés pour mesurer l'angle dièdre
+
         neighbors1 = [n for n in atom1.GetNeighbors() if n.GetIdx() != atom2.GetIdx()]
         neighbors2 = [n for n in atom2.GetNeighbors() if n.GetIdx() != atom1.GetIdx()]
-        
+
         if not neighbors1 or not neighbors2:
             continue
-            
+
         double_bonds_to_fix.append({
             'bond': bond,
             'atom1': atom1,
@@ -10691,147 +7643,108 @@ def _infer_double_bond_stereo(mol: Chem.Mol, default_stereo: str = "E") -> Chem.
             'ref1': neighbors1[0],
             'ref2': neighbors2[0],
         })
-    
-    # Forcer la géométrie trans pour chaque double liaison
+
     if double_bonds_to_fix and molH.GetNumConformers() > 0:
         conf = molH.GetConformer()
-        
+
         for db_info in double_bonds_to_fix:
             try:
                 ref1_idx = db_info['ref1'].GetIdx()
                 atom1_idx = db_info['atom1'].GetIdx()
                 atom2_idx = db_info['atom2'].GetIdx()
                 ref2_idx = db_info['ref2'].GetIdx()
-                
-                # Lire l'angle dièdre actuel
+
                 current_dihedral = AllChem.GetDihedralDeg(conf, ref1_idx, atom1_idx, atom2_idx, ref2_idx)
-                
-                # Déterminer l'angle cible
+
                 if default_stereo == "E":
-                    target_dihedral = 180.0  # Trans
+                    target_dihedral = 180.0
                 else:
-                    target_dihedral = 0.0    # Cis
-                
-                # Si l'angle n'est pas proche de la cible, ajuster
+                    target_dihedral = 0.0
+
                 if abs(current_dihedral - target_dihedral) > 30 and abs(current_dihedral + 360 - target_dihedral) > 30:
-                    # Forcer l'angle dièdre
+
                     AllChem.SetDihedralDeg(conf, ref1_idx, atom1_idx, atom2_idx, ref2_idx, target_dihedral)
                     modified_count += 1
                 elif abs(current_dihedral - target_dihedral) <= 30:
-                    modified_count += 1  # Déjà en configuration trans
-                    
+                    modified_count += 1
+
             except Exception as e:
                 logging.debug(f"Erreur ajustement dièdre: {e}")
                 continue
-        
-        # Ré-optimiser légèrement pour relaxer les contraintes
+
         if modified_count > 0:
             try:
                 AllChem.MMFFOptimizeMolecule(molH, maxIters=50)
             except:
                 pass
-    
+
     if modified_count > 0:
-        logging.info(f"✅ Géométrie {default_stereo} (trans) forcée pour {modified_count} double(s) liaison(s)")
-    
-    # Assigner la stéréochimie basée sur la géométrie 3D
+        logging.info(f" Géométrie {default_stereo} (trans) forcée pour {modified_count} double(s) liaison(s)")
+
     Chem.AssignStereochemistryFrom3D(molH)
-    
+
     return molH
 
-
 def _count_undefined_double_bonds(mol: Chem.Mol) -> Tuple[int, int]:
-    """
-    Compte les doubles liaisons C=C définies et non définies.
-    
-    Returns:
-        (defined_count, undefined_count)
-    """
+
     defined = 0
     undefined = 0
-    
+
     for bond in mol.GetBonds():
         if bond.GetBondType() != Chem.BondType.DOUBLE:
             continue
-            
+
         atom1 = bond.GetBeginAtom()
         atom2 = bond.GetEndAtom()
-        
+
         if atom1.GetSymbol() != "C" or atom2.GetSymbol() != "C":
             continue
-            
+
         stereo = bond.GetStereo()
         if stereo == Chem.BondStereo.STEREONONE:
             undefined += 1
         else:
             defined += 1
-            
+
     return (defined, undefined)
 
-
-# ---------------------------
-# ✅ CORRECTION 1 : Validation structure moléculaire (avec paramètre smiles)
-# ---------------------------
 def _validate_molecular_structure(mol: Chem.Mol, smiles: str) -> None:
-    """
-    ✅ Validation GÉNÉRIQUE d'une molécule :
-    - Vérifie les valences
-    - Détecte les stéréocentres ambigus
-    - REFUSE les cycles furanose dans les sucres (cycle 5 atomes)
-    - Vérifie la cohérence des chiralités
-    
-    Lève ValueError si la molécule est invalide.
-    """
-    # 1. Nettoyage et vérification de valence
+
     try:
         Chem.SanitizeMol(mol, Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_SETAROMATICITY)
         Chem.SetAromaticity(mol)
     except Exception as e:
-        raise ValueError(f"❌ Structure moléculaire invalide (valence, connectivité): {e}")
-    
-    # 2. Vérification des stéréocentres
+        raise ValueError(f" Structure moléculaire invalide (valence, connectivité): {e}")
+
     molH = Chem.AddHs(mol)
     Chem.AssignStereochemistry(molH, cleanIt=True, force=True, flagPossibleStereoCenters=True)
-    
-    # Note: On ne refuse plus les stéréocentres non définis - on génère juste un avertissement
-    # car beaucoup de molécules légitimes n'ont pas besoin de stéréochimie définie pour la RMN
+
     for atom in molH.GetAtoms():
         if atom.GetChiralTag() == rdchem.ChiralType.CHI_UNSPECIFIED:
             if atom.GetDegree() == 4 and atom.IsInRing():
-                # Avertissement au lieu d'erreur - la stéréochimie peut être inférée
+
                 import logging
-                logging.debug(f"⚠️ Stéréochimie non définie sur l'atome {atom.GetIdx()} ({atom.GetSymbol()}) dans un cycle - sera ignorée")
-    
-    # 3. Détection de cycles furanose (5 atomes O-C-C-C-C) dans les sucres
+                logging.debug(f" Stéréochimie non définie sur l'atome {atom.GetIdx()} ({atom.GetSymbol()}) dans un cycle - sera ignorée")
+
     rings = Chem.GetSymmSSSR(molH)
     for ring in rings:
-        if len(ring) == 5:  # Cycle à 5 atomes
+        if len(ring) == 5:
             atoms_in_ring = [molH.GetAtomWithIdx(i) for i in ring]
             symbols = [a.GetSymbol() for a in atoms_in_ring]
-            
-            # Vérifier motif furanose : 1 O + 4 C + présence de CH2OH externe
+
             if symbols.count("O") == 1 and symbols.count("C") == 4:
-                # Vérifier si c'est une molécule sucre-like (présence de CH2OH)
+
                 for atom in molH.GetAtoms():
                     if atom.GetSymbol() == "C" and not atom.IsInRing():
                         neighbors = [n.GetSymbol() for n in atom.GetNeighbors()]
                         if "O" in neighbors and atom.GetTotalNumHs() >= 2:
                             raise ValueError(
-                                f"❌ Cycle furanose détecté (5 atomes) dans '{smiles}'. "
+                                f" Cycle furanose détecté (5 atomes) dans '{smiles}'. "
                                 "Utilisez un cycle pyranose (6 atomes) pour les hexoses naturels."
                             )
 
-
-# ---------------------------
-# VALIDATION CONNECTIVITÉ
-# ---------------------------
 def _validate_connectivity(molH: Chem.Mol, connectivity: Dict[int, List[int]]) -> bool:
-    """
-    ✅ Vérifie que la connectivité X–H est cohérente :
-      - indices dans l'intervalle
-      - atomes bien de type H
-      - pas de doublons
-    """
+
     n_atoms = molH.GetNumAtoms()
     seen = set()
 
@@ -10848,46 +7761,31 @@ def _validate_connectivity(molH: Chem.Mol, connectivity: Dict[int, List[int]]) -
 
     return True
 
-# ---------------------------
-# Numeric helpers
-# ---------------------------
 def _delta_nu_hz(delta_ppm: float, spectrometer_mhz: float) -> float:
     return abs(delta_ppm) * spectrometer_mhz
 
-# ---------------------------
-# Aromatic contextual J
-# ---------------------------
 def _aromatic_J_contextual(base: Chem.Mol, aromatic_dmap: List[Dict[int,int]], i: int, j: int,
                            J0_meta: float = 2.3, J0_para: float = 0.6) -> Tuple[Optional[float], Optional[str]]:
-    """
-    Calcule J aromatique avec gestion enrichie des hétérocycles.
-    
-    AMÉLIORATION: Utilise _AROMATIC_COUPLING_TABLE pour les valeurs spécifiques
-    selon le type d'hétérocycle (imidazole, pyridine, etc.)
-    """
+
     rel = _aromatic_rel_from_map(aromatic_dmap, i, j)
     if rel is None:
         return None, rel
-    
-    # Identifier le type d'hétérocycle pour les deux atomes
+
     cycle_type = _identify_heterocycle_type(base, i, j)
-    
-    # Cas spécial: imidazole H2 (entre les 2 N) → couplage négligeable
+
     if cycle_type == 'imidazole':
         ring_info = base.GetRingInfo()
         for ring in ring_info.AtomRings():
             if i in ring and j in ring:
                 if _is_imidazole_h2_position(base, i, j, ring):
-                    return 0.0, rel  # Pas de couplage significatif avec/depuis H2
-    
-    # Récupérer J depuis la table enrichie
+                    return 0.0, rel
+
     if cycle_type in _AROMATIC_COUPLING_TABLE:
         cycle_data = _AROMATIC_COUPLING_TABLE[cycle_type]
         if isinstance(cycle_data, dict) and rel in cycle_data:
             J = cycle_data[rel]
             return J, rel
-    
-    # Fallback: valeurs par défaut
+
     if rel == "ortho":
         J = _AROMATIC_COUPLING_TABLE.get('default_ortho', 7.5)
     elif rel == "meta":
@@ -10915,29 +7813,23 @@ def _aromatic_J_contextual(base: Chem.Mol, aromatic_dmap: List[Dict[int,int]], i
     elif rel == "para":
         scale = (penalty(i) * penalty(j))**0.5
         J = max(0.45, min(0.80, J * scale))
-    
+
     return J, rel
 
-
 def _identify_heterocycle_type(mol: Chem.Mol, i: int, j: int) -> str:
-    """
-    Identifie le type d'hétérocycle contenant les atomes i et j.
-    
-    Returns:
-        Type de cycle: 'benzene', 'pyridine', 'imidazole', 'furan', 'thiophene', etc.
-    """
+
     ring_info = mol.GetRingInfo()
-    
+
     for ring in ring_info.AtomRings():
         if i in ring and j in ring:
-            # Vérifier que c'est aromatique
+
             if not all(mol.GetAtomWithIdx(idx).GetIsAromatic() for idx in ring):
                 continue
-            
+
             ring_atoms = [mol.GetAtomWithIdx(idx) for idx in ring]
             heteroatoms = [a.GetSymbol() for a in ring_atoms if a.GetSymbol() != 'C']
             ring_size = len(ring)
-            
+
             if ring_size == 5:
                 if 'O' in heteroatoms and 'N' not in heteroatoms and 'S' not in heteroatoms:
                     return 'furan'
@@ -10956,7 +7848,7 @@ def _identify_heterocycle_type(mol: Chem.Mol, i: int, j: int) -> str:
                     return 'pyrimidine'
                 elif heteroatoms.count('N') >= 3:
                     return 'triazine_1_3_5'
-            
+
     return 'benzene'
 
 def _fallback_aromatic_J_when_empty(
@@ -10967,29 +7859,23 @@ def _fallback_aromatic_J_when_empty(
     config: SimConfig,
     ranks: Optional[List[int]] = None,
 ) -> List[float]:
-    """
-    Fallback pour H aromatiques quand aucun J n'a été estimé.
-    
-    IMPORTANT: Ne retourne PAS de J pour les voisins équivalents
-    (ex: benzène non-substitué → singulet).
-    """
+
     heavy = base.GetAtomWithIdx(heavy_idx)
     if heavy.GetSymbol() != "C" or not heavy.GetIsAromatic():
         return []
 
     J_vals: List[float] = []
-    
+
     for other_heavy, Hs in heavy_to_H.items():
         if other_heavy == heavy_idx or not Hs:
             continue
         other_atom = base.GetAtomWithIdx(other_heavy)
         if not other_atom.GetIsAromatic():
             continue
-        
-        # ✅ CORRECTION: Skip les voisins équivalents (homotopes)
+
         if ranks is not None:
             if _are_heavy_equivalent(ranks, heavy_idx, other_heavy, heavy_to_H, None, 0.01, mol=base):
-                continue  # Pas de couplage observable entre protons équivalents
+                continue
 
         rel = _aromatic_rel_from_map(aromatic_dmap, heavy_idx, other_heavy)
         if rel == "ortho":
@@ -11007,12 +7893,9 @@ def _fallback_aromatic_J_when_empty(
 
     return J_vals
 
-# ---------------------------
-# Spin-system fallback helpers
-# ---------------------------
 def _rough_topological_J(base: Chem.Mol, aromatic_dmap: List[Dict[int,int]],
                          i_heavy: int, j_heavy: int, is_sp2_i: bool, is_sp2_j: bool) -> float:
-    """Estimation grossière de J entre deux protons pour fallback partenaire↔partenaire."""
+
     if i_heavy == j_heavy:
         return 2.0 if is_sp2_i else 12.5
     D = _topological_distances(base)
@@ -11116,7 +7999,7 @@ def _spin_fallback_label(
     aromatic_dmap: Optional[List[Dict[int,int]]] = None,
     is_sp2_list: Optional[List[bool]] = None
 ) -> Optional[str]:
-    """Fallback spin enrichi : système avec couplages partenaire↔partenaire."""
+
     try:
         n = 1 + len(partner_ppm)
         if n < 2 or n > config.spin_fallback_max_spins:
@@ -11157,68 +8040,42 @@ def _spin_fallback_label(
     except Exception:
         return None
 
-# ---------------------------
-# Grouping
-# ---------------------------
-
 def _group_J_values_with_orders(
-    J_list: List[float], 
+    J_list: List[float],
     J_orders: List[int],
-    tol: float = TOLERANCE_J_HZ, 
+    tol: float = TOLERANCE_J_HZ,
     anisotropy_high: bool = False,
     config: Optional[SimConfig] = None,
     separate_geminal_vicinal: bool = True
 ) -> List[List[float]]:
-    """
-    Groupe les J en séparant optionnellement les géminaux (²J, ordre=2) des vicinaux (³J, ordre=3).
-    
-    Si separate_geminal_vicinal=True, les J d'ordre différent ne seront jamais fusionnés
-    même si leurs valeurs sont identiques. Cela garantit que les CH₂ diastéréotopiques
-    avec J_gem ≈ J_vic auront un label "ddd" au lieu de "td".
-    
-    Args:
-        J_list: Liste des valeurs de J en Hz
-        J_orders: Liste des ordres de couplage (2=geminal, 3=vicinal, 4=longue portée, etc.)
-        tol: Tolérance pour le regroupement
-        anisotropy_high: Si True, utilise une tolérance plus stricte
-        config: Configuration SimConfig
-        separate_geminal_vicinal: Si True, ne fusionne jamais ²J avec ³J
-    
-    Returns:
-        Liste de groupes de J (chaque groupe contient des J équivalents)
-    """
+
     config = config or SimConfig()
-    
+
     if not J_list or len(J_list) != len(J_orders):
         return _group_J_values(J_list, tol, anisotropy_high, config)
-    
+
     if not separate_geminal_vicinal:
         return _group_J_values(J_list, tol, anisotropy_high, config)
-    
-    # Séparer les J par ordre de couplage
+
     geminal_J = [(j, i) for i, (j, order) in enumerate(zip(J_list, J_orders)) if order == 2 and j is not None and j > 0]
     vicinal_J = [(j, i) for i, (j, order) in enumerate(zip(J_list, J_orders)) if order == 3 and j is not None and j > 0]
     other_J = [(j, i) for i, (j, order) in enumerate(zip(J_list, J_orders)) if order not in (2, 3) and j is not None and j > 0]
-    
-    # Grouper chaque catégorie séparément
+
     def group_category(j_list):
         if not j_list:
             return []
         vals = [j for j, _ in j_list]
         return _group_J_values(vals, tol, anisotropy_high, config)
-    
+
     geminal_groups = group_category(geminal_J)
     vicinal_groups = group_category(vicinal_J)
     other_groups = group_category(other_J)
-    
-    # Combiner tous les groupes
-    all_groups = geminal_groups + vicinal_groups + other_groups
-    
-    # Trier par J moyen décroissant (comme _group_J_values)
-    all_groups.sort(key=lambda g: float(np.mean(g)) if g else 0, reverse=True)
-    
-    return all_groups
 
+    all_groups = geminal_groups + vicinal_groups + other_groups
+
+    all_groups.sort(key=lambda g: float(np.mean(g)) if g else 0, reverse=True)
+
+    return all_groups
 
 def _group_J_values(J_list: List[float], tol: float = TOLERANCE_J_HZ, anisotropy_high: bool = False,
                     config: Optional[SimConfig]=None) -> List[List[float]]:
@@ -11271,56 +8128,44 @@ def _group_J_values(J_list: List[float], tol: float = TOLERANCE_J_HZ, anisotropy
 
     return groups
 
-# ---------------------------
-# Apparent label pour centres sp²
-# ---------------------------
 def _apparent_sp2_label_from_J(J_vals: List[float], minJ: float = 0.4, tol: float = 0.5) -> str:
-    """
-    Simplification 'apparent' pour centres sp² avec regroupement des J équivalents.
-    
-    Pour un CHO couplé à un CH₃, les 3 J identiques donnent un quartet (q), pas ddd.
-    
-    ✅ AMÉLIORATION: Tolérance adaptative pour les petits J (homoallyliques)
-    - Pour J < 2 Hz: tolérance réduite à 0.15 Hz (différencie 1.25 vs 1.50 Hz)
-    - Pour J ≥ 2 Hz: tolérance standard 0.5 Hz
-    """
+
     Js = [j for j in J_vals if j is not None and j >= minJ]
     n = len(Js)
     if n == 0:
         return "s"
     if n == 1:
         return "d"
-    
-    # Regrouper les J similaires avec tolérance adaptative
+
     if n >= 2:
         Js_sorted = sorted(Js)
         groups = []
         current_group = [Js_sorted[0]]
-        
+
         for j in Js_sorted[1:]:
-            # ✅ Tolérance adaptative: plus stricte pour les petits J
+
             ref_J = current_group[0]
             if ref_J < 2.0:
-                effective_tol = 0.15  # Stricte pour J homoallyliques
+                effective_tol = 0.15
             else:
-                effective_tol = tol  # Standard pour grands J
-            
+                effective_tol = tol
+
             if abs(j - ref_J) <= effective_tol:
                 current_group.append(j)
             else:
                 groups.append(current_group)
                 current_group = [j]
         groups.append(current_group)
-        
+
         total = sum(len(g) for g in groups)
         n_groups = len(groups)
-        
+
         if n_groups == 1:
-            # Tous les J sont équivalents
+
             if total == 2: return "t"
             if total == 3: return "q"
             if total >= 4:
-                # quin, sext, sept, etc. -> simplifié en 'm' (multiplet)
+
                 return "m"
             return "m"
         elif n_groups == 2:
@@ -11333,36 +8178,25 @@ def _apparent_sp2_label_from_J(J_vals: List[float], minJ: float = 0.4, tol: floa
             return "ddd"
         elif n_groups == 3:
             counts = sorted([len(g) for g in groups])
-            # ✅ NOUVEAU: Cas ddt pour CH vinylique avec 2 CH₃ non-équivalents + CH₂
+
             if counts == [1, 1, 2]: return "ddt"
             if counts == [1, 1, 1]: return "ddd"
             if counts == [1, 2, 2]: return "tdt"
             return "m"
         else:
             return "m"
-    
+
     return "ddd"
 
-# ---------------------------
-# Label construction
-# ---------------------------
 def _first_order_label_from_groups(groups: List[List[float]], force_singlet_if_empty: bool = True) -> str:
-    """
-    Détermine le label de multiplicité à partir des groupes de couplages.
-    
-    Args:
-        groups: Liste de groupes de J (Hz)
-        force_singlet_if_empty: Si True, retourne 's' si pas de couplage.
-                               Si False, retourne 'm' pour multiplet indéterminé.
-    """
+
     if not groups:
         return "s" if force_singlet_if_empty else "m"
-    
-    # Filtrer les groupes vides ou avec J très faibles (< 0.3 Hz)
+
     filtered_groups = [g for g in groups if g and max(abs(j) for j in g) >= 0.3]
     if not filtered_groups:
         return "s" if force_singlet_if_empty else "m"
-    
+
     if (len(filtered_groups) == 1 and len(filtered_groups[0]) == 1 and abs(filtered_groups[0][0] - 0.6) < 0.15):
         return "td"
     counts = [len(g) for g in filtered_groups]
@@ -11387,54 +8221,50 @@ def _first_order_label_from_groups(groups: List[List[float]], force_singlet_if_e
 
     if total == 4:
         if len(groups) == 1 and counts[0] == 4:
-            # quin -> simplifié en 'm' (multiplet)
+
             return "m"
         if len(groups) == 2 and sorted(counts) == [1, 3]:
             return "qd"
         if len(groups) == 2 and sorted(counts) == [2, 2]: return "tt"
         if len(groups) == 3 and sorted(counts) == [1, 1, 2]:
-            # ddt -> simplifié en 'm' (multiplet)
+
             return "m"
         return "dddd"
 
     if total == 5:
         if len(groups) == 1 and counts[0] == 5:
-            # sext -> simplifié en 'm' (multiplet)
+
             return "m"
         if len(groups) == 2 and sorted(counts) == [2, 3]:
             return "qt"
         if len(groups) == 3 and sorted(counts) == [1, 2, 2]:
-            # qqd -> simplifié en 'm' (multiplet)
+
             return "m"
         return "m"
 
     if total == 6:
         if len(groups) == 1 and counts[0] == 6:
-            # sept -> simplifié en 'm' (multiplet)
+
             return "m"
         if len(groups) == 2 and sorted(counts) == [3, 3]:
             return "qt"
         if len(groups) == 3 and sorted(counts) == [1, 2, 3]:
-            # ttd -> simplifié en 'm' (multiplet)
+
             return "m"
         return "m"
 
     if total == 7:
-        # Toujours multiplet pour 7+ couplages
-        return "m"
-    
-    if total == 8:
-        # 8 couplages: toujours multiplet
-        return "m"
-    
-    # ≥ 9 couplages : toujours multiplet (non résolu en pratique)
-    if total >= 9: return "m"
-    
-    return "s"  # Défaut: singulet si aucun couplage détecté
 
-# ---------------------------
-# Stereo helpers
-# ---------------------------
+        return "m"
+
+    if total == 8:
+
+        return "m"
+
+    if total >= 9: return "m"
+
+    return "s"
+
 def _assign_stereo(mol: Chem.Mol) -> None:
     try:
         Chem.AssignStereochemistry(mol, cleanIt=True, force=True, flagPossibleStereoCenters=True)
@@ -11445,89 +8275,52 @@ def _is_chiral_center(atom: Chem.Atom) -> bool:
     tag = atom.GetChiralTag()
     return tag in (rdchem.ChiralType.CHI_TETRAHEDRAL_CW, rdchem.ChiralType.CHI_TETRAHEDRAL_CCW)
 
-
 def _find_nearest_stereo_center(mol: Chem.Mol, start_idx: int, max_dist: int = 4) -> Tuple[Optional[int], int]:
-    """
-    Trouve le centre stéréogène le plus proche d'un atome donné.
-    
-    Args:
-        mol: Molécule RDKit
-        start_idx: Index de l'atome de départ
-        max_dist: Distance topologique maximale à explorer
-    
-    Returns:
-        (idx_stereo_center, distance) ou (None, -1) si aucun trouvé
-    """
+
     from collections import deque
-    
+
     visited = {start_idx}
     queue = deque([(start_idx, 0)])
-    
+
     while queue:
         current_idx, dist = queue.popleft()
-        
+
         if dist > max_dist:
             continue
-        
+
         atom = mol.GetAtomWithIdx(current_idx)
-        
-        # Vérifier si c'est un centre stéréogène
+
         if current_idx != start_idx and _is_chiral_center(atom):
             return current_idx, dist
-        
-        # Explorer les voisins
+
         for neighbor in atom.GetNeighbors():
             nb_idx = neighbor.GetIdx()
             if nb_idx not in visited:
                 visited.add(nb_idx)
                 queue.append((nb_idx, dist + 1))
-    
+
     return None, -1
 
-
 def _has_stereogenic_path(mol: Chem.Mol, heavy_idx: int, max_dist: int = 3) -> bool:
-    """
-    Vérifie si un atome a un chemin vers un centre stéréogène à distance <= max_dist.
-    
-    Pour les diastéréotopes, le centre stéréogène doit être à distance 1-3 liaisons.
-    """
+
     stereo_idx, dist = _find_nearest_stereo_center(mol, heavy_idx, max_dist)
     return stereo_idx is not None
 
-
-# ---------------------------
-# ✅ CORRECTION : Diastereotopy helpers (VERSION ROBUSTE ET AMÉLIORÉE)
-# ---------------------------
 def _is_diastereotopic_Hpair(molH: Chem.Mol, heavy_idx: int, h_a: int, h_b: int) -> bool:
-    """
-    ✅ VERSION AMÉLIORÉE : Teste si deux H sur le même carbone sont diastéréotopiques.
-    
-    Amélioration : Détecte les centres stéréogènes distants (jusqu'à 3 liaisons)
-    et les cas épimériques (sucres, etc.)
-    
-    Args:
-        molH: Molécule avec H explicites
-        heavy_idx: Index de l'atome lourd (C, N, etc.)
-        h_a, h_b: Indices des deux atomes H à comparer
-    
-    Returns:
-        True si diastéréotopiques, False sinon
-    """
+
     if heavy_idx is None or h_a is None or h_b is None:
         return False
 
     try:
         heavy_atom = molH.GetAtomWithIdx(heavy_idx)
-        
-        # ✅ ÉTAPE 0 : Test rapide des rangs canoniques (le plus fiable)
-        # Si RDKit détecte une différence de symétrie, c'est diastéréotopique
+
         try:
             ranks = list(Chem.CanonicalRankAtoms(molH, includeChirality=True, breakTies=True))
         except TypeError:
             ranks = list(Chem.CanonicalRankAtoms(molH, includeChirality=True))
-        
+
         if ranks[h_a] != ranks[h_b]:
-            # RDKit détecte une différence → confirmer par test isotopique
+
             def get_heavy_rank_with_marked_h(mark_h_idx: int) -> int:
                 m = Chem.RWMol(molH)
                 m.GetAtomWithIdx(mark_h_idx).SetIsotope(2)
@@ -11536,20 +8329,17 @@ def _is_diastereotopic_Hpair(molH: Chem.Mol, heavy_idx: int, h_a: int, h_b: int)
                 except TypeError:
                     new_ranks = list(Chem.CanonicalRankAtoms(m, includeChirality=True))
                 return new_ranks[heavy_idx]
-            
+
             if get_heavy_rank_with_marked_h(h_a) != get_heavy_rank_with_marked_h(h_b):
                 return True
-        
-        # ✅ ÉTAPE 1 : Vérifier la présence d'un centre stéréogène proche
+
         stereo_idx, stereo_dist = _find_nearest_stereo_center(molH, heavy_idx, max_dist=3)
-        
+
         if stereo_idx is not None:
-            # Il y a un centre chiral proche → les H peuvent être diastéréotopiques
-            # Même avec rotation libre, si le centre chiral est à distance ≤ 2,
-            # les H sont généralement non-équivalents
+
             if stereo_dist <= 2:
                 return True
-            # À distance 3, faire un test isotopique plus rigoureux
+
             elif stereo_dist == 3:
                 def get_heavy_rank_with_marked_h(mark_h_idx: int) -> int:
                     m = Chem.RWMol(molH)
@@ -11559,26 +8349,22 @@ def _is_diastereotopic_Hpair(molH: Chem.Mol, heavy_idx: int, h_a: int, h_b: int)
                     except TypeError:
                         new_ranks = list(Chem.CanonicalRankAtoms(m, includeChirality=True))
                     return new_ranks[heavy_idx]
-                
+
                 return get_heavy_rank_with_marked_h(h_a) != get_heavy_rank_with_marked_h(h_b)
-        
-        # ✅ ÉTAPE 2 : Cas spéciaux sans centre chiral explicite
+
         if heavy_atom.GetSymbol() == "C":
             neighbors_heavy = [n for n in heavy_atom.GetNeighbors() if n.GetSymbol() != "H"]
-            
-            # CH₂ dans un cycle → souvent non-équivalents (conformations bloquées)
+
             if heavy_atom.IsInRing():
-                # Tester si les environnements sont différents
+
                 return True
-            
-            # ✅ AMÉLIORATION: Détection prochirauté (carbonyle asymétrique, etc.)
+
             if _is_diastereotopic_by_prochirality(molH, heavy_idx, h_a, h_b):
                 return True
-            
-            # CH₂ attaché à un carbone sp2 (alcène, carbonyle) → peut être prochiral
+
             for nb in neighbors_heavy:
                 if nb.GetHybridization() in (Chem.HybridizationType.SP2, Chem.HybridizationType.SP):
-                    # Attaché à C=O, C=C, C=N → vérifier
+
                     def get_heavy_rank_with_marked_h(mark_h_idx: int) -> int:
                         m = Chem.RWMol(molH)
                         m.GetAtomWithIdx(mark_h_idx).SetIsotope(2)
@@ -11587,26 +8373,23 @@ def _is_diastereotopic_Hpair(molH: Chem.Mol, heavy_idx: int, h_a: int, h_b: int)
                         except TypeError:
                             new_ranks = list(Chem.CanonicalRankAtoms(m, includeChirality=True))
                         return new_ranks[heavy_idx]
-                    
+
                     if get_heavy_rank_with_marked_h(h_a) != get_heavy_rank_with_marked_h(h_b):
                         return True
-            
-            # ✅ ÉTAPE 3 : CH₂ avec rotation libre et pas de centre chiral proche
-            # → probablement équivalents
+
             if len(neighbors_heavy) == 2:
                 all_sp3_acyclic = all(
-                    nb.GetSymbol() in ("C", "O", "N") and 
+                    nb.GetSymbol() in ("C", "O", "N") and
                     not nb.IsInRing() and
                     nb.GetHybridization() == Chem.HybridizationType.SP3
                     for nb in neighbors_heavy
                 )
                 if all_sp3_acyclic:
-                    # Vérifier prochirauté avant de conclure équivalents
+
                     if not _is_diastereotopic_by_prochirality(molH, heavy_idx, h_a, h_b):
-                        # Chaîne acyclique sans chiralité proche → équivalents
+
                         return False
 
-        # Défaut: test isotopique final
         def get_heavy_rank_with_marked_h(mark_h_idx: int) -> int:
             m = Chem.RWMol(molH)
             m.GetAtomWithIdx(mark_h_idx).SetIsotope(2)
@@ -11629,9 +8412,6 @@ def _neighbor_is_diastereotopic_CH2(base: Chem.Mol, molH: Chem.Mol,
         return False
     return _is_diastereotopic_Hpair(molH, other_heavy, hs[0], hs[1])
 
-# ---------------------------
-# Sugar helpers
-# ---------------------------
 def _is_exocyclic_C6_like(base: Chem.Mol, heavy_to_H: Dict[int, List[int]], idx: int) -> bool:
     A = base.GetAtomWithIdx(idx)
     if A.GetIsAromatic() or A.GetSymbol() != "C":
@@ -11654,9 +8434,6 @@ def _is_anomeric_C1_like(base: Chem.Mol, heavy_to_H: Dict[int, List[int]], idx: 
     has_ring_O = any(n.GetSymbol()=="O" and n.IsInRing() for n in A.GetNeighbors())
     return has_ring_O and (len(heavy_to_H.get(idx, [])) == 1)
 
-# ---------------------------
-# Heteronuclear contextual
-# ---------------------------
 def _hetero_J_contextual(base: Chem.Mol, D: np.ndarray, aromatic_dmap: List[Dict[int,int]],
                          heavy_idx: int, X_atom: Chem.Atom, config: SimConfig) -> Iterable[float]:
     out = []
@@ -11687,9 +8464,6 @@ def _hetero_J_contextual(base: Chem.Mol, D: np.ndarray, aromatic_dmap: List[Dict
             elif rel == "para": scale = 0.9
     out.append(Jx * scale); return out
 
-# ---------------------------
-# J-estimation principale
-# ---------------------------
 def _estimate_Js_for_group(
     molH: Chem.Mol,
     base: Chem.Mol,
@@ -11715,14 +8489,7 @@ def _estimate_Js_for_group(
     List[float], bool, List[int], List[float], List[Tuple[int,float]],
     List[int], List[bool], str, Optional[str], float
 ]:
-    """
-    Estimation des couplages J pour un groupe de protons.
 
-    Args:
-        conformer_cache: Cache de conformères pour moyennage multi-conformères (optionnel)
-        ultra_fast_mode: Si True, skip les détections diastéréotopiques coûteuses
-        diastereotopic_cache: Cache pré-calculé {carbon_idx: (is_diast, delta_ppm)}
-    """
     if config is None: config = SimConfig()
 
     digital_floor = (config.digital_resolution_hz or 0.0)
@@ -11733,8 +8500,8 @@ def _estimate_Js_for_group(
     min5 = max(config.min_j_detect[5], detect_floor)
 
     J_vals: List[float] = []
-    J_sources: List[Optional[int]] = []  # Index de l'atome source (legacy)
-    J_source_types: List[str] = []       # Type de source (karplus_3d, fallback_table, etc.)
+    J_sources: List[Optional[int]] = []
+    J_source_types: List[str] = []
     J_orders: List[int] = []
     partners: List[int] = []
     homo_J_vals_for_second_order: List[float] = []
@@ -11743,47 +8510,35 @@ def _estimate_Js_for_group(
     second_order_type = "first_order"
     system_type: Optional[str] = None
     delta_nu_min_hz: float = 0.0
-    # ✅ NOUVEAU: homo_pairs maintenant inclut le type de source explicitement
-    # Format: (partner_h_idx, J_hz, source_type)
-    # source_type peut être: karplus_3d, fallback_table, aromatic_exact, geminal_calc,
-    #                        heterocycle, sugar, peptide, structural, long_range, etc.
+
     homo_pairs: List[Tuple[int, float, str]] = []
 
     para_buf_J: List[float] = []
     para_buf_partners: List[int] = []
-    
-    # =========================================================================
-    # ✅ MODE ULTRA-RAPIDE: Skip les modules coûteux et utiliser uniquement J fixe
-    # Pour les très grosses molécules (> 50 atomes), on utilise:
-    # - J=7.0 Hz pour les couplages vicinaux (chaînes flexibles)
-    # - J_aro pour les aromatiques (ortho=7.8, meta=2.3)
-    # - Pas de calcul de conformères, pas de détection diastéréotopique détaillée
-    # =========================================================================
+
     if ultra_fast_mode:
         heavy_atom = base.GetAtomWithIdx(heavy_idx)
         is_sp2 = heavy_is_sp2_cache[heavy_idx] if heavy_is_sp2_cache else _is_sp2_like(heavy_atom)
         h_rep = h_atoms[0] if h_atoms else None
-        
-        # Trouver les partenaires de couplage à distance 1 (topologique)
+
         n_heavy = base.GetNumAtoms()
         candidate_heavies = [j for j in range(n_heavy) if 1 <= int(D[heavy_idx, j]) <= 2]
-        
+
         J_fast_vals = []
         partners_fast = []
-        
+
         for other_heavy in candidate_heavies:
             if suppressed_heavy and other_heavy in suppressed_heavy:
                 continue
-            
+
             other_hs = heavy_to_H.get(other_heavy, [])
             if not other_hs:
                 continue
-            
+
             dist = int(D[heavy_idx, other_heavy])
             partner_atom = base.GetAtomWithIdx(other_heavy)
             partner_is_sp2 = heavy_is_sp2_cache[other_heavy] if heavy_is_sp2_cache else _is_sp2_like(partner_atom)
-            
-            # Couplages aromatiques
+
             if is_sp2 and partner_is_sp2 and heavy_atom.GetIsAromatic() and partner_atom.GetIsAromatic():
                 rel = _aromatic_rel_from_map(aromatic_dmap, heavy_idx, other_heavy)
                 if rel == "ortho":
@@ -11792,40 +8547,31 @@ def _estimate_Js_for_group(
                 elif rel == "meta":
                     J_fast_vals.append(config.aro_j_forced["meta"])
                     partners_fast.append(other_hs[0])
-            
-            # Couplages vicinaux sp3-sp3 ou sp3-sp2 (J=7.0 Hz moyen)
+
             elif dist == 1 and not (is_sp2 and partner_is_sp2):
                 for h in other_hs:
                     if h not in h_atoms:
                         J_fast_vals.append(config.ultra_fast_default_vicinal_J)
                         partners_fast.append(h)
-        
-        # Couplages géminaux si CH2 diastéréotopique avec geminal_partner
+
         if geminal_partner is not None:
-            J_fast_vals.append(12.0)  # 2J geminal typique
+            J_fast_vals.append(12.0)
             partners_fast.append(geminal_partner)
 
-        # ✅ FIX GÉNÉRALISÉ: Détecter couplage fort pour TOUS les protons en ultra-fast
-        # Utiliser les shifts réels pour calculer Δν/J
-        # Applicable aux: aromatiques, CH₂ diastéréotopiques, chaînes alkyle, sucres, etc.
         second_order_type_fast = "first_order"
         is_second_order = False
 
         if proton_shifts_ppm and h_rep is not None and J_fast_vals:
-            # Calculer le shift du proton courant
+
             my_shift_ppm = proton_shifts_ppm.get(h_rep)
             if my_shift_ppm is not None:
-                # Calculer Δν/J pour chaque partenaire avec couplage significatif
+
                 min_ratio = float('inf')
                 for partner_h, j_val in zip(partners_fast, J_fast_vals):
-                    # ⚠️ EXCLURE les partenaires géminaux du même groupe (même heavy_idx)
-                    # Les protons équivalents (même shift) n'ont pas d'effet second-ordre
-                    # pour leur couplage geminal - il est magnétiquement invisible!
+
                     if partner_h in h_atoms:
-                        continue  # Partenaire geminal du même groupe, ignorer
-                    # Ne considérer que les couplages significatifs (J > 4 Hz)
-                    # Inclut: ³J vicinal (~7 Hz), ³J aromatique ortho (~8 Hz)
-                    # Exclut: ⁴J meta (~2 Hz), ⁵J para (~0.5 Hz)
+                        continue
+
                     if j_val < 4.0:
                         continue
                     partner_shift = proton_shifts_ppm.get(partner_h)
@@ -11835,37 +8581,30 @@ def _estimate_Js_for_group(
                         if ratio < min_ratio:
                             min_ratio = ratio
 
-                # Seuils Δν/J (Günther, NMR Spectroscopy, 3rd ed.)
-                # < 3: strong coupling (roof effect très visible, pattern non-Pascal)
-                # 3-8: moderate second order (roof effect visible)
-                # > 8: first order approximation acceptable
                 if min_ratio < float('inf'):
                     if min_ratio < 3.0:
-                        # Très fort couplage (benzyle, CH₂ diastéréotopiques proches, etc.)
+
                         second_order_type_fast = "strong_coupling"
                         is_second_order = True
                     elif min_ratio < 8.0:
-                        # Couplage modéré (roof effect visible mais pattern reconnaissable)
+
                         second_order_type_fast = "moderate_second_order"
                         is_second_order = True
-                    # else: ratio >= 8 → first order OK
 
-        # Retourner les résultats ultra-rapides
         return (
-            J_fast_vals,  # J_vals
-            is_second_order,  # second_order
-            partners_fast,  # partners
-            [],  # satellites
-            [(p, j, "fallback_average") for p, j in zip(partners_fast, J_fast_vals)],  # homo_pairs avec source
-            [],  # partner_heavy_idx_kept
-            [],  # partner_is_sp2_kept
-            second_order_type_fast,  # second_order_type
-            "ultra_fast",  # system_type
-            0.0,  # delta_nu_min_hz
-            {}  # J_orders
+            J_fast_vals,
+            is_second_order,
+            partners_fast,
+            [],
+            [(p, j, "fallback_average") for p, j in zip(partners_fast, J_fast_vals)],
+            [],
+            [],
+            second_order_type_fast,
+            "ultra_fast",
+            0.0,
+            {}
         )
-    
-    # ✅ NOUVEAU: Tracker les partenaires déjà traités pour éviter les doublons
+
     processed_partners: set = set()
 
     heavy_atom = base.GetAtomWithIdx(heavy_idx)
@@ -11875,15 +8614,13 @@ def _estimate_Js_for_group(
     partner_heavy_idx_kept: List[int] = []
     partner_is_sp2_kept: List[bool] = []
 
-    # satellites 13C (avec ¹J(C-H) variable selon hybridation)
     if config.include_13C_satellites and heavy_atom.GetSymbol() == "C":
         nH_here = len(h_atoms)
-        # Déterminer ¹J(C-H) selon environnement
+
         jch = _get_1JCH(heavy_atom, base)
         if nH_here >= 1:
             satellites.extend([jch] * nH_here)
 
-    # Détection AA'BB'/AA'XX' (avec vérification du ratio Δν/J)
     system_type = _detect_AABB_system(
         base, heavy_idx, heavy_to_H, aromatic_dmap,
         proton_shifts_ppm=proton_shifts_ppm,
@@ -11891,51 +8628,44 @@ def _estimate_Js_for_group(
         J_typical_hz=7.0
     )
 
-    # =========================================================================
-    # NOUVEAU: Détection et traitement des hétérocycles via module complet
-    # =========================================================================
-    _heterocycle_handled = False  # Flag pour éviter double traitement
+    _heterocycle_handled = False
     if HETEROCYCLES_MODULE_AVAILABLE and heavy_atom.GetIsAromatic():
         try:
             het_result = estimate_heterocycle_couplings_complete(
-                mol=molH,  # ✅ CORRECTION: Utiliser molH (avec H explicites) au lieu de base
+                mol=molH,
                 heavy_idx=heavy_idx,
                 h_list=h_atoms,
                 heavy_to_H=heavy_to_H,
                 D=D,
                 min_j_threshold=min3,
                 apply_substituent_effects=True,
-                spectrometer_mhz=spectrometer_mhz  # ✅ CORRECTION: Passer la fréquence pour résolution
+                spectrometer_mhz=spectrometer_mhz
             )
-            
+
             if het_result is not None:
-                # L'hétérocycle a été identifié et traité
+
                 het_J_vals = het_result.get('J_values', [])
                 het_partners = het_result.get('coupling_partners', [])
                 het_mult = het_result.get('multiplicity', 's')
                 het_type = het_result.get('heterocycle_type', 'unknown')
                 het_source = het_result.get('source', 'heterocycle')
-                
-                # ✅ Traiter TOUS les résultats du module hétérocycle (singlets et expected_mult)
-                # Singulet spécial (imidazole H2, H4, H5, etc.)
+
                 if het_source in ('heterocycle_singlet', 'heterocycle_expected_singlet') or (het_mult == 's' and not het_J_vals):
-                    # Retourner directement un singulet
+
                     return (
-                        [],  # J_vals vide = singulet
-                        False,  # second_order
-                        [],  # partners
-                        [],  # satellites
-                        [],  # homo_pairs
-                        [],  # partner_heavy_idx_kept
-                        [],  # partner_is_sp2_kept
-                        "first_order",  # second_order_type
-                        f"heterocycle_{het_type}",  # system_type
-                        0.0,  # delta_nu_min_hz
-                        {}  # J_orders
+                        [],
+                        False,
+                        [],
+                        [],
+                        [],
+                        [],
+                        [],
+                        "first_order",
+                        f"heterocycle_{het_type}",
+                        0.0,
+                        {}
                     )
-                
-                # ✅ NOUVEAU: Traiter les multiplicités attendues (expected_mult: d, dd, tt, etc.)
-                # et aussi les résultats de table normale avec J
+
                 if het_J_vals:
                     het_J_vals_out = []
                     het_partners_out = []
@@ -11947,54 +8677,42 @@ def _estimate_Js_for_group(
                         het_J_vals_out.append(J_het)
                         het_partners_out.append(partner_het)
                         het_homo_pairs.append((partner_het, J_het, "heterocycle"))
-                        # Trouver le heavy_idx du partner
+
                         for h_idx, h_list in heavy_to_H.items():
                             if partner_het in h_list:
                                 het_partner_heavy_idx.append(h_idx)
                                 partner_atom = base.GetAtomWithIdx(h_idx)
                                 het_partner_is_sp2.append(partner_atom.GetIsAromatic() or _is_sp2_like(partner_atom))
                                 break
-                    
-                    # ✅ NOUVEAU: Encoder la multiplicité ET position IUPAC dans system_type
-                    # Format: heterocycle_<type>:<mult>:<position> (ex: heterocycle_pyridine:tt:4)
+
                     het_position = het_result.get('position', '')
                     system_type_with_mult = f"heterocycle_{het_type}:{het_mult}:{het_position}"
-                    
-                    # Retourner directement les résultats du module hétérocycle
+
                     return (
-                        het_J_vals_out,  # J_vals
-                        False,  # second_order
-                        het_partners_out,  # partners
-                        [],  # satellites
-                        het_homo_pairs,  # homo_pairs
-                        het_partner_heavy_idx,  # partner_heavy_idx_kept
-                        het_partner_is_sp2,  # partner_is_sp2_kept
-                        "first_order",  # second_order_type
-                        system_type_with_mult,  # system_type avec multiplicité et position
-                        0.0,  # delta_nu_min_hz
-                        {}  # J_orders
+                        het_J_vals_out,
+                        False,
+                        het_partners_out,
+                        [],
+                        het_homo_pairs,
+                        het_partner_heavy_idx,
+                        het_partner_is_sp2,
+                        "first_order",
+                        system_type_with_mult,
+                        0.0,
+                        {}
                     )
-                    
+
         except Exception as e:
-            # En cas d'erreur, continuer avec la logique standard
+
             _heterocycle_handled = False
 
-    # =========================================================================
-    # NOUVEAU: Détection et traitement des hétérocycles saturés (COUVERTURE COMPLÈTE)
-    # =========================================================================
-    # ✅ FIX CRITIQUE: Pour les cycles saturés (DKP, lactames), TOUJOURS utiliser
-    # les tables expérimentales, car Karplus 3D ne fonctionne pas pour ces systèmes
-    # rigides avec géométrie contrainte. Les tables donnent J=6.8 Hz (correct),
-    # alors que Karplus donne 7.0/12.38 Hz (incorrect).
     _saturated_heterocycle_handled = False
 
-    # Pré-détection: est-ce un cycle saturé (DKP, lactame, etc.) ?
     _is_in_saturated_ring = False
     if HETEROCYCLES_MODULE_AVAILABLE and not heavy_atom.GetIsAromatic():
         try:
             _sat_type_check = identify_saturated_heterocycle(molH, heavy_idx)
-            # Include _adjacent types to handle CH2 attached to DKP/lactam rings
-            # Include dkp_pyrrolidine_fused and pyrrolidine_fused for fused bicyclic systems
+
             if _sat_type_check in ('diketopiperazine', 'lactam_5', 'lactam_6', 'saturated_heterocycle_fused',
                                    'diketopiperazine_adjacent', 'lactam_5_adjacent', 'lactam_6_adjacent',
                                    'dkp_pyrrolidine_fused', 'pyrrolidine_fused', 'pyrrolidine'):
@@ -12002,19 +8720,17 @@ def _estimate_Js_for_group(
         except Exception:
             pass
 
-    # Pour cycles saturés: TOUJOURS utiliser tables (priorité sur Karplus)
-    # Pour chaînes flexibles: utiliser Karplus si use_conformational_averaging=True
     use_heterocycle_tables = _is_in_saturated_ring or (not config.use_conformational_averaging)
 
     if HETEROCYCLES_MODULE_AVAILABLE and not heavy_atom.GetIsAromatic() and not _heterocycle_handled and use_heterocycle_tables:
         try:
             sat_result = estimate_saturated_heterocycle_couplings(
-                mol=molH,  # Use molH (with explicit H)
+                mol=molH,
                 heavy_idx=heavy_idx,
                 H_indices=h_atoms,
                 heavy_to_H_mapping=heavy_to_H,
                 topological_distances=D,
-                spectrometer_mhz=spectrometer_mhz  # Passer la fréquence
+                spectrometer_mhz=spectrometer_mhz
             )
 
             if sat_result is not None:
@@ -12023,16 +8739,13 @@ def _estimate_Js_for_group(
                 sat_mult = sat_result.get('multiplicity', 's')
                 sat_type = sat_result.get('saturated_type', 'unknown')
                 max_dist = sat_result.get('max_distance', 3)
-                
-                # Construire les structures de sortie
+
                 sat_J_vals_out = []
                 sat_partners_out = []
                 sat_homo_pairs: List[Tuple[int, float, str]] = []
                 sat_partner_heavy_idx = []
                 sat_partner_is_sp2 = []
 
-                # ✅ NOUVEAU: Différencier les J pour CH₂ diastéréotopiques
-                # Identifier les paires de partenaires sur le même carbone (CH₂)
                 partner_to_heavy = {}
                 for p_sat in sat_partners:
                     p_atom = molH.GetAtomWithIdx(p_sat)
@@ -12041,12 +8754,10 @@ def _estimate_Js_for_group(
                             partner_to_heavy[p_sat] = nb.GetIdx()
                             break
 
-                # Grouper par carbone lourd
                 heavy_to_partners_sat: Dict[int, List[int]] = {}
                 for p_sat, h_idx_sat in partner_to_heavy.items():
                     heavy_to_partners_sat.setdefault(h_idx_sat, []).append(p_sat)
 
-                # ✅ FIX: Obtenir les H sur le carbone ACTUEL (heavy_idx) depuis molH (avec H explicites)
                 heavy_atom_H = molH.GetAtomWithIdx(heavy_idx)
                 current_h_siblings = [n.GetIdx() for n in heavy_atom_H.GetNeighbors() if n.GetSymbol() == 'H']
                 current_h_siblings_sorted = sorted(current_h_siblings)
@@ -12058,9 +8769,6 @@ def _estimate_Js_for_group(
                         J_final = J_sat
                         source_final = "saturated_heterocycle"
 
-                        # ✅ LOGIQUE GÉNÉRIQUE: différencier si le carbone ACTUEL a 2 H diastéréotopiques
-                        # et que la géométrie justifie une différenciation
-                        # Note: h_atoms est la liste des H du groupe actuel (passé comme H_indices à estimate_saturated_heterocycle_couplings)
                         if len(current_h_siblings) == 2 and partner_heavy is not None:
                             try:
                                 differentiate = should_differentiate_diastereotopic_J(
@@ -12070,43 +8778,35 @@ def _estimate_Js_for_group(
                                 differentiate = False
 
                             if differentiate:
-                                # Déterminer quel H je suis dans le groupe actuel
-                                # h_atoms contient le(s) H du groupe actuel
+
                                 if len(h_atoms) == 1:
                                     my_h_idx = h_atoms[0]
-                                    # Convention: index plus PETIT = pseudo-équatorial (J petit = 6.5 Hz)
-                                    #             index plus GRAND = pseudo-axial (J grand = 10.0 Hz)
+
                                     if my_h_idx == current_h_siblings_sorted[0]:
-                                        J_final = 6.5   # Premier H (index plus petit) = pseudo-équatorial
+                                        J_final = 6.5
                                     else:
-                                        J_final = 10.0  # Second H (index plus grand) = pseudo-axial
+                                        J_final = 10.0
                                     source_final = "saturated_heterocycle"
-                            # SINON: garder J_final = J_sat (ex: 7.0 Hz pour pyrrolidine)
 
                         sat_J_vals_out.append(J_final)
                         sat_partners_out.append(partner_sat)
 
-                        # ✅ FIX: partner_sat est un indice de PROTON (H), pas d'atome lourd
-                        # On ajoute directement à homo_pairs car ce sont les couplages H-H
                         sat_homo_pairs.append((partner_sat, J_final, source_final))
-                
-                # Fusionner les résultats
+
                 if sat_J_vals_out:
                     J_vals.extend(sat_J_vals_out)
                     J_sources.extend([None] * len(sat_J_vals_out))
                     J_orders.extend([3] * len(sat_J_vals_out))
                     partners.extend(sat_partners_out)
-                    # ✅ FIX: Extraire seulement les J (index 1), pas les tuples complets
+
                     homo_J_vals_for_second_order.extend([hp[1] for hp in sat_homo_pairs])
 
-                    # ✅ FIX: Ajouter ²J geminal pour protons diastéréotopiques
-                    # Le geminal_partner est passé si les H sont diastéréotopiques
                     if geminal_partner is not None:
-                        # Calculer ²J geminal adapté à l'environnement
+
                         Jg = _get_geminal_2J(heavy_atom, base)
-                        # min2 est déjà défini plus haut (config.min_j_detect[2])
+
                         if Jg >= min2:
-                            # Vérifier si les shifts diffèrent (pour visibilité)
+
                             geminal_shifts_differ = False
                             if proton_shifts_ppm is not None:
                                 try:
@@ -12119,61 +8819,54 @@ def _estimate_Js_for_group(
                                 except Exception:
                                     pass
 
-                            # Toujours ajouter aux homo_pairs pour la matrice Hamiltonien
                             sat_partners_out.append(geminal_partner)
                             sat_homo_pairs.append((geminal_partner, Jg, "geminal_calc"))
 
-                            # Ajouter aux J observables si shifts différents
                             if geminal_shifts_differ:
                                 sat_J_vals_out.append(Jg)
 
-                    # Retourner les résultats du module saturated_heterocycle
                     _saturated_heterocycle_handled = True
 
                     return (
-                        sat_J_vals_out,  # J_vals
-                        False,  # second_order
-                        sat_partners_out,  # partners
-                        [],  # satellites
-                        sat_homo_pairs,  # homo_pairs
-                        [],  # partner_heavy_idx_kept
-                        [],  # partner_is_sp2_kept
-                        "first_order",  # second_order_type
-                        f"saturated_{sat_type}",  # system_type
-                        0.0,  # delta_nu_min_hz
-                        {}  # J_orders
+                        sat_J_vals_out,
+                        False,
+                        sat_partners_out,
+                        [],
+                        sat_homo_pairs,
+                        [],
+                        [],
+                        "first_order",
+                        f"saturated_{sat_type}",
+                        0.0,
+                        {}
                     )
-        
+
         except Exception:
-            # En cas d'erreur, continuer avec la logique standard
+
             _saturated_heterocycle_handled = False
 
-    # =========================================================================
-    # NOUVEAU: Détection et traitement des sucres via module complet
-    # =========================================================================
-    # ✅ CORRECTION: Quand multi-conformer est activé, préférer Karplus 3D
     use_sugar_tables = not config.use_conformational_averaging
     if SUGARS_MODULE_AVAILABLE and heavy_atom.GetSymbol() == 'C' and not heavy_atom.GetIsAromatic() and use_sugar_tables:
         try:
-            # Vérifier si c'est un carbone de sucre
+
             if is_sugar_carbon(base, heavy_idx):
-                # Reconstruire proton_to_heavy à partir de heavy_to_H
+
                 proton_to_heavy_local = {}
                 for h_idx_map, h_list_map in heavy_to_H.items():
                     for h in h_list_map:
                         proton_to_heavy_local[h] = h_idx_map
-                
+
                 sugar_result = estimate_sugar_couplings_complete(
-                    mol=molH,  # ✅ CORRECTION: Utiliser molH (avec H explicites) au lieu de base
+                    mol=molH,
                     heavy_idx=heavy_idx,
                     h_list=h_atoms,
                     heavy_to_H=heavy_to_H,
                     proton_to_heavy=proton_to_heavy_local,
                     D=D,
-                    config=None,  # Utiliser config par défaut
-                    spectrometer_mhz=spectrometer_mhz  # Passer la fréquence
+                    config=None,
+                    spectrometer_mhz=spectrometer_mhz
                 )
-                
+
                 if sugar_result is not None:
                     sugar_J_vals = sugar_result.get('J_values', [])
                     sugar_partners = sugar_result.get('coupling_partners', [])
@@ -12182,8 +8875,7 @@ def _estimate_Js_for_group(
                     sugar_position = sugar_info.get('position', '')
                     sugar_ring_type = sugar_info.get('ring_type', 'pyranose')
                     sugar_source = sugar_result.get('source', 'sugar_complete')
-                    
-                    # Construire les structures de sortie
+
                     sugar_J_vals_out = []
                     sugar_partners_out = []
                     sugar_homo_pairs: List[Tuple[int, float, str]] = []
@@ -12194,57 +8886,48 @@ def _estimate_Js_for_group(
                         sugar_J_vals_out.append(J_sugar)
                         sugar_partners_out.append(partner_sugar)
                         sugar_homo_pairs.append((partner_sugar, J_sugar, "sugar"))
-                        # Trouver le heavy_idx du partner
+
                         for h_idx, h_list in heavy_to_H.items():
                             if partner_sugar in h_list:
                                 sugar_partner_heavy_idx.append(h_idx)
                                 partner_atom = base.GetAtomWithIdx(h_idx)
                                 sugar_partner_is_sp2.append(partner_atom.GetIsAromatic() or _is_sp2_like(partner_atom))
                                 break
-                    
-                    # Encoder position dans system_type: sugar_<ring_type>:<mult>:<position>
+
                     system_type_sugar = f"sugar_{sugar_ring_type}:{sugar_mult}:{sugar_position}"
-                    
-                    # Retourner directement les résultats du module sucre
+
                     return (
-                        sugar_J_vals_out,  # J_vals
-                        False,  # second_order
-                        sugar_partners_out,  # partners
-                        [],  # satellites
-                        sugar_homo_pairs,  # homo_pairs
-                        sugar_partner_heavy_idx,  # partner_heavy_idx_kept
-                        sugar_partner_is_sp2,  # partner_is_sp2_kept
-                        "first_order",  # second_order_type
-                        system_type_sugar,  # system_type avec ring_type, multiplicité et position
-                        0.0,  # delta_nu_min_hz
-                        {}  # J_orders
+                        sugar_J_vals_out,
+                        False,
+                        sugar_partners_out,
+                        [],
+                        sugar_homo_pairs,
+                        sugar_partner_heavy_idx,
+                        sugar_partner_is_sp2,
+                        "first_order",
+                        system_type_sugar,
+                        0.0,
+                        {}
                     )
-                    
+
         except Exception as e:
-            # En cas d'erreur, continuer avec la logique standard
+
             pass
 
-    # =========================================================================
-    # NOUVEAU: Stéroïdes et Terpènes avec différenciation diastéréotopique
-    # Utilise les nouvelles fonctions estimate_*_couplings_differentiated
-    # =========================================================================
     if COUPLING_EXTENSIONS_AVAILABLE and heavy_atom.GetSymbol() == 'C' and not heavy_atom.GetIsAromatic():
-        # Construire proton_to_heavy pour les nouvelles fonctions
+
         proton_to_heavy_ext = {}
         for h_idx_map, h_list_map in heavy_to_H.items():
             for h in h_list_map:
                 proton_to_heavy_ext[h] = h_idx_map
 
-        # IMPORTANT: Récupérer TOUS les H sur ce carbone (pas seulement h_atoms du groupe)
-        # Nécessaire pour la différenciation diastéréotopique
         all_h_on_heavy = heavy_to_H.get(heavy_idx, h_atoms)
 
-        # === STÉROÏDES ===
         try:
             steroid_result = estimate_steroid_couplings_differentiated(
                 mol=molH,
                 heavy_idx=heavy_idx,
-                h_list=all_h_on_heavy,  # Tous les H, pas juste le groupe actuel
+                h_list=all_h_on_heavy,
                 heavy_to_H=heavy_to_H,
                 proton_to_heavy=proton_to_heavy_ext,
             )
@@ -12253,7 +8936,6 @@ def _estimate_Js_for_group(
                 steroid_type = steroid_result.get('system_type', 'steroid')
                 steroid_couplings = steroid_result.get('couplings', {})
 
-                # Récupérer les couplages pour le proton représentatif
                 h_rep_couplings = steroid_couplings.get(h_rep, [])
 
                 if h_rep_couplings:
@@ -12268,13 +8950,13 @@ def _estimate_Js_for_group(
                             steroid_homo_pairs.append((partner_h, J_val, source))
 
                     if steroid_J_vals_out:
-                        # Ajouter ²J geminal si applicable
+
                         if geminal_partner is not None:
                             Jg = _get_geminal_2J(heavy_atom, base)
                             if Jg >= min2:
                                 steroid_partners_out.append(geminal_partner)
                                 steroid_homo_pairs.append((geminal_partner, Jg, "geminal_calc"))
-                                # Ajouter aux J_vals si shifts différents
+
                                 if proton_shifts_ppm is not None:
                                     try:
                                         d_rep = proton_shifts_ppm.get(h_rep, None)
@@ -12300,12 +8982,11 @@ def _estimate_Js_for_group(
         except Exception:
             pass
 
-        # === TERPÈNES ===
         try:
             terpene_result = estimate_terpene_couplings_differentiated(
                 mol=molH,
                 heavy_idx=heavy_idx,
-                h_list=all_h_on_heavy,  # Tous les H, pas juste le groupe actuel
+                h_list=all_h_on_heavy,
                 heavy_to_H=heavy_to_H,
                 proton_to_heavy=proton_to_heavy_ext,
             )
@@ -12328,7 +9009,7 @@ def _estimate_Js_for_group(
                             terpene_homo_pairs.append((partner_h, J_val, source))
 
                     if terpene_J_vals_out:
-                        # Ajouter ²J geminal
+
                         if geminal_partner is not None:
                             Jg = _get_geminal_2J(heavy_atom, base)
                             if Jg >= min2:
@@ -12359,12 +9040,11 @@ def _estimate_Js_for_group(
         except Exception:
             pass
 
-        # === MACROCYCLES ===
         try:
             macrocycle_result = estimate_macrocycle_couplings_differentiated(
                 mol=molH,
                 heavy_idx=heavy_idx,
-                h_list=all_h_on_heavy,  # Tous les H, pas juste le groupe actuel
+                h_list=all_h_on_heavy,
                 heavy_to_H=heavy_to_H,
                 proton_to_heavy=proton_to_heavy_ext,
             )
@@ -12387,7 +9067,7 @@ def _estimate_Js_for_group(
                             macro_homo_pairs.append((partner_h, J_val, source))
 
                     if macro_J_vals_out:
-                        # Ajouter ²J geminal
+
                         if geminal_partner is not None:
                             Jg = _get_geminal_2J(heavy_atom, base)
                             if Jg >= min2:
@@ -12418,14 +9098,10 @@ def _estimate_Js_for_group(
         except Exception:
             pass
 
-        # =================================================================
-        # GENERIQUE: Tous les CH2 dans un cycle 6 (rigide)
-        # Differencier meme sans motif terpene/steroide detecte
-        # =================================================================
         try:
             if len(all_h_on_heavy) == 2 and heavy_atom.IsInRing():
                 ri = molH.GetRingInfo()
-                # Verifier si dans un cycle 6
+
                 in_ring_6 = False
                 for ring in ri.AtomRings():
                     if heavy_idx in ring and len(ring) == 6:
@@ -12433,21 +9109,19 @@ def _estimate_Js_for_group(
                         break
 
                 if in_ring_6:
-                    # Valeurs par dÃ©faut pour cycles 6 rigides
-                    J_large_default = 11.0  # ax-ax
-                    J_small_default = 4.0   # ax-eq
+
+                    J_large_default = 11.0
+                    J_small_default = 4.0
 
                     generic_J_vals_out = []
                     generic_partners_out = []
                     generic_homo_pairs: List[Tuple[int, float, str]] = []
 
-                    # Trouver les voisins C dans le meme cycle
                     for neighbor in heavy_atom.GetNeighbors():
                         if neighbor.GetSymbol() != 'C':
                             continue
                         neighbor_idx = neighbor.GetIdx()
 
-                        # Verifier si voisin est dans le meme cycle 6
                         in_same_ring_6 = False
                         for ring in ri.AtomRings():
                             if heavy_idx in ring and neighbor_idx in ring and len(ring) == 6:
@@ -12461,20 +9135,19 @@ def _estimate_Js_for_group(
                         if not partner_hs:
                             continue
 
-                        # Appliquer diffÃ©renciation basÃ©e sur rigiditÃ©
                         differentiate = should_differentiate_diastereotopic_J(
                             molH, heavy_idx, neighbor_idx, 'generic_ring6'
                         )
 
                         for partner_h in partner_hs:
                             if differentiate:
-                                # h_rep est le premier H du groupe
+
                                 if h_rep == all_h_on_heavy[0]:
                                     J = J_large_default
                                 else:
                                     J = J_small_default
                             else:
-                                J = 7.0  # Fallback uniforme
+                                J = 7.0
 
                             if J >= min3:
                                 generic_J_vals_out.append(J)
@@ -12482,7 +9155,7 @@ def _estimate_Js_for_group(
                                 generic_homo_pairs.append((partner_h, J, 'ring6_generic'))
 
                     if generic_J_vals_out:
-                        # Ajouter Â²J geminal
+
                         if geminal_partner is not None:
                             Jg = _get_geminal_2J(heavy_atom, base)
                             if Jg >= min2:
@@ -12513,57 +9186,49 @@ def _estimate_Js_for_group(
         except Exception:
             pass
 
-    # =========================================================================
-    # NOUVEAU: Détection et traitement via module couplages complets
-    # (Alcynes, Aldéhydes, Peptides, Phosphines, Stéroïdes, Terpènes, etc.)
-    # =========================================================================
     if COUPLING_TABLES_MODULE_AVAILABLE:
         try:
-            # Classifier la molécule (peut utiliser base sans H)
+
             mol_types = MoleculeClassifier.classify(base)
-            
+
             if mol_types:
-                # Chercher les partenaires de couplage pour ce proton
+
                 n_heavy = base.GetNumAtoms()
                 candidate_heavies_spec = [j for j in range(n_heavy) if 1 <= int(D[heavy_idx, j]) <= 3]
-                
+
                 for other_heavy in candidate_heavies_spec:
                     other_hs = heavy_to_H.get(other_heavy, [])
                     if not other_hs:
                         continue
-                    
-                    # ✅ FILTRE: Ignorer les H échangeables (NH, OH)
+
                     exch_spec = _is_exchangeable_H_on_X(base, other_heavy)
                     if exch_spec and solvent.get("name") != "DMSO-d6":
                         continue
-                    
+
                     dist = int(D[heavy_idx, other_heavy])
-                    
+
                     for h2 in other_hs:
                         if h2 in h_atoms:
                             continue
-                        
-                        # ✅ Éviter les doublons
+
                         if h2 in processed_partners:
                             continue
-                        
-                        # Utiliser le dispatch des tables spécialisées avec molH
-                        # car h_rep et h2 sont des indices de protons
+
                         J_spec = get_specialized_coupling(
                             mol=molH,
                             h1_idx=h_rep,
                             h2_idx=h2,
-                            distance=dist + 1  # +1 car on veut 3J, 4J, etc.
+                            distance=dist + 1
                         )
-                        
+
                         if J_spec is not None and J_spec >= min3:
                             J_vals.append(J_spec)
                             J_sources.append(other_heavy)
                             J_orders.append(dist + 1)
                             partners.append(h2)
                             homo_J_vals_for_second_order.append(J_spec)
-                            homo_pairs.append((h2, J_spec, "structural"))  # ✅ Source: tables spécialisées
-                            processed_partners.add(h2)  # ✅ Marquer comme traité
+                            homo_pairs.append((h2, J_spec, "structural"))
+                            processed_partners.add(h2)
 
                             partner_atom = base.GetAtomWithIdx(other_heavy)
                             partner_heavy_idx_kept.append(other_heavy)
@@ -12572,24 +9237,18 @@ def _estimate_Js_for_group(
                             )
 
         except Exception as e:
-            # En cas d'erreur, continuer avec la logique standard
+
             pass
 
-    # =========================================================================
-    # NOUVEAU: Couplages peptidiques robustes via module peptide_couplings
-    # CORRECTION: Utiliser le module peptide EN PRIORITÉ (pas seulement en fallback)
-    # =========================================================================
     if PEPTIDE_MODULE_AVAILABLE:
-        # Utiliser le module peptide directement si coupling_tables n'est pas là
+
         try:
-            # Vérifier si c'est un environnement peptidique ou acide aminé
-            # CORRECTION: Détecter aussi les acides aminés LIBRES (pas seulement amides)
+
             is_peptide_env = False
 
-            # Pattern 1: Liaison amide classique (N-C=O) pour peptides/protéines
             for nb in heavy_atom.GetNeighbors():
                 if nb.GetSymbol() == 'N':
-                    # Chercher liaison amide (N-C=O)
+
                     for nn in nb.GetNeighbors():
                         if nn.GetSymbol() == 'C':
                             for nnn in nn.GetNeighbors():
@@ -12599,20 +9258,17 @@ def _estimate_Js_for_group(
                                         is_peptide_env = True
                                         break
 
-            # Pattern 2: Acide aminé LIBRE (α-amino acid: NH2-CHR-COOH)
-            # Détecte: carbone α avec NH2 voisin ET COOH attaché
             if not is_peptide_env and heavy_atom.GetSymbol() == 'C':
                 has_amino = False
                 has_carboxyl = False
 
                 for nb in heavy_atom.GetNeighbors():
-                    # Chercher NH2 (amine primaire ou secondaire)
+
                     if nb.GetSymbol() == 'N':
-                        # Vérifier que c'est une amine (pas dans un cycle aromatique)
+
                         if not nb.GetIsAromatic():
                             has_amino = True
 
-                    # Chercher C(=O)O (carboxyle)
                     if nb.GetSymbol() == 'C':
                         has_carbonyl_O = False
                         has_hydroxyl_O = False
@@ -12627,23 +9283,18 @@ def _estimate_Js_for_group(
                         if has_carbonyl_O and has_hydroxyl_O:
                             has_carboxyl = True
 
-                # C'est un acide aminé libre si on a NH2 + COOH sur le même carbone
                 if has_amino and has_carboxyl:
                     is_peptide_env = True
 
-            # Pattern 3: Chaîne latérale d'acide aminé (ex: lysine ε-CH2-NH2)
-            # Détecte les CH2 dans une chaîne terminée par NH2 et connectée à un α-carbone
             if not is_peptide_env and heavy_atom.GetSymbol() == 'C':
-                # Parcourir les voisins pour trouver une chaîne alkyle vers NH2
+
                 for nb in heavy_atom.GetNeighbors():
                     if nb.GetSymbol() == 'N' and not nb.GetIsAromatic():
-                        # Ce carbone est directement lié à une amine
+
                         is_peptide_env = True
                         break
                     elif nb.GetSymbol() == 'C':
-                        # Chercher si ce voisin mène vers un acide aminé (max 5 bonds)
-                        # Simplification: si on trouve NH2 à distance ≤4, c'est probablement
-                        # une chaîne latérale d'acide aminé
+
                         visited = {heavy_idx, nb.GetIdx()}
                         queue = [(nb, 1)]
                         while queue and not is_peptide_env:
@@ -12655,25 +9306,12 @@ def _estimate_Js_for_group(
                                     continue
                                 visited.add(nn.GetIdx())
                                 if nn.GetSymbol() == 'N' and not nn.GetIsAromatic():
-                                    # Trouvé une amine dans la chaîne
+
                                     is_peptide_env = True
                                     break
                                 elif nn.GetSymbol() == 'C':
                                     queue.append((nn, depth + 1))
-            
-            # ═══════════════════════════════════════════════════════════════════════════════
-            # LOGIQUE DE SÉLECTION: Tables peptide vs Karplus 3D
-            #
-            # Utiliser tables peptide si:
-            #   - Environnement peptidique/acide aminé détecté
-            #   - ET pas de cache conformer (chaîne flexible → tables moyennes)
-            #
-            # Utiliser Karplus 3D si:
-            #   - Cache conformer disponible (système rigide → chi1 fiable)
-            #
-            # Cette logique est cohérente avec _molecule_needs_conformers et
-            # peptide_couplings.py qui utilisent le même critère (IsInRing)
-            # ═══════════════════════════════════════════════════════════════════════════════
+
             use_peptide_tables = is_peptide_env and (conformer_cache is None)
 
             if use_peptide_tables:
@@ -12684,72 +9322,54 @@ def _estimate_Js_for_group(
                     other_hs = heavy_to_H.get(other_heavy, [])
                     if not other_hs:
                         continue
-                    
-                    # ✅ FILTRE: Ignorer les H échangeables (NH, OH)
+
                     exch_pep = _is_exchangeable_H_on_X(base, other_heavy)
                     if exch_pep and solvent.get("name") != "DMSO-d6":
                         continue
-                    
+
                     for h2 in other_hs:
                         if h2 in h_atoms:
                             continue
 
-                        # ✅ Éviter les doublons
                         if h2 in processed_partners:
                             continue
 
-                        # ✅ FILTRE DISTANCE TOPOLOGIQUE: Le module peptide ne traite que les ³J
-                        # Calculer le nombre de liaisons entre les deux protons
                         try:
                             path = Chem.GetShortestPath(molH, h_rep, h2)
                             n_bonds = len(path) - 1 if path else 99
                         except Exception:
                             n_bonds = 99
 
-                        # ³J = 3 liaisons (H-C-C-H), ²J = 2 liaisons (H-C-H geminal)
-                        # Le module peptide ne doit PAS traiter:
-                        # - ⁴J+ (>3 liaisons) sauf exceptions explicites (allylique, W-pathway)
-                        # - Couplages trop longs qui seraient des artefacts
                         if n_bonds > 3:
-                            # Exceptions: ⁴J allylique, méta-aromatique peuvent être traités ailleurs
+
                             continue
 
-                        # ═══════════════════════════════════════════════════════════════════
-                        # PRIORITÉ 1: Moyennage rotamérique pour CH₂ diastéréotopiques
-                        # Plus précis que Karplus multi-conformères pour chaînes flexibles
-                        # car basé sur populations expérimentales (Dunbrack library)
-                        # ═══════════════════════════════════════════════════════════════════
                         J_pep = None
                         j_source_pep = "peptide"
 
                         if ROTAMER_AVERAGING_AVAILABLE and n_bonds == 3:
-                            # Vérifier si c'est un couplage Hα-Hβ (CH₂ diastéréotopique)
-                            current_h_count = len(h_atoms)  # Nombre de H sur heavy_idx
-                            partner_h_count = len(other_hs)  # Nombre de H sur other_heavy
 
-                            # Cas 1: heavy_idx est CH (Hα) et other_heavy est CH₂ (Hβ)
+                            current_h_count = len(h_atoms)
+                            partner_h_count = len(other_hs)
+
                             if current_h_count == 1 and partner_h_count == 2:
-                                # Déterminer si h2 est HB2 ou HB3
-                                is_hb2 = (h2 == other_hs[0])  # Premier H = HB2 par convention
+
+                                is_hb2 = (h2 == other_hs[0])
                                 rotamer_result = _get_rotamer_averaged_J_for_peptide(
                                     molH, h_rep, h2, other_heavy, is_hb2=is_hb2
                                 )
                                 if rotamer_result:
                                     J_pep, j_source_pep = rotamer_result
 
-                            # Cas 2: heavy_idx est CH₂ (Hβ) et other_heavy est CH (Hα)
                             elif current_h_count == 2 and partner_h_count == 1:
-                                # Déterminer si h_rep est HB2 ou HB3
-                                is_hb2 = (h_rep == h_atoms[0])  # Premier H = HB2
+
+                                is_hb2 = (h_rep == h_atoms[0])
                                 rotamer_result = _get_rotamer_averaged_J_for_peptide(
                                     molH, h2, h_rep, heavy_idx, is_hb2=is_hb2
                                 )
                                 if rotamer_result:
                                     J_pep, j_source_pep = rotamer_result
 
-                        # ═══════════════════════════════════════════════════════════════════
-                        # PRIORITÉ 2: Fallback sur get_peptide_coupling_robust
-                        # ═══════════════════════════════════════════════════════════════════
                         if J_pep is None:
                             J_pep = get_peptide_coupling_robust(
                                 mol=molH,
@@ -12766,7 +9386,7 @@ def _estimate_Js_for_group(
                             J_orders.append(3)
                             partners.append(h2)
                             homo_J_vals_for_second_order.append(J_pep)
-                            homo_pairs.append((h2, J_pep, j_source_pep))  # ✅ Source tracée
+                            homo_pairs.append((h2, J_pep, j_source_pep))
                             processed_partners.add(h2)
 
                             partner_atom = base.GetAtomWithIdx(other_heavy)
@@ -12778,56 +9398,49 @@ def _estimate_Js_for_group(
         except Exception as e:
             pass
 
-    # =========================================================================
-    # NOUVEAU: Extensions de couplage (aromatiques polycycliques, cycles tendus)
-    # =========================================================================
     if COUPLING_EXTENSIONS_AVAILABLE:
         try:
             n_heavy = base.GetNumAtoms()
             candidate_heavies_ext = [j for j in range(n_heavy) if 1 <= int(D[heavy_idx, j]) <= 3]
-            
+
             for other_heavy in candidate_heavies_ext:
-                # ✅ FILTRE ÉQUIVALENCE: Ignorer couplages entre carbones équivalents
+
                 if config.collapse_equivalent_by_rank and ranks is not None:
                     if _are_protons_on_equivalent_carbons(base, ranks, heavy_idx, other_heavy):
                         continue
-                
+
                 other_hs = heavy_to_H.get(other_heavy, [])
                 if not other_hs:
                     continue
-                
-                # ✅ FILTRE: Ignorer les H échangeables (NH, OH)
+
                 exch_ext = _is_exchangeable_H_on_X(base, other_heavy)
                 if exch_ext and solvent.get("name") != "DMSO-d6":
                     continue
-                
+
                 dist = int(D[heavy_idx, other_heavy])
-                
+
                 for h2 in other_hs:
                     if h2 in h_atoms:
                         continue
-                    
-                    # ✅ Éviter les doublons
+
                     if h2 in processed_partners:
                         continue
-                    
-                    # Utiliser le dispatch des extensions avec molH (molécule avec H)
-                    # car h_rep et h2 sont des indices de protons
+
                     J_ext = get_extended_coupling(
                         mol=molH,
                         h1_idx=h_rep,
                         h2_idx=h2,
                         distance=dist + 1
                     )
-                    
+
                     if J_ext is not None and abs(J_ext) >= min3:
-                        J_vals.append(abs(J_ext))  # Prendre valeur absolue
+                        J_vals.append(abs(J_ext))
                         J_sources.append(other_heavy)
                         J_orders.append(dist + 1)
                         partners.append(h2)
                         homo_J_vals_for_second_order.append(abs(J_ext))
-                        homo_pairs.append((h2, abs(J_ext), "coupling_extensions"))  # ✅ Source: extensions
-                        processed_partners.add(h2)  # ✅ Marquer comme traité
+                        homo_pairs.append((h2, abs(J_ext), "coupling_extensions"))
+                        processed_partners.add(h2)
 
                         partner_atom = base.GetAtomWithIdx(other_heavy)
                         partner_heavy_idx_kept.append(other_heavy)
@@ -12838,13 +9451,11 @@ def _estimate_Js_for_group(
         except Exception as e:
             pass
 
-    # 2J geminal avec partenaire diastéréotopique explicite
     if geminal_partner is not None:
-        # Utiliser _get_geminal_2J pour valeur adaptée à l'environnement
+
         Jg = _get_geminal_2J(heavy_atom, base)
         if Jg >= min2:
-            # ⚠️ FIX CRITIQUE: Vérifier d'abord si shifts différents
-            # Le couplage geminal n'est OBSERVABLE que si les shifts diffèrent
+
             geminal_shifts_differ = False
             if proton_shifts_ppm is not None:
                 try:
@@ -12856,20 +9467,17 @@ def _estimate_Js_for_group(
                 except Exception:
                     pass
 
-            # Toujours garder pour la simulation Hamiltonienne
             partners.append(geminal_partner)
-            homo_pairs.append((geminal_partner, Jg, "geminal_calc"))  # ✅ Source: geminal calculé
+            homo_pairs.append((geminal_partner, Jg, "geminal_calc"))
             partner_heavy_idx_kept.append(heavy_idx)
             partner_is_sp2_kept.append(is_sp2)
 
-            # Mais n'ajouter aux J observables QUE si shifts vraiment différents
             if geminal_shifts_differ:
                 J_vals.append(Jg)
                 J_sources.append(None)
                 J_orders.append(2)
                 homo_J_vals_for_second_order.append(Jg)
 
-    # 2J geminal (cas où les 2 H sont dans le même groupe)
     if len(h_atoms) == 2:
         nb_heavy = [n for n in heavy_atom.GetNeighbors()]
         chiral_neigh = any(_is_chiral_center(n) for n in nb_heavy)
@@ -12883,74 +9491,55 @@ def _estimate_Js_for_group(
                     non_equiv_by_shift = (abs(d0 - d1) > 0.005)
             except Exception:
                 non_equiv_by_shift = False
-        # ✅ NOUVEAU: Vérifier aussi les centres prochiraux (ex: citrate)
-        # Un CH2 adjacent à un centre prochiral a des protons diastéréotopiques
+
         prochiral_ch2 = False
         try:
             prochiral_ch2, _ = _is_prochiral_CH2(molH, heavy_idx)
         except Exception:
             pass
         if chiral_neigh or non_equiv_by_shift or prochiral_ch2:
-            # Utiliser _get_geminal_2J pour valeur adaptée à l'environnement
+
             Jg = _get_geminal_2J(heavy_atom, base)
             if Jg >= min2:
-                # ⚠️ FIX CRITIQUE: Le couplage geminal entre protons ÉQUIVALENTS (même shift)
-                # est magnétiquement INVISIBLE. Il ne produit PAS de splitting observable.
-                #
-                # - partners/homo_pairs: TOUJOURS ajouter (pour matrice Hamiltonien)
-                # - J_vals: ajouter SEULEMENT si shifts différents (pour label/multiplicité)
-                # - homo_J_vals_for_second_order: idem (pour détection second-ordre)
-                #
-                # Sinon: CH₂ équivalent → label "dd" au lieu de "d" (FAUX!)
 
-                # Toujours garder pour la simulation Hamiltonienne
                 partners.append(h_atoms[1])
-                homo_pairs.append((h_atoms[1], Jg, "geminal_calc"))  # ✅ Source: geminal calculé
+                homo_pairs.append((h_atoms[1], Jg, "geminal_calc"))
                 partner_heavy_idx_kept.append(heavy_idx)
                 partner_is_sp2_kept.append(is_sp2)
 
-                # Mais n'ajouter aux J observables QUE si shifts vraiment différents
                 if non_equiv_by_shift:
                     J_vals.append(Jg)
                     J_sources.append(None)
                     J_orders.append(2)
                     homo_J_vals_for_second_order.append(Jg)
 
-    # Hétéronucléaires (F, P) avec couplages avancés
     if include_heteronuclear:
         for X in base.GetAtoms():
             xsym = X.GetSymbol()
             if xsym not in config.hetero_j_base: continue
-            
-            # Couplages ³¹P avancés (phosphates, phosphonates)
+
             if xsym == "P":
                 dist_P = int(D[heavy_idx, X.GetIdx()]) if D[heavy_idx, X.GetIdx()] > 0 else 99
                 if dist_P <= 4:
                     J_31P = _estimate_31P_1H_coupling(base, h_rep, X.GetIdx(), dist_P)
                     if J_31P is not None and J_31P >= 0.5:
                         J_vals.append(J_31P); J_sources.append(X.GetIdx()); J_orders.append(dist_P + 1)
-                        continue  # Skip generic hetero coupling for P
-            
+                        continue
+
             for j in _hetero_J_contextual(base, D, aromatic_dmap, heavy_idx, X, config):
                 if j >= 0.5:
                     J_vals.append(j); J_sources.append(None); J_orders.append(3)
-    
-    # Couplages ¹⁵N-¹H (satellites, 0.37% abondance naturelle)
-    # Visible surtout pour composés enrichis en ¹⁵N ou spectres très concentrés
-    # Note: Nous ne les ajoutons pas par défaut car ils sont très faibles
-    # mais la fonction _estimate_15N_1H_coupling existe pour usage spécialisé
 
-    # ³J(H-N-C-H) pour peptides/amides (Bystrov)
     if config.peptide_HNCH_coupling:
-        # Chercher les protons sur N voisins couplés via C
+
         for nb in heavy_atom.GetNeighbors():
             if nb.GetSymbol() == 'N':
                 n_idx = nb.GetIdx()
-                # Chercher H sur N
+
                 for n_neighbor in nb.GetNeighbors():
                     if n_neighbor.GetSymbol() == 'H':
                         hn_idx = n_neighbor.GetIdx()
-                        # Estimer ³J(H-N-C-H)
+
                         for h in h_atoms:
                             try:
                                 J_hnch = _estimate_HNCH_J(molH, hn_idx, n_idx, heavy_idx, h)
@@ -12960,36 +9549,31 @@ def _estimate_Js_for_group(
                                     J_orders.append(3)
                                     partners.append(hn_idx)
                                     homo_J_vals_for_second_order.append(J_hnch)
-                                    homo_pairs.append((hn_idx, J_hnch, "peptide_HNCH"))  # ✅ Source: Bystrov HNCH
+                                    homo_pairs.append((hn_idx, J_hnch, "peptide_HNCH"))
                             except Exception:
                                 pass
 
     n_heavy = base.GetNumAtoms()
-    
-    # ✅ CORRECTIF: Vérifier si c'est un hétérocycle saturé (dikétopipérazine, lactame, etc.)
-    # Si oui, limiter strictement aux couplages vicinals (dist=3: 2 liaisons)
+
     is_saturated_heterocycle = False
     if heavy_atom.GetSymbol() in ['C', 'N'] and not heavy_atom.GetIsAromatic():
-        # Vérifier si le carbone/azote est dans un hétérocycle saturé
+
         for ring in base.GetRingInfo().AtomRings():
             if heavy_idx in ring:
-                # Vérifier si le cycle contient un hétéroatome (N, O, S)
+
                 has_hetero = any(base.GetAtomWithIdx(i).GetSymbol() in ['N', 'O', 'S'] for i in ring)
-                if has_hetero and len(ring) in [5, 6]:  # Lactames/lactones typiques
-                    # Vérifier que c'est saturé (pas aromatique)
+                if has_hetero and len(ring) in [5, 6]:
+
                     all_saturated = all(not base.GetAtomWithIdx(i).GetIsAromatic() for i in ring)
                     if all_saturated:
                         is_saturated_heterocycle = True
                         break
-    
-    # Limiter les distances selon le type
+
     if is_saturated_heterocycle:
-        # Hétérocycle saturé: couplages vicinaux (dist=1, soit ³J sur 3 liaisons H-C-C-H)
-        # On inclut aussi dist=2 pour les couplages géminaux (²J) et dist=3 pour les ⁴J intra-cycle
-        # mais on exclut les distances plus longues pour éviter les artefacts
+
         candidate_heavies = [j for j in range(n_heavy) if 1 <= int(D[heavy_idx, j]) <= 2]
     else:
-        # Cas standard: couplages 2J (dist=1) et 3J (dist=1), 4J (dist=2 allylic/long-range)
+
         candidate_heavies = [j for j in range(n_heavy) if 1 <= int(D[heavy_idx, j]) <= 3]
 
     anomeric_rule_applied = False
@@ -13000,44 +9584,23 @@ def _estimate_Js_for_group(
         other_hs = heavy_to_H.get(other_heavy, [])
         if not other_hs: continue
 
-        # ✅ FILTRE GLOBAL: Ignorer les H échangeables (NH, OH) comme partenaires de couplage
-        # Ces protons sont en échange rapide et ne montrent pas de couplage J observable
-        # sauf en DMSO-d6 (où l'échange est lent)
         exch_partner_global = _is_exchangeable_H_on_X(base, other_heavy)
         if exch_partner_global and solvent.get("name") != "DMSO-d6":
             continue
 
-        # Filtre équivalence par rang canonique (inclut symétrie moléculaire)
-        # ✅ CORRECTION MAJEURE: Les protons sur des carbones MAGNÉTIQUEMENT ÉQUIVALENTS
-        # ne montrent pas de couplage mutuel visible (le couplage existe mais est invisible
-        # car les protons sont isochroniques = même shift chimique).
-        # 
-        # Cas concernés:
-        # - Cyclohexane: tous les CH2 équivalents → singulet large
-        # - Cyclopentane: tous les CH2 équivalents → singulet
-        # - 1,2-Dichloroéthane (ClCCCl): les 2 CH2 équivalents → singulet
-        # - Benzène: tous les CH équivalents → singulet
-        # - Aromatiques monosubstitués: H en position ortho équivalents entre eux
-        #
-        # Règle: Si ranks[heavy_idx] == ranks[other_heavy], ignorer le couplage
         if config.collapse_equivalent_by_rank and ranks is not None:
-            # ✅ NOUVEAU: Vérifier si les deux carbones porteurs sont équivalents
-            # Si oui, ne pas compter le couplage (il est invisible)
+
             if _are_protons_on_equivalent_carbons(base, ranks, heavy_idx, other_heavy):
                 continue
-            
-            # Ancien code pour les cas aromatiques (gardé pour compatibilité)
+
             heavy_atom_check = base.GetAtomWithIdx(heavy_idx)
             other_heavy_atom = base.GetAtomWithIdx(other_heavy)
             both_aromatic = heavy_atom_check.GetIsAromatic() and other_heavy_atom.GetIsAromatic()
-            
-            # Pour aromatiques: toujours filtrer les équivalents
-            # Pour aliphatiques: la vérification ci-dessus suffit maintenant
+
             if both_aromatic:
                 if _are_heavy_equivalent(ranks, heavy_idx, other_heavy, heavy_to_H, proton_shifts_ppm, config.equiv_delta_ppm_tol, mol=base):
                     continue
 
-        # 3J vicinaux
         if dist == 1:
             partner_atom = base.GetAtomWithIdx(other_heavy)
             partner_is_sp2 = (heavy_is_sp2_cache[other_heavy]
@@ -13050,30 +9613,22 @@ def _estimate_Js_for_group(
                 continue
 
             Js_tmp: List[float] = []
-            Js_tmp_sources: List[str] = []  # ✅ NOUVEAU: traçage des sources
+            Js_tmp_sources: List[str] = []
             partners_tmp: List[int] = []
             partners_tmp_heavy: List[int] = []
             partners_tmp_is_sp2: List[bool] = []
 
-            # ✅ NOUVEAU: Pour CH3, collecter TOUS les J (même petits) pour le calcul de moyenne
             Js_all_for_CH3: List[float] = []
-            Js_all_for_CH3_sources: List[str] = []  # ✅ NOUVEAU: traçage des sources CH3
+            Js_all_for_CH3_sources: List[str] = []
             partners_all_for_CH3: List[int] = []
 
-            # ✅ CORRECTION: forbid_avg doit être True si:
-            # 1. Le partenaire (other_heavy) est un CH₂ diastéréotopique, OU
-            # 2. Le proton actuel est diastéréotopique (geminal_partner is not None)
-            # Cela garantit que les J ne sont pas moyennés pour les protons diastéréotopiques
             forbid_avg = _neighbor_is_diastereotopic_CH2(base, molH, heavy_to_H, other_heavy)
             if geminal_partner is not None:
-                # Le proton actuel est diastéréotopique → ne pas moyenner ses couplages
+
                 forbid_avg = True
-            
-            # Détecter si c'est un CH3 partner
+
             is_CH3_partner = (partner_atom.GetSymbol() == "C" and len(other_hs) == 3 and not partner_is_sp2)
 
-            # ✅ FIX: Toujours forcer les J aromatiques depuis les tables (ortho/meta/para)
-            # Auparavant conditionné par auto_bench_mode, maintenant toujours appliqué
             if (is_sp2 and partner_is_sp2
                 and base.GetAtomWithIdx(heavy_idx).IsInRingSize(6)
                 and base.GetAtomWithIdx(other_heavy).IsInRingSize(6)):
@@ -13094,12 +9649,11 @@ def _estimate_Js_for_group(
                     for jv, ptmp, phv, pis2 in zip(Js_tmp, partners_tmp, partners_tmp_heavy, partners_tmp_is_sp2):
                         J_vals.append(jv); J_sources.append(other_heavy); J_orders.append(3)
                         homo_J_vals_for_second_order.append(jv)
-                        partners.append(ptmp); homo_pairs.append((ptmp, jv, "aromatic_exact"))  # ✅ Source: aromatique
+                        partners.append(ptmp); homo_pairs.append((ptmp, jv, "aromatic_exact"))
                         partner_heavy_idx_kept.append(phv); partner_is_sp2_kept.append(pis2)
-                        processed_partners.add(ptmp)  # FIX: Eviter doublons aromatiques
+                        processed_partners.add(ptmp)
                     continue
 
-            # Auto-bench vinylique
             if config.auto_bench_mode and is_sp2 and partner_is_sp2:
                 b = base.GetBondBetweenAtoms(heavy_idx, other_heavy)
                 if b and b.GetBondTypeAsDouble() >= 2:
@@ -13114,7 +9668,7 @@ def _estimate_Js_for_group(
                     for jv, ptmp, phv, pis2 in zip(Js_tmp, partners_tmp, partners_tmp_heavy, partners_tmp_is_sp2):
                         J_vals.append(jv); J_sources.append(other_heavy); J_orders.append(3)
                         homo_J_vals_for_second_order.append(jv)
-                        partners.append(ptmp); homo_pairs.append((ptmp, jv, "vinylic"))  # ✅ Source: vinylique
+                        partners.append(ptmp); homo_pairs.append((ptmp, jv, "vinylic"))
                         partner_heavy_idx_kept.append(phv); partner_is_sp2_kept.append(pis2)
                     continue
 
@@ -13122,12 +9676,11 @@ def _estimate_Js_for_group(
                 if h in h_atoms:
                     continue
 
-                # ✅ Éviter les doublons avec modules spécialisés
                 if h in processed_partners:
                     continue
 
                 J = None
-                j_source = "unknown"  # ✅ NOUVEAU: traçage explicite de la source
+                j_source = "unknown"
                 if not is_sp2:
                     bond = base.GetBondBetweenAtoms(heavy_idx, other_heavy)
                     flexible_cc = (
@@ -13138,41 +9691,33 @@ def _estimate_Js_for_group(
                         and base.GetAtomWithIdx(heavy_idx).GetSymbol() == "C"
                         and partner_atom.GetSymbol() == "C"
                     )
-                    
-                    # ✅ CORRECTION CRITIQUE: Couplage allylique CH₂(sp3)-CH(sp2)
-                    # Pour un CH₂ sp3 couplant avec un CH sp2 via liaison simple flexible,
-                    # J = 7.0 Hz (moyenne rotationnelle) MÊME si le CH₂ est diastéréotopique
-                    # Car la rotation autour de la liaison C(sp3)-C(sp2) est libre
+
                     is_allylic_coupling = (
                         flexible_cc
-                        and partner_is_sp2  # Le partenaire est sp2 (vinylique)
-                        and len(heavy_to_H.get(other_heavy, [])) == 1  # CH vinylique (1 seul H)
+                        and partner_is_sp2
+                        and len(heavy_to_H.get(other_heavy, [])) == 1
                     )
-                    
+
                     if is_allylic_coupling:
-                        # Couplage allylique sp3-sp2: J = 7.0 Hz (moyenne rotationnelle)
+
                         J = 7.0
-                        j_source = "fallback_average"  # ✅ Source: moyenne rotationnelle
-                    
-                    # ✅ MODE ULTRA-RAPIDE: Skip la détection diastéréotopique coûteuse
-                    # Pour les très grosses molécules, utiliser J=7.0 Hz partout (chaînes flexibles)
+                        j_source = "fallback_average"
+
                     is_diastereotopic_CH2 = False
                     if ultra_fast_mode:
-                        # En mode ultra-rapide: assumer pas de diastéréotopie → J=7.0 Hz
+
                         is_diastereotopic_CH2 = False
                     elif flexible_cc:
-                        # Vérifier si le carbone courant a 2 H (CH₂)
+
                         current_h_count = len(heavy_to_H.get(heavy_idx, []))
                         partner_h_count = len(heavy_to_H.get(other_heavy, []))
-                        
-                        # ✅ UTILISER LE CACHE au lieu d'appeler _detect_diastereotopic_protons
-                        # Le cache inclut déjà toutes les méthodes de détection (chiralité + prochiralité)
+
                         if current_h_count == 2:
                             if diastereotopic_cache and heavy_idx in diastereotopic_cache:
                                 is_diast, _ = diastereotopic_cache[heavy_idx]
                                 is_diastereotopic_CH2 = is_diast
                             elif not ultra_fast_mode:
-                                # Fallback si pas dans le cache (ne devrait pas arriver)
+
                                 is_diast, _ = _detect_diastereotopic_protons(molH, heavy_idx)
                                 if is_diast:
                                     is_diastereotopic_CH2 = True
@@ -13180,14 +9725,13 @@ def _estimate_Js_for_group(
                                     is_prochiral, _ = _is_prochiral_CH2(molH, heavy_idx)
                                     if is_prochiral:
                                         is_diastereotopic_CH2 = True
-                        
-                        # ✅ UTILISER LE CACHE pour le partenaire aussi
+
                         if not is_diastereotopic_CH2 and partner_h_count == 2:
                             if diastereotopic_cache and other_heavy in diastereotopic_cache:
                                 is_diast_partner, _ = diastereotopic_cache[other_heavy]
                                 is_diastereotopic_CH2 = is_diast_partner
                             elif not ultra_fast_mode:
-                                # Fallback si pas dans le cache
+
                                 is_diast_partner, _ = _detect_diastereotopic_protons(molH, other_heavy)
                                 if is_diast_partner:
                                     is_diastereotopic_CH2 = True
@@ -13195,49 +9739,31 @@ def _estimate_Js_for_group(
                                     is_prochiral_partner, _ = _is_prochiral_CH2(molH, other_heavy)
                                     if is_prochiral_partner:
                                         is_diastereotopic_CH2 = True
-                    
-                    # ✅ PRIORITÉ 1: Couplage allylique CH₂(sp3)-CH(sp2)
-                    # Pour un CH₂ sp3 couplant avec un CH sp2 via liaison simple flexible,
-                    # J = 7.0 Hz (moyenne rotationnelle) TOUJOURS (même si CH₂ diastéréotopique)
-                    # Car la rotation autour de la liaison C(sp3)-C(sp2) est libre
+
                     if is_allylic_coupling:
                         J = 7.0
                         j_source = "fallback_average"
-                    # ✅ MODE ULTRA-RAPIDE: Utiliser J=7.0 Hz pour toutes les chaînes flexibles
+
                     elif ultra_fast_mode and flexible_cc:
-                        J = config.ultra_fast_default_vicinal_J  # Par défaut 7.0 Hz
+                        J = config.ultra_fast_default_vicinal_J
                         j_source = "fallback_average"
-                    # ═══════════════════════════════════════════════════════════════════════════════
-                    # FALLBACK INTELLIGENT pour chaînes flexibles acycliques
-                    # Le force field MMFF favorise systématiquement un rotamère → J biaisé
-                    # Solution: utiliser des valeurs moyennes basées sur l'environnement chimique
-                    #
-                    # | Environnement        | J moyen | Raison                           |
-                    # |----------------------|---------|----------------------------------|
-                    # | Alkyle simple        | 7.0 Hz  | Rotation quasi-libre             |
-                    # | Adjacent à NH3+      | 7.5 Hz  | Trans favorisé (chaîne étendue)  |
-                    # | Adjacent à O (éther) | 6.5 Hz  | Effet gauche O                   |
-                    # | Adjacent à F         | 5.5 Hz  | Effet gauche F (plus fort)       |
-                    # | O-CH2-CH2-O (glycol) | 5.0 Hz  | Double effet gauche              |
-                    # ═══════════════════════════════════════════════════════════════════════════════
+
                     elif flexible_cc:
-                        # ✅ NOUVEAU: Moyennage rotamérique pour acides aminés (diastéréotopiques)
-                        # Utiliser get_diastereotopic_J_pair() pour obtenir J(Hα-Hβ2) et J(Hα-Hβ3) différents
+
                         amino_acid_J = None
                         if is_diastereotopic_CH2 and ROTAMER_AVERAGING_AVAILABLE:
-                            # Déterminer quel carbone est le CH₂ (Cβ) et quel est le CH (Cα)
+
                             current_h_count = len(heavy_to_H.get(heavy_idx, []))
                             partner_h_count = len(heavy_to_H.get(other_heavy, []))
 
-                            # Cas 1: heavy_idx est CH (Hα), other_heavy est CH₂ (Hβ)
                             if current_h_count == 1 and partner_h_count == 2:
                                 ch2_idx = other_heavy
-                                ca_idx = heavy_idx  # Cα
+                                ca_idx = heavy_idx
                                 is_current_h_hb2 = (h == heavy_to_H.get(other_heavy, [])[0])
-                            # Cas 2: heavy_idx est CH₂ (Hβ), other_heavy est CH (Hα)
+
                             elif current_h_count == 2 and partner_h_count == 1:
                                 ch2_idx = heavy_idx
-                                ca_idx = other_heavy  # Cα
+                                ca_idx = other_heavy
                                 is_current_h_hb2 = (h_rep == heavy_to_H.get(heavy_idx, [])[0])
                             else:
                                 ch2_idx = None
@@ -13245,23 +9771,22 @@ def _estimate_Js_for_group(
                                 is_current_h_hb2 = True
 
                             if ch2_idx is not None:
-                                # Détecter le type d'acide aminé
+
                                 aa_type = _detect_amino_acid_type(molH, ch2_idx)
                                 if aa_type:
                                     try:
-                                        # ✅ FIX: Détecter si c'est un acide aminé LIBRE
+
                                         if ca_idx is not None and _is_free_amino_acid(molH, ca_idx):
                                             secondary_structure = 'free_amino_acid'
                                         else:
                                             secondary_structure = 'random_coil'
 
-                                        # Utiliser get_diastereotopic_J_pair pour les J spécifiques
                                         J_HB2, J_HB3, aa_source = get_diastereotopic_J_pair(aa_type, secondary_structure)
                                         if is_current_h_hb2:
                                             amino_acid_J = J_HB2
                                         else:
                                             amino_acid_J = J_HB3
-                                        # ✅ Inclure la structure secondaire dans la source
+
                                         j_source = f"rotamer_pair:{aa_type}:{secondary_structure}"
                                     except Exception:
                                         pass
@@ -13269,82 +9794,73 @@ def _estimate_Js_for_group(
                         if amino_acid_J is not None:
                             J = amino_acid_J
                         else:
-                            # ✅ Fallback intelligent basé sur l'environnement chimique
+
                             J, j_source = _get_flexible_chain_fallback_J(base, heavy_idx, other_heavy)
                     else:
                         EN_corr = 0.4 if any(n.GetSymbol() in {"O","N"} for n in base.GetAtomWithIdx(heavy_idx).GetNeighbors()) else 0.0
-                        
-                        # ✅ Initialiser Jk à None (sera rempli par tables ou conformères)
+
                         Jk = None
-                        
-                        # ✅ PRIORITÉ: Table des macrocycles (évite calcul conformères)
-                        # Pour les protons dans un macrocycle (≥8 membres), utiliser J moyen constant
-                        # Car les macrocycles flexibles donnent des J moyennés quasi-constants
+
                         macrocycle_J = None
                         if base.GetAtomWithIdx(heavy_idx).IsInRing() and base.GetAtomWithIdx(other_heavy).IsInRing():
                             ring_info = base.GetRingInfo()
                             for ring in ring_info.AtomRings():
                                 ring_size = len(ring)
                                 if ring_size >= 8 and heavy_idx in ring and other_heavy in ring:
-                                    # Protons dans un macrocycle → utiliser table
+
                                     try:
                                         macrocycle_J = get_macrocycle_coupling(
-                                            base, h_rep, h, ring_size, 
+                                            base, h_rep, h, ring_size,
                                             macrocycle_type='macrolactam' if _has_amide_in_ring(base, ring) else 'macrolactone'
                                         )
                                     except Exception:
-                                        macrocycle_J = 7.0  # Valeur par défaut macrocycle
+                                        macrocycle_J = 7.0
                                     break
-                        
+
                         if macrocycle_J is not None:
                             Jk = macrocycle_J
                             j_source = "macrocycle_table"
 
-                        # ✅ NOUVEAU: Table des stéroïdes (évite calcul conformères)
-                        # Pour les protons dans un système stéroïde (4+ cycles fusionnés), 
-                        # utiliser la table car les J sont verrouillés par la stéréochimie
                         steroid_J = None
                         if Jk is None and COUPLING_TABLES_MODULE_AVAILABLE:
                             if base.GetAtomWithIdx(heavy_idx).IsInRing() and base.GetAtomWithIdx(other_heavy).IsInRing():
                                 ring_info = base.GetRingInfo()
                                 n_fused_5_6 = sum(1 for r in ring_info.AtomRings() if len(r) in (5, 6))
-                                n_stereocenters = sum(1 for a in base.GetAtoms() 
+                                n_stereocenters = sum(1 for a in base.GetAtoms()
                                                      if a.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED)
-                                # Stéroïde = 4+ cycles 5/6-membres fusionnés avec stéréocentres
+
                                 if n_fused_5_6 >= 4 or (n_fused_5_6 >= 3 and n_stereocenters >= 4):
                                     try:
                                         steroid_J = get_steroid_coupling(base, h_rep, h)
                                     except Exception:
                                         pass
-                        
+
                         if steroid_J is not None:
                             Jk = steroid_J
                             j_source = "steroid_table"
 
-                        # ✅ NOUVEAU: Table des terpènes (évite calcul conformères)
-                        # Pour les protons dans un système terpénique (cyclohexane/ène avec gem-diméthyl)
                         terpene_J = None
                         if Jk is None and COUPLING_TABLES_MODULE_AVAILABLE:
                             if base.GetAtomWithIdx(heavy_idx).IsInRing() and base.GetAtomWithIdx(other_heavy).IsInRing():
-                                # Détecter gem-diméthyl sur cycle (caractéristique terpénique)
+
                                 ring_info = base.GetRingInfo()
                                 has_gem_dimethyl = False
                                 for atom in base.GetAtoms():
                                     if atom.GetSymbol() == 'C' and not atom.IsInRing():
-                                        # C hors cycle avec un seul voisin lourd
+
                                         heavy_neighbors = [n for n in atom.GetNeighbors() if n.GetSymbol() != 'H']
                                         if len(heavy_neighbors) == 1 and atom.GetTotalNumHs() == 3:
                                             parent = heavy_neighbors[0]
-                                            # Parent a un autre CH3?
-                                            ch3_count = sum(1 for n in parent.GetNeighbors() 
-                                                          if n.GetSymbol() == 'C' and not n.IsInRing() 
+
+                                            ch3_count = sum(1 for n in parent.GetNeighbors()
+                                                          if n.GetSymbol() == 'C' and not n.IsInRing()
                                                           and n.GetTotalNumHs() == 3)
                                             if ch3_count >= 2 and parent.IsInRing():
                                                 has_gem_dimethyl = True
                                                 break
-                                
+
                                 if has_gem_dimethyl:
-                                    # Cycle terpénique détecté
+
                                     ring_size = None
                                     for ring in ring_info.AtomRings():
                                         if heavy_idx in ring and other_heavy in ring:
@@ -13360,12 +9876,11 @@ def _estimate_Js_for_group(
                                             terpene_J = get_terpene_coupling(base, h_rep, h, 'pinane')
                                         except Exception:
                                             pass
-                        
+
                         if terpene_J is not None:
                             Jk = terpene_J
                             j_source = "terpene_table"
 
-                        # ✅ Utiliser moyennage multi-conformères pour systèmes cycliques/semi-rigides
                         elif conformer_cache is not None and config.use_conformational_averaging:
                             Jk = conformer_cache.get_J_vicinal_averaged(
                                 h_rep, h,
@@ -13373,14 +9888,11 @@ def _estimate_Js_for_group(
                                 use_haasnoot_7_params=config.use_haasnoot_7_params,
                                 electroneg_corr=EN_corr
                             )
-                            j_source = "karplus_3d"  # ✅ Source: Karplus avec géométrie 3D
+                            j_source = "karplus_3d"
 
-                            # ✅ ROBUSTESSE: Vérification du nombre de conformères utilisés
-                            # Si le cache n'a pas assez de conformères, le J peut être biaisé
-                            # Pour les CH₂ flexibles, minimum 10 conformères recommandé
                             n_conf_used = conformer_cache.get_num_conformers() if hasattr(conformer_cache, 'get_num_conformers') else 1
                             if flexible_cc and is_diastereotopic_CH2 and Jk is not None and Jk < 1.5 and n_conf_used < 10:
-                                # Échantillonnage insuffisant → utiliser le calcul direct
+
                                 Jk_direct = _estimate_vicinal_sp3_J(
                                     molH, h_rep, h,
                                     use_haasnoot=False,
@@ -13389,27 +9901,19 @@ def _estimate_Js_for_group(
                                 )
                                 if Jk_direct is not None:
                                     Jk = Jk_direct
-                            
-                            # ✅ CORRECTION SCIENTIFIQUE: J plancher/plafond pour CH₂-CH₂ flexibles acycliques
-                            # Ces corrections ne s'appliquent QUE pour les vrais CH₂-CH₂ (deux méthylènes)
-                            # Pour CH-CH₂ (ex: Hα-Hβ amino acid), les J peuvent légitimement varier
-                            # entre 3 et 12 Hz selon les populations de rotamères.
+
                             current_h_count = len(heavy_to_H.get(heavy_idx, []))
                             partner_h_count = len(heavy_to_H.get(other_heavy, []))
                             is_true_CH2_CH2 = (current_h_count == 2 and partner_h_count == 2)
 
                             if flexible_cc and is_diastereotopic_CH2 and is_true_CH2_CH2 and Jk is not None:
-                                # En rotation libre (énergie barrière << kT), les 3 rotamères sont peuplés:
-                                # - gauche+ (~60°): J ≈ 3.5 Hz
-                                # - anti (180°): J ≈ 11 Hz
-                                # - gauche- (~300°): J ≈ 3.5 Hz
-                                # Moyenne statistique = (3.5 + 11 + 3.5) / 3 ≈ 6 Hz
+
                                 if Jk < 3.0:
-                                    # Plancher physique: J_min ≈ 3 Hz pour CH₂-CH₂ flexible
+
                                     Jk = max(Jk, 3.0)
                                 elif Jk > 9.0:
-                                    # Plafond: sampling biaisé anti détecté
-                                    Jk = 6.5  # Moyenne rotationnelle empirique
+
+                                    Jk = 6.5
                         else:
                             Jk = _estimate_vicinal_sp3_J(
                                 molH, h_rep, h,
@@ -13417,10 +9921,10 @@ def _estimate_Js_for_group(
                                 electroneg_corr=EN_corr,
                                 use_full_haasnoot=config.use_haasnoot_7_params
                             )
-                            j_source = "karplus_3d"  # ✅ Source: Karplus avec géométrie 3D
+                            j_source = "karplus_3d"
                         if Jk is None:
                             J = 7.0 if is_carbon_partner else None
-                            j_source = "fallback_average"  # ✅ Source: fallback
+                            j_source = "fallback_average"
                         else:
                             J = Jk
                 else:
@@ -13443,22 +9947,20 @@ def _estimate_Js_for_group(
                         if J is not None:
                             j_source = "vinylic"
                         if J is None:
-                            # Essayer couplage alcyne (H-C≡C-H)
+
                             J_alkyne = _estimate_alkyne_J(molH, h_rep, h)
                             if J_alkyne is not None:
                                 J = J_alkyne
                                 j_source = "alkyne"
                             else:
-                                # ✅ FIX: Distinguer couplage vinylique (sp2-sp2) vs allylique (sp2-sp3)
-                                # Pour couplage =CH-CH2 (sp2→sp3 flexible), J~7.0 Hz moyenne rotationnelle
-                                # Pour couplage =CH-CH= (sp2→sp2), utiliser vinylic_J_defaults
+
                                 if not partner_is_sp2:
-                                    # Couplage allylique: =CH couplant avec CH2 sp3 adjacent
+
                                     bond = base.GetBondBetweenAtoms(heavy_idx, other_heavy)
                                     if (bond is not None
-                                        and bond.GetBondTypeAsDouble() == 1.0  # Liaison simple
+                                        and bond.GetBondTypeAsDouble() == 1.0
                                         and not base.GetAtomWithIdx(other_heavy).IsInRing()):
-                                        # Liaison simple flexible sp2-sp3: J~7.0 Hz
+
                                         J = 7.0
                                         j_source = "fallback_average"
                                     else:
@@ -13468,7 +9970,6 @@ def _estimate_Js_for_group(
                                     J = config.vinylic_J_defaults.get('cis', 10.0)
                                     j_source = "vinylic_default"
 
-                # Profils sucre
                 if config.sugar_mode:
                     is_C6_other = _is_exocyclic_C6_like(base, heavy_to_H, other_heavy)
                     is_C5_this = _is_ring_sp3C_in_6_like(base, heavy_idx)
@@ -13500,21 +10001,19 @@ def _estimate_Js_for_group(
                             anomeric_rule_applied = True
 
                 if config.formyl_rule:
-                    # ✅ CORRECTION: Appliquer la règle formyl dans les DEUX sens
-                    # Cas 1: heavy_idx est le CHO
+
                     A = base.GetAtomWithIdx(heavy_idx)
                     is_formyl_this = (A.GetSymbol()=="C"
                         and any(b.GetBondTypeAsDouble()==2 and b.GetOtherAtom(A).GetSymbol()=="O" for b in A.GetBonds())
                         and len(heavy_to_H.get(heavy_idx, [])) == 1)
-                    
-                    # Cas 2: other_heavy est le CHO (le partenaire)
+
                     B = base.GetAtomWithIdx(other_heavy)
                     is_formyl_partner = (B.GetSymbol()=="C"
                         and any(b.GetBondTypeAsDouble()==2 and b.GetOtherAtom(B).GetSymbol()=="O" for b in B.GetBonds())
                         and len(heavy_to_H.get(other_heavy, [])) == 1)
-                    
+
                     if is_formyl_this or is_formyl_partner:
-                        # ³J(H-CHO) typique: 1.5-3.0 Hz
+
                         if J is None: J = 2.5
                         J = max(1.5, min(3.0, J))
 
@@ -13522,156 +10021,118 @@ def _estimate_Js_for_group(
                     def _is_amide_like(idx_c):
                         C = base.GetAtomWithIdx(idx_c)
                         return (C.GetSymbol()=="C" and any(b.GetBondTypeAsDouble()==2 and b.GetOtherAtom(C).GetSymbol()=="O" for b in C.GetBonds()))
-                    
+
                     def _is_formyl(idx_c):
-                        """Vrai si c'est un aldéhyde CHO (pas amide)"""
+
                         C = base.GetAtomWithIdx(idx_c)
-                        return (C.GetSymbol()=="C" 
+                        return (C.GetSymbol()=="C"
                             and any(b.GetBondTypeAsDouble()==2 and b.GetOtherAtom(C).GetSymbol()=="O" for b in C.GetBonds())
                             and len(heavy_to_H.get(idx_c, [])) == 1)
-                    
-                    # ✅ CORRECTION: Ne PAS appliquer amide_mode aux formyls (aldéhydes)
+
                     if (_is_amide_like(heavy_idx) or _is_amide_like(other_heavy)) and not (_is_formyl(heavy_idx) or _is_formyl(other_heavy)):
                         if J is None: J = 6.0
                         J = max(3.5, min(9.0, J))
 
-                # ✅ NOUVEAU: Pour CH3 rotatif, collecter TOUS les J pour le calcul de moyenne
-                # Un CH3 en rotation libre moyenne les 3 couplages → tous les H comptent
                 if is_CH3_partner and J is not None:
                     Js_all_for_CH3.append(J)
-                    Js_all_for_CH3_sources.append(j_source)  # ✅ Tracer la source
+                    Js_all_for_CH3_sources.append(j_source)
                     partners_all_for_CH3.append(h)
 
                 if J is not None and J >= min3:
-                    Js_tmp.append(J); Js_tmp_sources.append(j_source)  # ✅ Tracer la source
+                    Js_tmp.append(J); Js_tmp_sources.append(j_source)
                     partners_tmp.append(h)
                     partners_tmp_heavy.append(other_heavy); partners_tmp_is_sp2.append(partner_is_sp2)
 
-            # ✅ CORRECTION: Pour CH3 rotatif, utiliser TOUS les J calculés pour la moyenne
-            # puis ajouter exactement 3 couplages (un par H du CH3)
             if is_CH3_partner and not forbid_avg and len(Js_all_for_CH3) == 3:
                 Jmean = float(np.mean(Js_all_for_CH3))
-                # ✅ Source: utiliser la source majoritaire (tous identiques normalement)
+
                 ch3_source = Js_all_for_CH3_sources[0] if Js_all_for_CH3_sources else "karplus_3d"
                 if Jmean >= min3:
-                    # Ajouter 3 couplages avec la valeur moyenne
+
                     for h_ch3 in other_hs:
                         if h_ch3 in h_atoms:
                             continue
-                        if h_ch3 in processed_partners:  # ✅ Éviter doublons
+                        if h_ch3 in processed_partners:
                             continue
                         J_vals.append(Jmean); J_sources.append(other_heavy); J_orders.append(3)
                         homo_J_vals_for_second_order.append(Jmean)
-                        partners.append(h_ch3); homo_pairs.append((h_ch3, Jmean, ch3_source))  # ✅ Source explicite
+                        partners.append(h_ch3); homo_pairs.append((h_ch3, Jmean, ch3_source))
                         partner_heavy_idx_kept.append(other_heavy); partner_is_sp2_kept.append(partner_is_sp2)
-                        processed_partners.add(h_ch3)  # ✅ Marquer comme traité
+                        processed_partners.add(h_ch3)
                 continue
-            
+
             if Js_tmp:
                 dyn_tol = max(TOLERANCE_J_HZ, config.grouping_tol_scale * config.line_width_hz)
 
-                # Note: Le cas CH3_partner avec rotation libre est géré ci-dessus avec Js_all_for_CH3
-                # Ce bloc gère les autres cas (CH2, CH, etc.)
-
                 close_enough = (max(Js_tmp) - min(Js_tmp) <= 0.5 * dyn_tol)
 
-                # ✅ PHYSIQUE RMN CRITIQUE: Partenaires magnétiquement équivalents
-                # Si TOUS les partenaires ont le MÊME déplacement chimique (dans la tolérance),
-                # ils sont magnétiquement équivalents et leurs J vers le proton observé
-                # doivent être moyennés, même si les J individuels sont différents.
-                #
-                # Exemple: CH₂-CH₂ avec rotation libre
-                # - H35 couple avec H33 (J=6.5 Hz) et H34 (J=3.0 Hz)
-                # - Mais H33 et H34 ont le même shift → équivalents
-                # - Le J effectif observé = moyenne(6.5, 3.0) = 4.75 Hz
-                # - Résultat: triplet au lieu de doublet de doublets
                 partners_are_equivalent = False
                 if len(partners_tmp) >= 2 and proton_shifts_ppm is not None:
                     partner_shifts = [proton_shifts_ppm.get(p, None) for p in partners_tmp]
                     if all(s is not None for s in partner_shifts):
                         shift_spread = max(partner_shifts) - min(partner_shifts)
-                        # Tolérance: 0.02 ppm (~14 Hz à 700 MHz) pour équivalence magnétique
+
                         partners_are_equivalent = (shift_spread <= 0.02)
 
-                # Forcer le moyennage si les partenaires sont magnétiquement équivalents
                 should_average = (len(Js_tmp) >= 2) and (not is_sp2) and (not partner_is_sp2)
                 if partners_are_equivalent:
-                    # Équivalence magnétique → TOUJOURS moyenner (ignorer forbid_avg et close_enough)
+
                     should_average = should_average and True
                 else:
-                    # Cas standard: respecter forbid_avg et close_enough
+
                     should_average = should_average and (not forbid_avg) and close_enough
 
                 if should_average:
                     Jmean = float(np.mean(Js_tmp))
-                    # ✅ Source: utiliser la source majoritaire
+
                     avg_source = Js_tmp_sources[0] if Js_tmp_sources else "karplus_3d"
                     for ptmp, phv, pis2 in zip(partners_tmp, partners_tmp_heavy, partners_tmp_is_sp2):
-                        if ptmp in processed_partners:  # ✅ Éviter doublons
+                        if ptmp in processed_partners:
                             continue
                         J_vals.append(Jmean); J_sources.append(other_heavy); J_orders.append(3)
                         homo_J_vals_for_second_order.append(Jmean)
-                        partners.append(ptmp); homo_pairs.append((ptmp, Jmean, avg_source))  # ✅ Source explicite
+                        partners.append(ptmp); homo_pairs.append((ptmp, Jmean, avg_source))
                         partner_heavy_idx_kept.append(phv); partner_is_sp2_kept.append(pis2)
-                        processed_partners.add(ptmp)  # ✅ Marquer comme traité
+                        processed_partners.add(ptmp)
                 else:
                     for jv, jsrc, ptmp, phv, pis2 in zip(Js_tmp, Js_tmp_sources, partners_tmp, partners_tmp_heavy, partners_tmp_is_sp2):
-                        if ptmp in processed_partners:  # ✅ Éviter doublons
+                        if ptmp in processed_partners:
                             continue
                         J_vals.append(jv); J_sources.append(other_heavy); J_orders.append(3)
                         homo_J_vals_for_second_order.append(jv)
-                        partners.append(ptmp); homo_pairs.append((ptmp, jv, jsrc))  # ✅ Source explicite
+                        partners.append(ptmp); homo_pairs.append((ptmp, jv, jsrc))
                         partner_heavy_idx_kept.append(phv); partner_is_sp2_kept.append(pis2)
-                        processed_partners.add(ptmp)  # ✅ Marquer comme traité
+                        processed_partners.add(ptmp)
             continue
 
-        # 4J
         if dist == 2:
-            # ✅ FILTRE ÉQUIVALENCE: Ignorer 4J entre carbones magnétiquement équivalents
-            # Cas: cyclopentane, etc. où tous les CH2 sont équivalents
+
             if config.collapse_equivalent_by_rank and ranks is not None:
                 if _are_protons_on_equivalent_carbons(base, ranks, heavy_idx, other_heavy):
                     continue
-            
-            # 🔴 FILTRE : Ignorer ⁴J pour les méthyles isolés (benzyl, méthoxy)
-            # Ces groupes ne montrent pas de couplage longue portée observable en pratique
+
             if _is_isolated_methyl(base, heavy_idx, heavy_to_H):
-                continue  # Le CH3 benzyl ou OCH3 est un singulet
-            
-            # 🔴 FILTRE FORMAMIDE : Ignorer ⁴J entre formamide CHO et N-CH₃
-            # Le chemin H-C(=O)-N-CH₃ est un ⁴J à travers N, non observable (<0.5 Hz)
-            # Exemples: DMF, N-methylformamide, formamides N,N-disubstitués
+                continue
+
             if _is_NCH3_coupling_to_formamide_CHO(base, heavy_idx, other_heavy, heavy_to_H):
-                continue  # Formamide CHO est un singulet
-            
-            # 🔴 FILTRE ALDÉHYDE : Ignorer ⁴J entre aldéhyde CHO et β-H
-            # Les couplages ⁴J aldéhyde (CHO ↔ β-H) sont typiquement < 1 Hz et non observables
-            # Le CHO des aldéhydes aliphatiques ne couple qu'avec les α-H (³J ~ 2-3 Hz)
+                continue
+
             if _is_aldehyde_4J_coupling(base, heavy_idx, other_heavy, heavy_to_H, D):
-                continue  # Ignorer le couplage CHO ↔ β-H
-            
-            # 🔴 FILTRE BENZYLIQUE : Ignorer ⁴J entre CH₂ benzylique et H ortho aromatique
-            # Les couplages ⁴J benzyliques (Ar-CH₂ ↔ Ar-H ortho) sont ~0.5-1.5 Hz, non résolus
-            # Le CH₂ benzylique apparaît typiquement comme un singulet
-            # Exemples: benzyl alcohol, benzyl chloride, benzylamine
+                continue
+
             if _is_benzylic_CH2_4J_coupling(base, heavy_idx, other_heavy, heavy_to_H):
-                continue  # Ignorer le couplage CH₂ benzylique ↔ H ortho
-            
+                continue
+
             Jctx, rel = _aromatic_J_contextual(base, aromatic_dmap, heavy_idx, other_heavy,
                                                J0_meta=config.aro_j_forced["meta"], J0_para=config.aro_j_forced["para"])
             if rel == "meta":
-                # ✅ NOUVEAU: Filtrer les couplages meta aromatiques SEULEMENT si les carbones sont équivalents
-                # Pour benzènes ortho-disubstitués (aspirine, etc.), les protons meta ne sont pas équivalents
-                # et leur couplage 4J (~1.5 Hz) est observable → donne td au lieu de t
-                
-                # Vérifier l'équivalence des carbones via les classes de symétrie
+
                 try:
                     symmetry_classes = list(Chem.CanonicalRankAtoms(base, breakTies=False))
                     carbons_equivalent = (symmetry_classes[heavy_idx] == symmetry_classes[other_heavy])
                 except Exception:
                     carbons_equivalent = False
-                
-                # Détecter si c'est un benzène pur (pas d'hétéroatome dans le cycle)
+
                 is_pure_benzene = True
                 heavy_atom = base.GetAtomWithIdx(heavy_idx)
                 if heavy_atom.GetIsAromatic():
@@ -13683,39 +10144,29 @@ def _estimate_Js_for_group(
                                     is_pure_benzene = False
                                     break
                             break
-                
-                # Filtrer le couplage meta SEULEMENT si:
-                # 1. C'est un benzène pur ET
-                # 2. Les carbones sont équivalents (couplage invisible car isochronique) ET
-                # 3. Le couplage est faible (<2.0 Hz)
+
                 if is_pure_benzene and carbons_equivalent and Jctx is not None and Jctx < 2.0:
-                    continue  # Couplage meta entre protons équivalents, non résolu
+                    continue
                 J = Jctx
             else:
-                # 1. Vérifier couplage homoallylique (H-C=C-CH₃)
+
                 is_homoallyl, J_homoallyl = _is_homoallylic_4J(base, heavy_idx, other_heavy, mol3d=molH)
                 if is_homoallyl:
-                    # ✅ CORRIGÉ: Les couplages homoallyliques avec C(CH₃)₂ sont ~1.3 Hz
-                    # et DOIVENT être inclus car ils sont résolus à haute fréquence (≥500 MHz)
-                    # Ex: prényl CH₂-CH=C(CH₃)₂ → H vinylique couple avec les 2 CH₃
-                    # Conséquence: CH vinylique = thept (pseudo-septuplet) ou tsept au lieu de triplet
+
                     J = J_homoallyl
-                    # Note: On ne réduit PAS le J pour méthyles géminaux car le couplage
-                    # homoallylique est toujours ~1.3 Hz et est observable
+
                 else:
-                    # 2. Vérifier couplage allylique classique (H-CH₂-C=C-H)
+
                     is_allyl, J_allyl = _is_allylic_4J(base, heavy_idx, other_heavy, mol3d=molH)
                     if is_allyl:
-                        # 🔴 FILTRE MÉTHYLE GEMINAL : Ignorer couplage allylique avec méthyles géminaux
-                        # Les couplages allyliques H-C(sp3)-C=C-H où C(sp3) est un CH₃ geminal
-                        # ont J < 1 Hz et sont généralement non résolus
+
                         if _is_geminal_methyl(base, heavy_idx, heavy_to_H):
-                            continue  # Le carbone sp3 est un méthyle geminal
+                            continue
                         if _is_geminal_methyl(base, other_heavy, heavy_to_H):
-                            continue  # Le carbone partenaire est un méthyle geminal
+                            continue
                         J = J_allyl
                     else:
-                        # 3. Vérifier W-path classique
+
                         isW, isRigid = _is_W_allylic(base, heavy_idx, other_heavy)
                         if isW:
                             J = 2.8 if isRigid else 1.6
@@ -13723,49 +10174,43 @@ def _estimate_Js_for_group(
                             J = 0.3
                         if config.rigid_W_boost and isW:
                             J = min(4.0, max(J, 2.0))
-            # ✅ AMÉLIORATION: Seuil ⁴J adaptatif selon rigidité du système
+
             adaptive_min4 = _get_adaptive_4J_threshold(base, heavy_idx, other_heavy, min4)
             if J is not None and J >= adaptive_min4:
-                # ✅ CORRECTION: Éviter les doublons de partenaires
+
                 if other_hs[0] in processed_partners:
                     continue
                 J_vals.append(J); J_sources.append(None); J_orders.append(4)
                 partners.append(other_hs[0]); homo_J_vals_for_second_order.append(J)
-                homo_pairs.append((other_hs[0], J, "long_range_4J"))  # ✅ Source explicite
+                homo_pairs.append((other_hs[0], J, "long_range_4J"))
                 partner_heavy_idx_kept.append(other_heavy); partner_is_sp2_kept.append(_is_sp2_like(base.GetAtomWithIdx(other_heavy)))
-                processed_partners.add(other_hs[0])  # ✅ Marquer comme traité
+                processed_partners.add(other_hs[0])
             continue
 
-        # 5J
         if dist == 3:
-            # ✅ FILTRE ÉQUIVALENCE: Ignorer 5J entre carbones magnétiquement équivalents
+
             if config.collapse_equivalent_by_rank and ranks is not None:
                 if _are_protons_on_equivalent_carbons(base, ranks, heavy_idx, other_heavy):
                     continue
-            
-            # 🔴 FILTRE : Ignorer ⁵J pour les méthyles isolés (benzyl, méthoxy)
+
             if _is_isolated_methyl(base, heavy_idx, heavy_to_H):
-                continue  # Le CH3 benzyl ou OCH3 est un singulet
-            
+                continue
+
             Jctx, rel = _aromatic_J_contextual(base, aromatic_dmap, heavy_idx, other_heavy,
                                                J0_meta=config.aro_j_forced["meta"], J0_para=config.aro_j_forced["para"])
             if rel == "para":
-                # ✅ NOUVEAU: Filtrer les couplages 5J para aromatiques entre carbones non-équivalents
-                # Ces couplages (~0.5 Hz) ne sont généralement pas résolus dans les benzènes substitués
-                # Exemple: aspirine (ortho-disubstitué) - H3 montre d, pas ddd
+
                 try:
                     symmetry_classes = list(Chem.CanonicalRankAtoms(base, breakTies=False))
                     carbons_equivalent = (symmetry_classes[heavy_idx] == symmetry_classes[other_heavy])
                 except Exception:
                     carbons_equivalent = False
-                
-                # Ne garder le couplage para que si les carbones sont équivalents
-                # (pour les benzènes para-disubstitués symétriques uniquement)
+
                 if carbons_equivalent:
                     J = Jctx
                     para_buf_J.append(J); para_buf_partners.append(other_hs[0])
             else:
-                # Vérifier couplage W-zigzag ⁵J (systèmes rigides)
+
                 is_W_5J, J_W_5J = _is_W_coupling_5J(base, heavy_idx, other_heavy)
                 if is_W_5J:
                     J = J_W_5J
@@ -13775,17 +10220,16 @@ def _estimate_Js_for_group(
                         if (base.GetAtomWithIdx(heavy_idx).IsInRing() and base.GetAtomWithIdx(other_heavy).IsInRing()):
                             J = 0.7
                 if J >= min5:
-                    # ✅ CORRECTION: Éviter les doublons de partenaires
+
                     if other_hs[0] in processed_partners:
                         continue
                     J_vals.append(J); J_sources.append(None); J_orders.append(5)
                     partners.append(other_hs[0]); homo_J_vals_for_second_order.append(J)
-                    homo_pairs.append((other_hs[0], J, "long_range_5J"))  # ✅ Source explicite
+                    homo_pairs.append((other_hs[0], J, "long_range_5J"))
                     partner_heavy_idx_kept.append(other_heavy); partner_is_sp2_kept.append(_is_sp2_like(base.GetAtomWithIdx(other_heavy)))
-                    processed_partners.add(other_hs[0])  # ✅ Marquer comme traité
+                    processed_partners.add(other_hs[0])
             continue
 
-    # Anti-fusion sucre
     if config.sugar_mode and J_vals:
         dyn_tol = max(TOLERANCE_J_HZ, config.grouping_tol_scale * config.line_width_hz)
         eps = 1.1 * dyn_tol
@@ -13809,7 +10253,6 @@ def _estimate_Js_for_group(
                     continue
                 break
 
-    # Politique para
     allow_para = (spectrometer_mhz >= config.detect_para_min_mhz)
     if allow_para and para_buf_J:
         candidates = [(j, p) for (j, p) in zip(para_buf_J, para_buf_partners)
@@ -13836,7 +10279,7 @@ def _estimate_Js_for_group(
             for j_sel, p_sel in picked[:k]:
                 J_vals.append(j_sel); J_sources.append(None); J_orders.append(5)
                 partners.append(p_sel); homo_J_vals_for_second_order.append(j_sel)
-                homo_pairs.append((p_sel, j_sel, "aromatic_para"))  # ✅ Source explicite
+                homo_pairs.append((p_sel, j_sel, "aromatic_para"))
                 try:
                     hh = [n.GetIdx() for n in molH.GetAtomWithIdx(p_sel).GetNeighbors() if n.GetSymbol()!='H'][0]
                     partner_heavy_idx_kept.append(hh)
@@ -13844,14 +10287,12 @@ def _estimate_Js_for_group(
                 except Exception:
                     pass
 
-    # Solvant / quadrupolaire
     visco = solvent.get("viscosity", "low")
     low_cut = config.viscosity_low_cuts.get(visco, config.viscosity_low_cuts["low"])
     J_vals = [j for j in J_vals if j >= low_cut]
     if _has_quadrupolar_neighbor(base, heavy_idx):
         J_vals = [j for j in J_vals if j >= max(low_cut, 0.5)]
 
-    # Détection second ordre (Δν/J raffinée)
     if homo_J_vals_for_second_order:
         real_ppm_vals: List[float] = []
         if proton_shifts_ppm is not None:
@@ -13861,39 +10302,33 @@ def _estimate_Js_for_group(
                     real_ppm_vals.append(d0)
 
                 for p in partners:
-                    # ⚠️ FIX: Exclure les partenaires géminaux du même groupe
-                    # Pour un CH₂ équivalent (même shift), le couplage geminal
-                    # est magnétiquement INVISIBLE et ne doit PAS affecter
-                    # la détection second-ordre (sinon Δν=0 → strong_coupling erroné)
+
                     if p in h_atoms:
-                        continue  # Partenaire geminal du même groupe, ignorer
+                        continue
                     val = proton_shifts_ppm.get(p, None)
                     if val is not None and math.isfinite(val):
                         real_ppm_vals.append(val)
             except Exception:
                 real_ppm_vals = []
 
-        # ✅ FIX: Utiliser real_ppm_vals seulement si on a des valeurs DIFFÉRENTES
-        # Si tous les shifts sont identiques, c'est un bug (protons équivalents dans le même groupe)
         use_real_vals = False
         if len(real_ppm_vals) >= 2:
             unique_vals = set(round(v, 3) for v in real_ppm_vals)
             if len(unique_vals) > 1:
-                # OK: On a des shifts différents (groupe + partenaires)
+
                 ppm_vals = real_ppm_vals
                 use_real_vals = True
 
         if not use_real_vals:
-            # Fallback: Utiliser les valeurs de la table centralisée
 
             if len(h_atoms) == 2:
-                # CH₂ diastéréotopique: valeur par défaut de la table
+
                 delta_ppm_default = DEFAULT_DELTA.get("ch2_near_chiral_1", 0.12) if DIASTEREOTOPIC_TABLE_AVAILABLE else 0.12
             elif is_sp2:
-                # Vinylique: valeur de la table
+
                 delta_ppm_default = DEFAULT_DELTA.get("vinyl_geminal", 0.30) if DIASTEREOTOPIC_TABLE_AVAILABLE else 0.30
             else:
-                # Autre: valeur générale
+
                 delta_ppm_default = DEFAULT_DELTA.get("unknown", 0.10) if DIASTEREOTOPIC_TABLE_AVAILABLE else 0.10
             ppm_vals = [0.0, delta_ppm_default]
 
@@ -13912,38 +10347,34 @@ def _estimate_Js_for_group(
             )
             delta_nu_min_hz = _delta_nu_hz(delta_ppm_min, spectrometer_mhz)
 
-    # Forcer second ordre pour AA'BB'/AA'XX'
     if system_type in ["AA'BB'", "AA'XX'"]:
         if not second_order:
             second_order = True
             if second_order_type == "first_order":
                 second_order_type = "strong_coupling"
 
-    # ✅ NOUVEAU: Appliquer les corrections J par solvant
     if config.use_solvent_J_corrections and J_vals:
         solvent_name = solvent.get("name", "CDCl3")
         corrected_J_vals = []
         for i, J in enumerate(J_vals):
             order = J_orders[i] if i < len(J_orders) else 3
-            
-            # Déterminer le type de couplage pour la correction
+
             if order == 2:
                 j_type = "2J_geminal"
             elif order == 4:
                 j_type = "4J_allylic"
             elif order >= 5:
-                j_type = "3J_aromatic"  # Approximation pour longue distance
+                j_type = "3J_aromatic"
             elif is_sp2:
                 j_type = "3J_vinyl"
             else:
                 j_type = "3J_vicinal"
-            
+
             J_corrected = _apply_solvent_J_correction(J, solvent_name, j_type)
             corrected_J_vals.append(J_corrected)
-        
+
         J_vals = corrected_J_vals
-        
-        # Mettre à jour homo_pairs avec les J corrigés (préserver la source)
+
         homo_pairs_corrected: List[Tuple[int, float, str]] = []
         for i, hp_tuple in enumerate(homo_pairs):
             partner = hp_tuple[0]
@@ -13958,9 +10389,6 @@ def _estimate_Js_for_group(
             partner_heavy_idx_kept, partner_is_sp2_kept,
             second_order_type, system_type, delta_nu_min_hz, J_orders)
 
-# ---------------------------
-# Public simulators (par groupes)
-# ---------------------------
 def _effective_exchange_regime(solvent: dict, temperature_k: float) -> str:
     base_reg = solvent.get("exchange_regime", "moderate")
     rate = solvent.get("exchange_rate_factor", 1.0) * (temperature_k / 298.15)
@@ -13969,77 +10397,28 @@ def _effective_exchange_regime(solvent: dict, temperature_k: float) -> str:
     if rate <= 0.75: return "slow" if base_reg != "fast" else "moderate"
     return base_reg
 
-
-
-# =========================================================================
-# ✅ INFÉRENCE DE SOURCE J - Approche GÉNÉRIQUE (sans valeurs hardcodées)
-# =========================================================================
 def _infer_j_source_type(J_hz: float, is_flexible_system: bool = False) -> Tuple[str, int]:
-    """
-    Infère le type de source d'une valeur J basé sur ses caractéristiques MATHÉMATIQUES.
 
-    ✅ APPROCHE GÉNÉRIQUE - Aucune valeur spécifique hardcodée !
-
-    Critères utilisés:
-    1. PRÉCISION DÉCIMALE: Plus de décimales = plus probablement calculé
-       - J = 7.0 Hz (0 décimale significative) → probablement fallback
-       - J = 7.23 Hz (2 décimales) → probablement calculé
-       - J = 3.456 Hz (3 décimales) → certainement calculé (Karplus)
-
-    2. PLAGES PHYSIQUES (indépendantes des valeurs exactes):
-       - Geminal: 10-16 Hz (²J, indépendant de conformation)
-       - Vicinal moyen: 5.5-8.5 Hz (³J moyenne rotationnelle)
-       - Gauche: 2-5 Hz (³J conformère gauche)
-       - Anti: 8-12 Hz (³J conformère anti)
-
-    3. FLEXIBILITÉ DU SYSTÈME:
-       - Rigide: valeurs Karplus fiables
-       - Flexible sans averaging: valeurs extrêmes = biais potentiel
-
-    Args:
-        J_hz: Valeur du couplage en Hz
-        is_flexible_system: True si grosse molécule sans averaging conformationnel
-
-    Returns:
-        (source_type, priority): Type de source et priorité (1-10)
-    """
-    # =========================================================================
-    # CRITÈRE 1: Analyse de la précision décimale
-    # =========================================================================
-    # Plus une valeur a de décimales significatives, plus elle est probablement calculée
-
-    # Compter les décimales significatives
-    J_str = f"{J_hz:.6f}".rstrip('0')  # Ex: "7.230000" → "7.23"
+    J_str = f"{J_hz:.6f}".rstrip('0')
     if '.' in J_str:
         n_decimals = len(J_str.split('.')[1])
     else:
         n_decimals = 0
 
-    # Partie fractionnaire (distance au nombre rond le plus proche)
     J_frac = abs(J_hz - round(J_hz))
 
-    # Score de précision: 0 (très rond) à 1 (très précis)
     precision_score = min(1.0, n_decimals / 3.0 + J_frac)
 
-    # Classification basée sur la précision
-    is_very_precise = precision_score > 0.5      # Ex: 3.234, 10.567
-    is_moderately_precise = precision_score > 0.2  # Ex: 7.23, 6.85
-    is_round = precision_score < 0.1              # Ex: 7.0, 12.0, 6.8
+    is_very_precise = precision_score > 0.5
+    is_moderately_precise = precision_score > 0.2
+    is_round = precision_score < 0.1
 
-    # =========================================================================
-    # CRITÈRE 2: Classification par plage physique
-    # =========================================================================
-    is_geminal_range = 10.0 <= J_hz <= 16.0       # ²J geminal
-    is_vicinal_mean_range = 5.5 <= J_hz <= 8.5    # ³J moyenne rotationnelle
-    is_gauche_range = 2.0 <= J_hz <= 5.0          # ³J conformère gauche (~60°)
-    is_anti_range = 8.5 <= J_hz <= 12.0           # ³J conformère anti (~180°)
+    is_geminal_range = 10.0 <= J_hz <= 16.0
+    is_vicinal_mean_range = 5.5 <= J_hz <= 8.5
+    is_gauche_range = 2.0 <= J_hz <= 5.0
+    is_anti_range = 8.5 <= J_hz <= 12.0
     is_extreme_range = is_gauche_range or is_anti_range
 
-    # =========================================================================
-    # LOGIQUE DE DÉCISION
-    # =========================================================================
-
-    # CAS 1: Couplages géminaux (²J) - toujours fiables, indépendants de conformation
     if is_geminal_range:
         if is_very_precise:
             return "geminal_calculated", 9
@@ -14048,44 +10427,40 @@ def _infer_j_source_type(J_hz: float, is_flexible_system: bool = False) -> Tuple
         else:
             return "geminal_default", 5
 
-    # CAS 2: Système FLEXIBLE (grosse molécule sans averaging conformationnel)
     if is_flexible_system:
-        # Pour systèmes flexibles, les valeurs extrêmes (gauche/anti) sont suspectes
-        # car elles reflètent UN SEUL conformère au lieu de la moyenne rotationnelle
 
         if is_extreme_range:
-            # Valeur extrême = probablement biais de conformère
+
             if is_very_precise:
-                # Karplus calculé mais biaisé → priorité RÉDUITE
+
                 return "karplus_biased", 3
             else:
                 return "conformer_biased", 2
 
         elif is_vicinal_mean_range:
-            # Valeur moyenne = plus fiable (proche de la moyenne rotationnelle réelle)
+
             if is_very_precise:
                 return "karplus_averaged", 8
             elif is_moderately_precise:
                 return "rotational_estimate", 7
             else:
-                # Valeur ronde dans la plage moyenne = bon fallback pour systèmes flexibles
+
                 return "rotational_default", 6
 
-    # CAS 3: Système RIGIDE ou avec averaging conformationnel correct
     else:
         if is_very_precise:
-            # Valeur très précise = certainement calculé (Karplus 3D)
+
             return "karplus_3d", 10
 
         elif is_moderately_precise:
-            # Valeur modérément précise = probablement structural ou Karplus
+
             if is_extreme_range:
                 return "karplus_likely", 8
             else:
                 return "structural", 6
 
         else:
-            # Valeur ronde = probablement fallback
+
             if is_geminal_range:
                 return "geminal_default", 5
             elif is_vicinal_mean_range:
@@ -14093,115 +10468,75 @@ def _infer_j_source_type(J_hz: float, is_flexible_system: bool = False) -> Tuple
             else:
                 return "fallback_generic", 2
 
-    # Par défaut
     return "unknown", 1
 
-
-# =========================================================================
-# ✅ POST-TRAITEMENT: Réciprocité J, partners manquants, cohérence J_couplings
-# =========================================================================
 def _post_process_reciprocity_and_partners(
     result: Dict[int, Dict[str, Any]],
     proton_shifts_ppm: Dict[int, float],
     heavy_to_H: Dict[int, List[int]],
     is_large_molecule: bool = False,
 ) -> Dict[int, Dict[str, Any]]:
-    """
-    Post-traitement pour corriger les incohérences dans les couplages J.
 
-    Corrections appliquées:
-    1. RÉCIPROCITÉ: Si J(A→B) existe, J(B→A) doit être identique
-    2. PARTNERS VIDES: Remplir partners à partir des J_couplings si vide
-    3. COHÉRENCE J_couplings/partners: Aligner les valeurs
-    4. COUPLAGES VICINAUX DIASTÉRÉOTOPIQUES: Propager aux deux H du CH₂
-
-    Args:
-        result: Dictionnaire {h_idx: {...data...}} à corriger
-        proton_shifts_ppm: Shifts de tous les protons
-        heavy_to_H: Mapping {heavy_idx: [h_idx1, h_idx2, ...]}
-        is_large_molecule: True si molécule > 40 atomes lourds (averaging conformationnel probablement désactivé)
-
-    Returns:
-        result corrigé
-    """
-    # Construire proton_to_heavy (inverse de heavy_to_H)
     proton_to_heavy: Dict[int, int] = {}
     for heavy_idx, h_list in heavy_to_H.items():
         for h in h_list:
             proton_to_heavy[h] = heavy_idx
 
-    # =========================================================================
-    # PASS 1: Collecter tous les couplages existants pour détecter les incohérences
-    # =========================================================================
-    # Structure: {(h_a, h_b): [(J_hz, source), ...]} où h_a < h_b pour éviter les doublons
-    # ✅ NOUVEAU: Inclure la source explicite pour résolution intelligente
     coupling_registry: Dict[Tuple[int, int], List[Tuple[float, str]]] = {}
 
-    # Priorités des sources (utilisées pour la résolution de conflits)
-    # ✅ MISE À JOUR: Tables expérimentales > Karplus 3D > Fallback
-    # Karplus 3D sur conformère unique est MOINS FIABLE que les tables expérimentales
-    # car un seul angle dièdre = un seul J, alors que les tables sont des moyennes
     source_priority = {
-        # === PRIORITÉ HAUTE : Tables expérimentales (15-20) ===
-        "vinylic": 20,                  # J fixes, géométrie plane, jamais faux
-        "alkyne": 20,                   # Alcynes (J fixes à travers triple liaison)
-        "aromatic_exact": 19,           # Tables aromatiques calibrées
-        "heterocycle": 19,              # Tables hétérocycles aromatiques
-        "heterocycle_table": 19,        # Tables hétérocycles (heterocycles_complete)
-        "heterocycle_expected_mult": 19,  # Hétérocycles avec multiplicité attendue
-        "heterocycle_expected_singlet": 19,  # Hétérocycles singulet attendu
-        "heterocycle_singlet": 19,      # Hétérocycles singulet
-        "saturated_heterocycle": 18,    # Tables DKP, pyrrolidine, cycles saturés
-        "dkp_pyrrolidine_fused_table": 18,  # Table spécifique DKP-proline fusionné
-        "pyrrolidine_fused_table": 18,  # Table spécifique pyrrolidine fusionnée
-        "diketopiperazine_experimental": 18,  # DKP expérimental
-        "steroid_table": 18,            # Tables stéroïdes (coupling_tables_complete)
-        "terpene_table": 18,            # Tables terpènes (coupling_tables_complete)
-        "macrocycle_table": 18,         # Tables macrocycles (coupling_tables_complete)
-        "nucleotide_table": 18,         # Tables nucléotides (coupling_tables_complete)
-        "coupling_tables": 18,          # Tables complètes (phosphines, silanes, boranes...)
-        "peptide_HNCH": 17,             # Bystrov HNCH peptide (rotamères expérimentaux)
-        "sugar": 16,                    # Tables sucres (Altona/Haasnoot)
-        "structural": 15,               # Tables structurelles générales
-        "coupling_extensions": 18,      # Module extensions - même priorité que tables
-        "geminal_calc": 14,             # Geminal calculé (géométrie fixe)
-        "long_range_4J": 12,            # ⁴J longue portée
-        "long_range_5J": 12,            # ⁵J longue portée
-        "fallback_ortho": 10,           # Fallback ortho aromatique
-        "fallback_meta": 10,            # Fallback méta aromatique
-        # === PRIORITÉ BASSE : Calculs conformationnels (5) ===
-        "karplus_3d": 5,                # Karplus 3D = dernier recours (conformère unique biaisé)
-        "aromatic_para": 4,             # Para aromatique
-        "gauche_effect_double": 4,      # Double effet gauche (O-CH2-CH2-O)
-        "gauche_effect_O": 4,           # Effet gauche O (adjacent à éther/alcool)
-        "gauche_effect_F": 4,           # Effet gauche F (adjacent à fluor)
-        "extended_chain_cation": 4,     # Chaîne étendue (adjacent à NH3+)
-        "fallback_average": 3,          # Moyenne de fallback standard (7.0 Hz)
-        "diastereotopic_estimated": 2,  # Estimé pour diastéréotopiques
-        "vinylic_default": 2,           # Vinylique par défaut
-        "peptide": 2,                   # Peptide fallback générique
-        "unknown": 1                    # Source inconnue
+
+        "vinylic": 20,
+        "alkyne": 20,
+        "aromatic_exact": 19,
+        "heterocycle": 19,
+        "heterocycle_table": 19,
+        "heterocycle_expected_mult": 19,
+        "heterocycle_expected_singlet": 19,
+        "heterocycle_singlet": 19,
+        "saturated_heterocycle": 18,
+        "dkp_pyrrolidine_fused_table": 18,
+        "pyrrolidine_fused_table": 18,
+        "diketopiperazine_experimental": 18,
+        "steroid_table": 18,
+        "terpene_table": 18,
+        "macrocycle_table": 18,
+        "nucleotide_table": 18,
+        "coupling_tables": 18,
+        "peptide_HNCH": 17,
+        "sugar": 16,
+        "structural": 15,
+        "coupling_extensions": 18,
+        "geminal_calc": 14,
+        "long_range_4J": 12,
+        "long_range_5J": 12,
+        "fallback_ortho": 10,
+        "fallback_meta": 10,
+
+        "karplus_3d": 5,
+        "aromatic_para": 4,
+        "gauche_effect_double": 4,
+        "gauche_effect_O": 4,
+        "gauche_effect_F": 4,
+        "extended_chain_cation": 4,
+        "fallback_average": 3,
+        "diastereotopic_estimated": 2,
+        "vinylic_default": 2,
+        "peptide": 2,
+        "unknown": 1
     }
 
-    # =========================================================================
-    # PASS 1.5: Harmoniser les J des protons équivalents (CH₃ uniquement)
-    # Les protons magnétiquement équivalents DOIVENT avoir le même J vers un partenaire
-    # NOTE: Ne PAS harmoniser les CH₂ diastéréotopiques qui ont des J légitimement différents
-    # =========================================================================
-    # Identifier les groupes de protons VRAIMENT équivalents (CH₃ = 3H sur même C)
-    equivalent_groups: Dict[int, List[int]] = {}  # heavy_idx -> [h_idx1, h_idx2, ...]
+    equivalent_groups: Dict[int, List[int]] = {}
     for heavy_idx, h_list in heavy_to_H.items():
-        # Seulement CH₃ (3 protons) - les CH₂ peuvent être diastéréotopiques
+
         if len(h_list) == 3:
             equivalent_groups[heavy_idx] = h_list
 
-    # Pour chaque groupe équivalent, harmoniser les J vers chaque partenaire
     for heavy_idx, equiv_h_list in equivalent_groups.items():
         if len(equiv_h_list) < 2:
             continue
 
-        # Collecter tous les partners et J de tous les H équivalents
-        partner_to_J_list: Dict[int, List[Tuple[float, str]]] = {}  # partner_h -> [(J, source), ...]
+        partner_to_J_list: Dict[int, List[Tuple[float, str]]] = {}
 
         for h_idx in equiv_h_list:
             if h_idx not in result:
@@ -14212,33 +10547,28 @@ def _post_process_reciprocity_and_partners(
                 J_hz = p.get("J_hz", 0)
                 J_source = p.get("J_source", "unknown")
                 if partner_h is not None and J_hz > 0:
-                    # Exclure les partenaires du même groupe (geminal)
+
                     if partner_h in equiv_h_list:
                         continue
                     if partner_h not in partner_to_J_list:
                         partner_to_J_list[partner_h] = []
                     partner_to_J_list[partner_h].append((J_hz, J_source))
 
-        # Pour chaque partenaire, calculer le J moyen et l'appliquer à tous
         for partner_h, J_source_list in partner_to_J_list.items():
             if len(J_source_list) == 0:
                 continue
 
-            # Calculer la moyenne des J
             J_values = [js[0] for js in J_source_list]
             J_mean = sum(J_values) / len(J_values)
 
-            # Utiliser la source avec la meilleure priorité
             best_source = max(J_source_list, key=lambda x: source_priority.get(x[1], 1))[1]
 
-            # Appliquer le J moyen à tous les H équivalents
             for h_idx in equiv_h_list:
                 if h_idx not in result:
                     continue
                 data = result[h_idx]
                 partners = data.get("partners", [])
 
-                # Chercher si ce partner existe déjà
                 found = False
                 for p in partners:
                     if p.get("partner_h_index") == partner_h:
@@ -14247,7 +10577,6 @@ def _post_process_reciprocity_and_partners(
                         found = True
                         break
 
-                # Si pas trouvé, ajouter le partner
                 if not found and partner_h in proton_shifts_ppm:
                     partners.append({
                         "partner_h_index": int(partner_h),
@@ -14261,33 +10590,24 @@ def _post_process_reciprocity_and_partners(
         for p in partners:
             partner_h = p.get("partner_h_index")
             J_hz = p.get("J_hz", 0)
-            J_source = p.get("J_source", "unknown")  # ✅ NOUVEAU: récupérer la source explicite
+            J_source = p.get("J_source", "unknown")
             if partner_h is not None and J_hz > 0:
-                # Normaliser la clé (min, max) pour éviter les doublons
+
                 key = (min(h_idx, partner_h), max(h_idx, partner_h))
                 if key not in coupling_registry:
                     coupling_registry[key] = []
                 coupling_registry[key].append((J_hz, J_source))
 
-    # =========================================================================
-    # PASS 2: Résoudre les incohérences de réciprocité
-    # Si J(A→B) ≠ J(B→A), prendre la valeur avec la meilleure source
-    # ✅ NOUVEAU: Utiliser les sources explicites (plus rigoureux que l'inférence)
-    # =========================================================================
     resolved_couplings: Dict[Tuple[int, int], float] = {}
 
     for key, J_source_pairs in coupling_registry.items():
         if len(J_source_pairs) == 1:
-            resolved_couplings[key] = J_source_pairs[0][0]  # J_hz
+            resolved_couplings[key] = J_source_pairs[0][0]
         elif len(J_source_pairs) >= 2:
-            # Plusieurs valeurs: choisir celle avec la meilleure source
+
             J_values_only = [js[0] for js in J_source_pairs]
             J_min, J_max = min(J_values_only), max(J_values_only)
 
-            # =====================================================================
-            # PRIORITÉ 1: Vérifier si c'est un couplage avec proton diastéréotopique
-            # Les diastéréotopiques ont des J vicinaux différents (gauche ~3Hz, anti ~10Hz)
-            # =====================================================================
             h_a, h_b = key
             heavy_a = proton_to_heavy.get(h_a)
             heavy_b = proton_to_heavy.get(h_b)
@@ -14303,18 +10623,11 @@ def _post_process_reciprocity_and_partners(
                     is_diastereotopic_pair = True
 
             if is_diastereotopic_pair and abs(J_max - J_min) > 2.0:
-                # =====================================================================
-                # FIX CRITIQUE: Les tables de la littérature (saturated_heterocycle, etc.)
-                # doivent avoir priorité sur les valeurs estimées (diastereotopic_estimated)
-                # =====================================================================
 
-                # Calculer les priorités de source
                 priorities = [(js[0], source_priority.get(js[1], 1), js[1]) for js in J_source_pairs]
                 max_priority = max(p[1] for p in priorities)
                 min_priority = min(p[1] for p in priorities)
 
-                # Sources "table" fiables (priority >= 7): saturated_heterocycle, heterocycle, sugar, peptide, structural
-                # Sources "estimées" (priority <= 3): diastereotopic_estimated, fallback_average
                 TABLE_THRESHOLD = 7
                 ESTIMATED_THRESHOLD = 3
 
@@ -14322,44 +10635,36 @@ def _post_process_reciprocity_and_partners(
                 has_estimated_source = any(p[1] <= ESTIMATED_THRESHOLD for p in priorities)
 
                 if has_table_source and has_estimated_source and (max_priority - min_priority) >= 4:
-                    # Une source table fiable vs une source estimée → utiliser la table
+
                     best_entry = max(priorities, key=lambda p: p[1])
                     resolved_couplings[key] = best_entry[0]
                 else:
-                    # Deux sources de qualité similaire → utiliser les heuristiques de valeur
-                    # Valeurs standard des tables: 6-8 Hz (moyenne rotationnelle)
-                    # Valeurs spécifiques: 2-5 Hz (gauche) ou 9-12 Hz (anti)
+
                     if 2.0 <= J_min <= 5.5 and 5.5 < J_max <= 8.5:
-                        # J_min est gauche calculé, J_max est fallback table → préférer gauche
+
                         resolved_couplings[key] = J_min
                     elif 8.0 <= J_max <= 12.0 and J_min < 8.0:
-                        # J_max est anti calculé → préférer anti
+
                         resolved_couplings[key] = J_max
                     elif 2.0 <= J_min <= 5.5:
-                        # J_min semble être gauche calculé
+
                         resolved_couplings[key] = J_min
                     elif 8.0 <= J_max <= 12.0:
-                        # J_max semble être anti calculé
+
                         resolved_couplings[key] = J_max
                     else:
-                        # Cas ambigu: préférer la valeur non dans la plage 6-8 Hz
+
                         non_standard = [j for j in J_values_only if j < 5.5 or j > 8.5]
                         if non_standard:
                             resolved_couplings[key] = non_standard[0]
                         else:
                             resolved_couplings[key] = J_min
 
-            # =====================================================================
-            # PRIORITÉ 2: Valeurs proches → moyenne
-            # =====================================================================
             elif abs(J_max - J_min) < 1.0:
                 resolved_couplings[key] = round(sum(J_values_only) / len(J_values_only), 3)
 
-            # =====================================================================
-            # PRIORITÉ 3: Sources avec priorités différentes
-            # =====================================================================
             else:
-                # Trier par priorité de source (décroissante)
+
                 J_source_sorted = sorted(
                     J_source_pairs,
                     key=lambda x: source_priority.get(x[1], 1),
@@ -14371,21 +10676,16 @@ def _post_process_reciprocity_and_partners(
                 worst_priority = source_priority.get(J_source_sorted[-1][1], 1)
 
                 if best_priority > worst_priority:
-                    # Source clairement meilleure → utiliser sa valeur
+
                     resolved_couplings[key] = best_J
                 else:
-                    # Même priorité → moyenne
+
                     resolved_couplings[key] = round(sum(J_values_only) / len(J_values_only), 2)
 
-    # =========================================================================
-    # PASS 3: Appliquer la réciprocité et remplir les partners manquants
-    # =========================================================================
     for h_idx, data in result.items():
         partners = data.get("partners", [])
         J_couplings = data.get("J_couplings", [])
 
-        # Cas 1: Partners vides mais J_couplings présents
-        # Reconstruire partners à partir de resolved_couplings
         if not partners and J_couplings:
             new_partners = []
             for key, J_resolved in resolved_couplings.items():
@@ -14397,28 +10697,26 @@ def _post_process_reciprocity_and_partners(
                 else:
                     continue
 
-                # Vérifier si ce partenaire correspond à un des J_couplings
                 for jc in J_couplings:
                     if abs(jc.get("J_hz", 0) - J_resolved) < 1.0:
-                        # ✅ FIX: Récupérer la source depuis coupling_registry
+
                         J_source_list = coupling_registry.get(key, [])
                         J_source = "unknown"
                         if J_source_list:
-                            # Prendre la source avec la meilleure priorité
+
                             best_src = max(J_source_list, key=lambda x: source_priority.get(x[1], 1))
                             J_source = best_src[1]
                         new_partners.append({
                             "partner_h_index": int(partner_h),
                             "partner_shift_ppm": round(float(proton_shifts_ppm.get(partner_h, 0.0)), 3),
                             "J_hz": round(float(J_resolved), 2),
-                            "J_source": J_source,  # ✅ Source préservée
+                            "J_source": J_source,
                         })
                         break
 
             if new_partners:
                 data["partners"] = new_partners
 
-        # Cas 2: Partners présents, vérifier/corriger la réciprocité
         else:
             updated_partners = []
             for p in partners:
@@ -14430,7 +10728,6 @@ def _post_process_reciprocity_and_partners(
                 key = (min(h_idx, partner_h), max(h_idx, partner_h))
                 J_resolved = resolved_couplings.get(key, p.get("J_hz", 0))
 
-                # ✅ FIX: Préserver la source existante ou récupérer depuis coupling_registry
                 existing_source = p.get("J_source", "unknown")
                 if existing_source == "unknown":
                     J_source_list = coupling_registry.get(key, [])
@@ -14442,23 +10739,17 @@ def _post_process_reciprocity_and_partners(
                     "partner_h_index": int(partner_h),
                     "partner_shift_ppm": round(float(proton_shifts_ppm.get(partner_h, p.get("partner_shift_ppm", 0.0))), 3),
                     "J_hz": round(float(J_resolved), 2),
-                    "J_source": existing_source,  # ✅ Source préservée
+                    "J_source": existing_source,
                 })
 
             data["partners"] = updated_partners
 
-    # =========================================================================
-    # PASS 4: Propagation des couplages vicinaux aux protons diastéréotopiques
-    # Si H_a couple avec H_c (vicinal), et H_b est sur le même C que H_a,
-    # alors H_b doit aussi coupler avec H_c (avec un J différent)
-    # =========================================================================
     for heavy_idx, h_list in heavy_to_H.items():
         if len(h_list) != 2:
             continue
 
         h_a, h_b = h_list[0], h_list[1]
 
-        # Vérifier si ce sont des protons diastéréotopiques
         data_a = result.get(h_a, {})
         data_b = result.get(h_b, {})
 
@@ -14468,19 +10759,15 @@ def _post_process_reciprocity_and_partners(
         partners_a = data_a.get("partners", [])
         partners_b = data_b.get("partners", [])
 
-        # Détecter les diastéréotopiques: ils ont un couplage geminal (~12-14 Hz) entre eux
-        # ET des J_couplings/partners différents
         is_diastereotopic = False
 
-        # Check if h_a has h_b as partner with geminal J
         for p in partners_a:
             if p.get("partner_h_index") == h_b:
                 J_hz = p.get("J_hz", 0)
-                if 10.0 <= J_hz <= 16.0:  # Geminal coupling range
+                if 10.0 <= J_hz <= 16.0:
                     is_diastereotopic = True
                     break
 
-        # Or check if h_b has h_a as partner with geminal J
         if not is_diastereotopic:
             for p in partners_b:
                 if p.get("partner_h_index") == h_a:
@@ -14489,7 +10776,6 @@ def _post_process_reciprocity_and_partners(
                         is_diastereotopic = True
                         break
 
-        # Also consider as diastereotopic if they have different J_couplings
         if not is_diastereotopic:
             jc_a = data_a.get("J_couplings", [])
             jc_b = data_b.get("J_couplings", [])
@@ -14499,18 +10785,16 @@ def _post_process_reciprocity_and_partners(
         if not is_diastereotopic:
             continue
 
-        # Re-get partners (already defined above but ensure fresh reference)
         partners_a = data_a.get("partners", [])
         partners_b = data_b.get("partners", [])
 
-        # Collecter les partenaires vicinaux (pas geminaux)
         vicinal_partners_a = set()
         vicinal_partners_b = set()
 
         for p in partners_a:
             partner_h = p.get("partner_h_index")
             J_hz = p.get("J_hz", 0)
-            # Vicinal si J < 12 Hz (geminal typiquement 12-15 Hz)
+
             if partner_h and partner_h != h_b and J_hz < 11.0:
                 vicinal_partners_a.add(partner_h)
 
@@ -14520,17 +10804,11 @@ def _post_process_reciprocity_and_partners(
             if partner_h and partner_h != h_a and J_hz < 11.0:
                 vicinal_partners_b.add(partner_h)
 
-        # Trouver les partenaires manquants
         missing_for_a = vicinal_partners_b - vicinal_partners_a
         missing_for_b = vicinal_partners_a - vicinal_partners_b
 
-        # Ajouter les couplages manquants avec un J estimé différent
-        # Typiquement: si H_a→H_c = 10.6 Hz (trans), alors H_b→H_c ≈ 3.0 Hz (gauche)
         for missing_h in missing_for_a:
-            # =====================================================================
-            # FIX CRITIQUE: Vérifier si le couplage réciproque existe déjà
-            # Si missing_h → h_a existe avec un J de meilleure qualité, utiliser cette valeur
-            # =====================================================================
+
             J_reciprocal = None
             J_reciprocal_source = None
             if missing_h in result:
@@ -14540,22 +10818,20 @@ def _post_process_reciprocity_and_partners(
                         J_reciprocal_source = p.get("J_source", "unknown")
                         break
 
-            # Trouver le J de H_b avec ce partenaire
             J_ref = None
             for p in partners_b:
                 if p.get("partner_h_index") == missing_h:
                     J_ref = p.get("J_hz", 0)
                     break
 
-            # Si le couplage réciproque existe avec une source fiable, utiliser cette valeur
             if J_reciprocal and J_reciprocal > 0:
                 reciprocal_priority = source_priority.get(J_reciprocal_source, 1)
-                # Si la source réciproque est meilleure que "estimated" (priority > 3), utiliser sa valeur
+
                 if reciprocal_priority > 3:
                     J_final = J_reciprocal
                     J_source = J_reciprocal_source
                 else:
-                    # Sinon estimer comme avant
+
                     if J_ref:
                         if J_ref > 8.0:
                             J_final = 3.0
@@ -14567,18 +10843,17 @@ def _post_process_reciprocity_and_partners(
                         J_final = J_reciprocal
                     J_source = "diastereotopic_estimated"
             elif J_ref:
-                # Estimation: si J grand (>8), alors l'autre est petit (~3), et vice versa
+
                 if J_ref > 8.0:
                     J_final = 3.0
                 elif J_ref < 5.0:
                     J_final = 10.0
                 else:
-                    J_final = J_ref  # Même valeur si intermédiaire
+                    J_final = J_ref
                 J_source = "diastereotopic_estimated"
             else:
-                continue  # Pas assez d'info pour estimer
+                continue
 
-            # Ajouter ce partenaire manquant
             if h_a in result:
                 result[h_a]["partners"].append({
                     "partner_h_index": int(missing_h),
@@ -14586,15 +10861,13 @@ def _post_process_reciprocity_and_partners(
                     "J_hz": round(float(J_final), 2),
                     "J_source": J_source,
                 })
-                # Mettre à jour J_couplings aussi
+
                 j_couplings_a = result[h_a].get("J_couplings", [])
                 j_couplings_a.append({"J_hz": round(float(J_final), 3), "n_equiv": 1})
                 result[h_a]["J_couplings"] = j_couplings_a
 
         for missing_h in missing_for_b:
-            # =====================================================================
-            # FIX CRITIQUE: Vérifier si le couplage réciproque existe déjà
-            # =====================================================================
+
             J_reciprocal = None
             J_reciprocal_source = None
             if missing_h in result:
@@ -14610,7 +10883,6 @@ def _post_process_reciprocity_and_partners(
                     J_ref = p.get("J_hz", 0)
                     break
 
-            # Si le couplage réciproque existe avec une source fiable, utiliser cette valeur
             if J_reciprocal and J_reciprocal > 0:
                 reciprocal_priority = source_priority.get(J_reciprocal_source, 1)
                 if reciprocal_priority > 3:
@@ -14649,45 +10921,33 @@ def _post_process_reciprocity_and_partners(
                 j_couplings_b.append({"J_hz": round(float(J_final), 3), "n_equiv": 1})
                 result[h_b]["J_couplings"] = j_couplings_b
 
-    # =========================================================================
-    # PASS 5: Cohérence finale J_couplings ↔ partners
-    # S'assurer que les valeurs de J dans J_couplings correspondent aux partners
-    # =========================================================================
     for h_idx, data in result.items():
         partners = data.get("partners", [])
         if not partners:
             continue
 
-        # ⚠️ FIX: Exclure les partenaires géminaux avec le MÊME shift (invisible)
-        # Un partenaire geminal avec le même shift que le groupe ne produit pas de splitting
-        # Utiliser corrected_shift_ppm (présent dans le dict interne) pour comparaison
         current_shift = data.get("corrected_shift_ppm")
 
         def is_invisible_geminal(partner):
-            """Vérifie si ce partenaire est un geminal invisible (même shift)"""
+
             p_shift = partner.get("partner_shift_ppm")
             j_source = partner.get("J_source", "")
 
-            # Si ce n'est pas un couplage geminal, c'est visible
             if "geminal" not in j_source:
                 return False
 
-            # Si le partenaire a le même shift que le proton observé (±0.005 ppm), invisible
-            # Seuil réduit de 0.02 à 0.005 pour éviter faux positifs sur vinyles (Δδ ~ 0.03 ppm)
             if p_shift is not None and current_shift is not None:
                 if abs(p_shift - current_shift) <= 0.005:
                     return True
             return False
 
-        # Recalculer J_couplings à partir des partners VISIBLES uniquement
         j_values_from_partners = [
             p.get("J_hz", 0) for p in partners
             if p.get("J_hz", 0) > 0 and not is_invisible_geminal(p)
         ]
 
         if j_values_from_partners:
-            # Grouper les valeurs similaires (tolérance 0.25 Hz pour préserver la différenciation diastéréotopique)
-            # 7.0 vs 7.35 Hz diffèrent de 0.35 Hz → ne doivent PAS être groupés ensemble
+
             grouped = _group_J_values(j_values_from_partners, tol=0.25)
             new_J_couplings = []
             for g in grouped:
@@ -14698,27 +10958,20 @@ def _post_process_reciprocity_and_partners(
                         "n_equiv": len(g),
                     })
 
-            # Ne remplacer que si différent (pour éviter de perdre des infos)
             current_J = data.get("J_couplings", [])
             current_J_set = set(round(jc.get("J_hz", 0), 1) for jc in current_J)
             new_J_set = set(round(jc.get("J_hz", 0), 1) for jc in new_J_couplings)
 
-            # Si les nouveaux J sont plus complets, les utiliser
             if len(new_J_couplings) >= len(current_J) or not current_J_set.issubset(new_J_set):
-                # Garder les nouveaux si plus complets ou si les anciens sont incorrects
+
                 if len(new_J_couplings) > 0:
                     data["J_couplings"] = new_J_couplings
 
-    # =========================================================================
-    # PASS 6: Recalculer les labels après modification des J_couplings
-    # Si des couplages ont été ajoutés en PASS 4, le label doit être mis à jour
-    # =========================================================================
     for h_idx, data in result.items():
         J_couplings = data.get("J_couplings", [])
         if not J_couplings:
             continue
 
-        # Reconstruire les groupes à partir de J_couplings
         groups = []
         for jc in J_couplings:
             J_hz = jc.get("J_hz", 0)
@@ -14729,78 +10982,58 @@ def _post_process_reciprocity_and_partners(
         if not groups:
             continue
 
-        # Calculer le nouveau label
         new_label = _first_order_label_from_groups(groups, force_singlet_if_empty=False)
         old_label = data.get("label", "")
 
-        # Mettre à jour si le nouveau label est différent et plus précis
-        # (éviter de dégrader "dd" en "d" ou "ddd" en "dd")
         if new_label != old_label:
-            # Compter les couplages effectifs
+
             total_J = sum(jc.get("n_equiv", 1) for jc in J_couplings if jc.get("J_hz", 0) > 0)
 
-            # Compter le nombre de groupes de J DIFFÉRENTS
             n_distinct_groups = len(groups)
 
-            # Le label devrait refléter le nombre total de couplages
             if total_J == 1 and old_label == "d":
-                pass  # Correct
+                pass
             elif total_J == 2 and old_label == "d":
-                # "d" avec 2 couplages → devrait être "dd" ou "t"
+
                 data["label"] = new_label
                 data["label_idx"] = LABEL2IDX.get(new_label, LABEL2IDX["m"])
             elif total_J >= 2 and old_label in ("d", "s"):
-                # Label trop simple pour le nombre de couplages
+
                 data["label"] = new_label
                 data["label_idx"] = LABEL2IDX.get(new_label, LABEL2IDX["m"])
             elif total_J >= 3 and old_label in ("d", "dd", "t"):
-                # Label trop simple pour 3+ couplages
+
                 data["label"] = new_label
                 data["label_idx"] = LABEL2IDX.get(new_label, LABEL2IDX["m"])
-            # =====================================================================
-            # FIX CRITIQUE: "t" avec des J DIFFÉRENTS doit être "dd"
-            # Un triplet implique 2 couplages IDENTIQUES. Si les J sont différents,
-            # c'est un doublet de doublets (dd).
-            # =====================================================================
+
             elif old_label == "t" and n_distinct_groups >= 2:
-                # "t" mais les J sont dans des groupes différents → "dd"
+
                 J_vals_unique = [g[0] for g in groups if g]
                 if len(J_vals_unique) >= 2:
                     J_diff = abs(J_vals_unique[0] - J_vals_unique[1])
-                    # ✅ Seuil réduit à 0.3 Hz pour capturer les protons diastéréotopiques
-                    # où les J sont légèrement différents (ex: ASP Hα-Hβ2 vs Hα-Hβ3)
+
                     if J_diff > 0.3:
                         data["label"] = "dd"
                         data["label_idx"] = LABEL2IDX.get("dd", LABEL2IDX["m"])
 
-    # =========================================================================
-    # PASS 7: HARMONISATION CH₃ - Protons équivalents DOIVENT avoir même J
-    # =========================================================================
-    # Après la réciprocité (qui peut avoir changé des J), s'assurer que tous les
-    # protons d'un groupe CH₃ ont le même J vers un partenaire donné.
-    # C'est PHYSIQUEMENT OBLIGATOIRE car les protons équivalents sont indiscernables.
-    # =========================================================================
-
-    # Identifier les groupes CH₃ (3 H sur même heavy atom)
     ch3_heavy_atoms = set()
     for heavy_idx, h_list in heavy_to_H.items():
         if len(h_list) == 3:
             ch3_heavy_atoms.add(heavy_idx)
 
     if ch3_heavy_atoms:
-        # Pour chaque groupe dans result, vérifier si ses partners incluent des CH₃
+
         for h_idx, data in result.items():
             partners = data.get("partners", [])
             if not partners:
                 continue
 
-            # Grouper les partners par leur heavy atom
             partner_by_heavy: Dict[int, List[Dict]] = {}
             for p in partners:
                 partner_h = p.get("partner_h_index")
                 if partner_h is None:
                     continue
-                # Trouver le heavy atom de ce partner
+
                 for hv, h_list in heavy_to_H.items():
                     if partner_h in h_list:
                         if hv not in partner_by_heavy:
@@ -14808,32 +11041,23 @@ def _post_process_reciprocity_and_partners(
                         partner_by_heavy[hv].append(p)
                         break
 
-            # Pour chaque groupe CH₃ dans les partners, harmoniser les J
             for hv, partner_group in partner_by_heavy.items():
                 if hv not in ch3_heavy_atoms:
                     continue
                 if len(partner_group) < 2:
                     continue
 
-                # Collecter tous les J de ce groupe CH₃
                 J_values = [p.get("J_hz", 0) for p in partner_group if p.get("J_hz", 0) > 0]
                 if not J_values:
                     continue
 
-                # =====================================================================
-                # STRATÉGIE ROBUSTE: La VALEUR MAJORITAIRE doit gagner
-                # Pour des protons équivalents (CH₃), ils DOIVENT avoir le même J.
-                # Si 2/3 ont 6.8 Hz et 1/3 a 2.68 Hz, c'est 6.8 Hz qui est physiquement correct.
-                # =====================================================================
                 from collections import Counter, defaultdict
 
-                # FIX: Grouper les valeurs similaires SANS arrondir agressivement
-                # On garde les valeurs ORIGINALES et on les groupe par proximité (± 1.0 Hz)
                 J_groups: Dict[float, List[float]] = defaultdict(list)
-                tolerance = 1.0  # Hz
+                tolerance = 1.0
 
                 for j_val in J_values:
-                    # Chercher un groupe existant proche
+
                     found_group = None
                     for group_key in J_groups:
                         if abs(j_val - group_key) <= tolerance:
@@ -14843,40 +11067,32 @@ def _post_process_reciprocity_and_partners(
                     if found_group is not None:
                         J_groups[found_group].append(j_val)
                     else:
-                        # Créer nouveau groupe avec la valeur originale comme clé
+
                         J_groups[j_val].append(j_val)
 
-                # Trouver le groupe avec le plus de valeurs
                 best_group_key = max(J_groups.keys(), key=lambda k: len(J_groups[k]))
                 best_group_values = J_groups[best_group_key]
                 count = len(best_group_values)
 
-                # Si la valeur majoritaire a plus d'occurrences, l'utiliser
                 if count > len(J_values) / 2:
-                    # Majorité claire → utiliser la MOYENNE du groupe (préserve précision)
+
                     J_harmonized = sum(best_group_values) / len(best_group_values)
                 else:
-                    # Pas de majorité claire → préférer la valeur dans la plage vicinale typique
-                    # (6-8 Hz pour CH-CH₃)
+
                     typical_groups = [(k, v) for k, v in J_groups.items() if 5.5 <= k <= 8.5]
                     if typical_groups:
-                        # Prendre le groupe typique avec le plus de valeurs
+
                         best_typical = max(typical_groups, key=lambda x: len(x[1]))
                         J_harmonized = sum(best_typical[1]) / len(best_typical[1])
                     else:
-                        # Sinon prendre la plus grande valeur (souvent plus fiable)
+
                         J_harmonized = max(J_values)
 
-                # Appliquer le J harmonisé à tous les partners du groupe
                 for p in partner_group:
                     old_J = p.get("J_hz", 0)
                     if abs(old_J - J_harmonized) > 0.01:
                         p["J_hz"] = round(J_harmonized, 2)
 
-                # =====================================================================
-                # FIX CRITIQUE: Mettre à jour aussi la direction INVERSE (CH₃ → partenaire)
-                # Chaque proton du CH₃ doit avoir le même J vers le partenaire h_idx
-                # =====================================================================
                 for ch3_h in heavy_to_H.get(hv, []):
                     if ch3_h not in result:
                         continue
@@ -14887,62 +11103,49 @@ def _post_process_reciprocity_and_partners(
                             if abs(old_ch3_J - J_harmonized) > 0.01:
                                 ch3_p["J_hz"] = round(J_harmonized, 2)
 
-    # =========================================================================
-    # PASS 8: SYNCHRONISER J_couplings AVEC partners APRÈS HARMONISATION
-    # =========================================================================
-    # Après PASS 7, les partners ont été mis à jour mais J_couplings peut être obsolète.
-    # On recalcule J_couplings à partir des partners harmonisés.
-    # =========================================================================
     for h_idx, data in result.items():
         partners = data.get("partners", [])
         if not partners:
             continue
 
-        # ⚠️ FIX: Exclure les partenaires géminaux avec le MÊME shift (invisible)
         current_shift = data.get("corrected_shift_ppm")
 
         def is_invisible_geminal_p8(partner):
-            """Vérifie si ce partenaire est un geminal invisible (même shift)"""
+
             p_shift = partner.get("partner_shift_ppm")
             j_source = partner.get("J_source", "")
 
             if "geminal" not in j_source:
                 return False
-            # Seuil réduit de 0.02 à 0.005 pour éviter faux positifs sur vinyles
+
             if p_shift is not None and current_shift is not None:
                 if abs(p_shift - current_shift) <= 0.005:
                     return True
             return False
 
-        # Extraire les J des partners VISIBLES uniquement
         j_values_from_partners = [
             p.get("J_hz", 0) for p in partners
             if p.get("J_hz", 0) > 0 and not is_invisible_geminal_p8(p)
         ]
 
         if j_values_from_partners:
-            # Grouper les valeurs similaires (tolérance 0.25 Hz pour préserver la différenciation diastéréotopique)
-            # 7.0 vs 7.35 Hz diffèrent de 0.35 Hz → ne doivent PAS être groupés ensemble
+
             grouped = _group_J_values(j_values_from_partners, tol=0.25)
             new_J_couplings = []
             for g in grouped:
                 if g:
-                    # Utiliser la moyenne du groupe (préserve la précision)
+
                     J_mean = sum(g) / len(g)
                     new_J_couplings.append({
-                        "J_hz": round(float(J_mean), 2),  # 2 décimales pour précision
+                        "J_hz": round(float(J_mean), 2),
                         "n_equiv": len(g),
                     })
 
-            # Toujours remplacer car PASS 7 a pu modifier les partners
             if new_J_couplings:
                 data["J_couplings"] = new_J_couplings
 
     return result
 
-
-# ---------------------------
-# ✅ CORRECTION 2 : WRAPPER par proton avec garde-fou diastéréotopie
 def simulate_multiplicity_per_proton(
     mol: Chem.Mol,
     x_h_connectivity: Dict[int, List[int]],
@@ -14954,90 +11157,66 @@ def simulate_multiplicity_per_proton(
     use_3d: bool = True,
     tol: float = TOLERANCE_J_HZ,
     config: Optional[SimConfig] = None,
-    # ✅ NOUVEAU: Paramètres dynamics post-processeur
+
     enable_dynamics: bool = False,
     ph: float = 7.4,
 ) -> Dict[int, Dict[str, Any]]:
-    """
-    ✅ VERSION CORRIGÉE ET DÉFINITIVE
-    Retourne une multiplicité par PROTON individuel avec informations enrichies.
-    
-    CORRECTIONS CRITIQUES :
-    1. Vérifie le nombre RÉEL de H attachés avant toute séparation diastéréotopique
-    2. Ne sépare les CH₂ que s'ils sont liés à un centre stéréogène (vraie diastéréotopie)
-    3. Évite les protons fantômes sur les CH/CH₃
-    
-    PARAMÈTRES DYNAMICS (optionnels):
-    - enable_dynamics: Active le post-processeur dynamique (pH, solvant, température)
-    - ph: pH de la solution [1.0, 14.0] (défaut: 7.4 plasma humain)
-    """
+
     if config is None:
         config = SimConfig()
-    
-    # ✅ NOUVEAU : Inférence stéréochimie E/Z pour doubles liaisons non définies
+
     if config.infer_double_bond_stereo:
         defined, undefined = _count_undefined_double_bonds(mol)
         if undefined > 0:
             if config.infer_stereo_log:
                 import logging
-                logging.info(f"🔧 Inférence stéréochimie: {undefined} double(s) liaison(s) non définies → {config.infer_stereo_default}")
+                logging.info(f" Inférence stéréochimie: {undefined} double(s) liaison(s) non définies → {config.infer_stereo_default}")
             mol = _infer_double_bond_stereo(mol, config.infer_stereo_default)
-    
-    # Préparation molécule
-    # FIXED: Vérifier si mol a déjà les H ou pas
+
     has_explicit_h = any(a.GetSymbol() == "H" for a in mol.GetAtoms())
     if has_explicit_h:
-        molH = mol  # Le mol a déjà les H explicites
+        molH = mol
     else:
-        molH = Chem.AddHs(mol, addCoords=True)  # Ajouter les H si manquants
-    
+        molH = Chem.AddHs(mol, addCoords=True)
+
     _validate_connectivity(molH, x_h_connectivity)
-    
-    # Build heavy_to_H from actual molecule
+
     H_ALL = [a.GetIdx() for a in molH.GetAtoms() if a.GetSymbol() == "H"]
     heavy_to_H: Dict[int, List[int]] = defaultdict(list)
     for h in H_ALL:
         nb = [n.GetIdx() for n in molH.GetAtomWithIdx(h).GetNeighbors()]
         if nb:
             heavy_to_H[nb[0]].append(h)
-    
-    # === ÉTAPE 1 : GARDE-FOU GÉNÉRIQUE - Vérification du nombre réel de H ===
+
     expanded_connectivity: Dict[int, List[int]] = {}
     proton_to_heavy: Dict[int, int] = {}
     geminal_partners: Dict[int, Optional[int]] = {}
-    
-    # ✅ NOUVEAU: Stockage des décalages pour protons diastéréotopiques
-    # Format: {h_idx: delta_ppm} (positif pour h_a, négatif pour h_b)
+
     diastereotopic_shift_deltas: Dict[int, float] = {}
-    
+
     for heavy_idx, h_list in sorted(x_h_connectivity.items(), key=lambda kv: kv[0]):
         if not h_list:
             continue
-        
-        # 🔴 CRITIQUE : Obtenir le nombre RÉEL de H attachés à ce carbone
+
         heavy_atom = molH.GetAtomWithIdx(heavy_idx)
         actual_h_neighbors = [n for n in heavy_atom.GetNeighbors() if n.GetSymbol() == "H"]
         n_h_attached = len(actual_h_neighbors)
-        
-        # === CAS SPÉCIAL : =CH₂ VINYLIQUE (terminaux) ===
-        # Les protons géminaux sur un =CH₂ sont TOUJOURS non-équivalents
-        # car ils ont des J différents (cis vs trans) avec le H vicinal
+
         is_terminal_vinyl_CH2 = False
         if n_h_attached == 2 and len(h_list) == 2:
             hyb = heavy_atom.GetHybridization()
             if hyb == rdchem.HybridizationType.SP2:
-                # Vérifier si c'est un =CH₂ terminal (carbone sp2 avec 2 H)
+
                 c_neighbors = [n for n in heavy_atom.GetNeighbors() if n.GetSymbol() != "H"]
                 if len(c_neighbors) == 1:
-                    # Un seul voisin non-H → c'est terminal (=CH₂)
-                    # Vérifier qu'il y a une double liaison
+
                     for bond in heavy_atom.GetBonds():
                         if bond.GetBondType() == rdchem.BondType.DOUBLE:
                             is_terminal_vinyl_CH2 = True
                             break
-        
+
         if is_terminal_vinyl_CH2:
-            # ✅ Séparer les protons vinyliques - ils sont toujours non-équivalents
+
             h_a, h_b = sorted(h_list)
             expanded_connectivity[heavy_idx] = [h_a]
             pseudo_key = -(h_b + 1)
@@ -15046,14 +11225,12 @@ def simulate_multiplicity_per_proton(
             proton_to_heavy[h_b] = heavy_idx
             geminal_partners[h_a] = h_b
             geminal_partners[h_b] = h_a
-            
-            # ✅ CORRECTION CRITIQUE: Appliquer la correction diastéréotopique aux vinyles
-            # Les protons vinyliques = CH₂ ont une Δδ qui doit être appliquée
-            delta_ppm = 0.10  # Valeur par défaut
-            
+
+            delta_ppm = 0.10
+
             if DIASTEREOTOPIC_TABLE_AVAILABLE:
                 try:
-                    # Utiliser la table centralisée pour les vinyles
+
                     delta_ppm, delta_reason = get_diastereotopic_delta(
                         mol=molH,
                         h1_idx=h_a,
@@ -15063,16 +11240,13 @@ def simulate_multiplicity_per_proton(
                         solvent=solvent
                     )
                 except Exception:
-                    # Fallback au delta standard vinyl
+
                     delta_ppm = 0.10
-            
-            # ✅ Appliquer le delta SEULEMENT si les shifts ML sont identiques
-            # (même logique que geminal CH₃ correction)
+
             if delta_ppm > 0 and proton_shifts_ppm:
                 shift_a = proton_shifts_ppm.get(h_a, 0.0)
                 shift_b = proton_shifts_ppm.get(h_b, 0.0)
 
-                # Appliquer correction SEULEMENT si shifts identiques (< 0.01 ppm)
                 if abs(shift_a - shift_b) < 0.01:
                     diastereotopic_shift_deltas[h_a] = -delta_ppm / 2.0
                     diastereotopic_shift_deltas[h_b] = +delta_ppm / 2.0
@@ -15081,26 +11255,22 @@ def simulate_multiplicity_per_proton(
                 else:
                     if config.verbose:
                         print(f"[CH2_vinyl] Skipped Δδ correction for H{h_a}/H{h_b}: ML already predicts different shifts ({shift_a:.3f} vs {shift_b:.3f} ppm, Δ={abs(shift_a-shift_b):.3f} ppm)")
-            
+
             continue
-        
-        # === CAS 1 : Ce n'est PAS un CH₂ → FORCER le regroupement ===
-        # Cela bloque les protons fantômes sur CH et CH₃
+
         if n_h_attached != 2:
             expanded_connectivity[heavy_idx] = list(h_list)
             for h in h_list:
                 proton_to_heavy[h] = heavy_idx
                 geminal_partners[h] = None
-            continue  # ← SAUTE la logique diastéréotopique
-        
-        # === CAS 2 : C'est un CH₂ → Tester la diastéréotopie avec TOUTES les méthodes ===
-        # ✅ CORRIGÉ: Utiliser les fonctions complètes de détection diastéréotopique
+            continue
+
         is_diastereotopic = False
-        diastereotopic_reason = ""  # Stocker la raison pour calculer le delta approprié
-        should_separate = True  # Par défaut: séparer si diastéréotopique
-        
+        diastereotopic_reason = ""
+        should_separate = True
+
         if config.separate_diastereotopic_protons and len(h_list) == 2:
-            # Méthode 1: Vérifier si un voisin direct est un centre chiral (tag explicite)
+
             neighbors = [n for n in heavy_atom.GetNeighbors() if n.GetSymbol() != "H"]
             for nb in neighbors:
                 if nb.GetSymbol() == "C":
@@ -15109,40 +11279,25 @@ def simulate_multiplicity_per_proton(
                         is_diastereotopic = True
                         diastereotopic_reason = "adjacent_chiral"
                         break
-            
-            # Méthode 2: Utiliser la détection complète avec recherche BFS de centres chiraux
+
             if not is_diastereotopic:
                 is_diast_bfs, delta_ppm_chiral = _detect_diastereotopic_protons(molH, heavy_idx)
                 if is_diast_bfs:
                     is_diastereotopic = True
                     diastereotopic_reason = "chiral_bfs"
-            
-            # Méthode 3: Vérifier la prochiralité (carbonyle asymétrique, alcène asymétrique, cycle)
+
             if not is_diastereotopic:
                 is_prochiral, prochiral_reason = _is_prochiral_CH2(molH, heavy_idx)
                 if is_prochiral:
                     is_diastereotopic = True
-                    diastereotopic_reason = prochiral_reason  # benzylic_asymmetric_aromatic, adjacent_to_asymmetric_alkene, etc.
-            
-            # Méthode 4: Prochirauté par analyse des H individuels
+                    diastereotopic_reason = prochiral_reason
+
             if not is_diastereotopic and len(h_list) == 2:
                 h_a, h_b = h_list
                 if _is_diastereotopic_by_prochirality(molH, heavy_idx, h_a, h_b):
                     is_diastereotopic = True
                     diastereotopic_reason = "prochirality_analysis"
-            
-            # ✅ Vérifier si on doit fusionner selon la dynamique conformationnelle
-            # (température, rotation, échange rapide)
-            # 
-            # PRINCIPE FONDAMENTAL (validé expérimentalement) :
-            # - Les CH₂ benzyliques adjacents à un aromatique asymétrique sont généralement
-            #   ÉQUIVALENTS à température ambiante car la rotation rapide (~10⁹ s⁻¹)
-            #   moyenne les environnements (ex: flavoglaucin → 2H, t, J=7.6 Hz)
-            # - Les protons ne deviennent diastéréotopiques que si:
-            #   * Rotation bloquée (barrière > 15-20 kcal/mol)
-            #   * Température cryogénique (< -80°C)
-            #   * Système bicyclique bridgé rigide
-            #   * Centre chiral ADJACENT DIRECT (distance = 1 liaison)
+
             if is_diastereotopic and len(h_list) == 2:
                 h_a, h_b = h_list
                 try:
@@ -15152,64 +11307,57 @@ def simulate_multiplicity_per_proton(
                         spectrometer_mhz=spectrometer_mhz
                     )
                     if should_merge:
-                        # Échange rapide → fusionner en UN pattern
+
                         should_separate = False
                         if config.verbose:
                             print(f"[dynamics] CH₂ {heavy_idx}: {merge_reason}")
                 except Exception as e:
                     if config.verbose:
                         print(f"[dynamics] Erreur pour CH₂ {heavy_idx}: {e}")
-                    # Par défaut: séparer (conservateur)
+
                     should_separate = True
-        
+
         if is_diastereotopic and should_separate:
-            # Séparer uniquement si vraiment diastéréotopique
+
             h_a, h_b = h_list
             expanded_connectivity[heavy_idx] = [h_a]
-            pseudo_key = -(h_b + 1)  # Clé unique
+            pseudo_key = -(h_b + 1)
             expanded_connectivity[pseudo_key] = [h_b]
             proton_to_heavy[h_a] = heavy_idx
             proton_to_heavy[h_b] = heavy_idx
             geminal_partners[h_a] = h_b
             geminal_partners[h_b] = h_a
-            
-            # ✅ UTILISER LA TABLE CENTRALISÉE diastereotopic_delta_table.py
-            # Source unique de vérité pour les valeurs Δδ
-            # Évite la duplication de valeurs hardcodées
-            delta_ppm = 0.10  # Valeur par défaut
-            
+
+            delta_ppm = 0.10
+
             if DIASTEREOTOPIC_TABLE_AVAILABLE:
                 try:
-                    # Utiliser la fonction complète qui analyse le contexte moléculaire
+
                     delta_ppm, delta_reason = get_diastereotopic_delta(
                         mol=molH,
                         h1_idx=h_a,
                         h2_idx=h_b,
                         heavy_idx=heavy_idx,
                         spectrometer_mhz=spectrometer_mhz,
-                        solvent=solvent  # Effet ASIS pour C₆D₆
+                        solvent=solvent
                     )
                 except Exception:
-                    # Fallback: utiliser les valeurs par distance au centre chiral
+
                     is_diast, delta_from_dist = _detect_diastereotopic_protons(molH, heavy_idx)
                     delta_ppm = delta_from_dist if is_diast else 0.10
             else:
-                # Fallback sans table: utiliser la détection par distance
+
                 is_diast, delta_from_dist = _detect_diastereotopic_protons(molH, heavy_idx)
                 delta_ppm = delta_from_dist if is_diast else 0.10
-            
-            # Plancher à 0.005 ppm pour être visible
+
             delta_ppm = max(delta_ppm, 0.005)
 
-            # ✅ Appliquer le delta SEULEMENT si les shifts ML sont identiques
-            # (même logique que geminal CH₃ correction et vinyles)
             if delta_ppm > 0 and proton_shifts_ppm:
                 shift_a = proton_shifts_ppm.get(h_a, 0.0)
                 shift_b = proton_shifts_ppm.get(h_b, 0.0)
 
-                # Appliquer correction SEULEMENT si shifts identiques (< 0.01 ppm)
                 if abs(shift_a - shift_b) < 0.01:
-                    # h_a légèrement upfield, h_b légèrement downfield
+
                     diastereotopic_shift_deltas[h_a] = -delta_ppm / 2.0
                     diastereotopic_shift_deltas[h_b] = +delta_ppm / 2.0
                     if config.verbose:
@@ -15218,83 +11366,76 @@ def simulate_multiplicity_per_proton(
                     if config.verbose:
                         print(f"[CH2_diast] Skipped Δδ correction for H{h_a}/H{h_b} (reason: {diastereotopic_reason}): ML already predicts different shifts ({shift_a:.3f} vs {shift_b:.3f} ppm, Δ={abs(shift_a-shift_b):.3f} ppm)")
         elif is_diastereotopic and not should_separate:
-            # ✅ NOUVEAU: CH₂ diastéréotopique MAIS avec échange rapide → UN pattern
-            # Garder ensemble comme groupe de 2 protons équivalents
+
             expanded_connectivity[heavy_idx] = list(h_list)
             for h in h_list:
                 proton_to_heavy[h] = heavy_idx
                 geminal_partners[h] = None
-            # Pas de delta de shift (protons moyennés)
+
         else:
-            # Garder ensemble (CH₂ non diastéréotopique, ex: CH₂OH du glucose)
+
             expanded_connectivity[heavy_idx] = list(h_list)
             for h in h_list:
                 proton_to_heavy[h] = heavy_idx
                 geminal_partners[h] = None
-    
-    # === ÉTAPE 2 : Préparer les structures de simulation ===
+
     solv = SOLVENT_DB.get(solvent, SOLVENT_DB[DEFAULT_SOLVENT])
     eff_regime = _effective_exchange_regime(solv, temperature_k)
-    
-    # === NOUVEAU: Appliquer corrections de solvant sur les shifts ===
+
     corrected_shifts = proton_shifts_ppm
     if config.use_solvent_shift_corrections and proton_shifts_ppm:
         corrected_shifts = _apply_solvent_corrections(
             proton_shifts_ppm, molH, heavy_to_H, solv.get("name", solvent)
         )
-    
-    # ✅ NOUVEAU: Appliquer les décalages diastéréotopiques aux shifts
-    # Cela garantit que les protons diastéréotopiques ont des shifts différents
+
     if corrected_shifts and diastereotopic_shift_deltas:
-        corrected_shifts = dict(corrected_shifts)  # Copie pour modification
+        corrected_shifts = dict(corrected_shifts)
         for h_idx, delta in diastereotopic_shift_deltas.items():
             if h_idx in corrected_shifts:
                 corrected_shifts[h_idx] = corrected_shifts[h_idx] + delta
-    
-    # === NOUVEAU: Largeur de raie selon solvant ===
+
     if config.use_solvent_linewidth:
         solvent_lw = _get_solvent_linewidth(solv.get("name", solvent), default=0.8)
         config.line_width_hz = max(config.line_width_hz, solvent_lw)
-    
+
     if config.use_field_resolution_model:
         auto_lw = _typical_linewidth_from_field(spectrometer_mhz, solv.get("viscosity", "low"))
         config.line_width_hz = max(config.line_width_hz, auto_lw)
         if config.digital_resolution_hz is None:
             config.digital_resolution_hz = _adaptive_digital_resolution(spectrometer_mhz)
-    
+
     if config.grouping_tol_scale_auto:
         config.grouping_tol_scale = 0.6 * math.sqrt(600.0 / max(1.0, spectrometer_mhz))
-    
+
     _field_based_tol = max(tol, config.grouping_tol_scale * config.line_width_hz)
-    
+
     base = Chem.RemoveHs(molH)
     Chem.SanitizeMol(base)
     _assign_stereo(base)
-    
-    # ✅ NOUVEAU: Détection des grosses molécules pour skip 3D
+
     n_heavy = base.GetNumHeavyAtoms()
     n_rings = len(base.GetRingInfo().AtomRings())
     skip_3d_reason = None
-    
+
     if config.skip_3d_for_large_molecules:
-        # Condition 1: Trop d'atomes lourds
+
         if n_heavy > config.skip_3d_above_heavy_atoms:
             skip_3d_reason = f"skip_3d: {n_heavy} atomes > {config.skip_3d_above_heavy_atoms}"
-        # Condition 2: Trop de cycles (polycyclique complexe)
+
         elif n_rings > config.skip_3d_above_fused_rings:
             skip_3d_reason = f"skip_3d: {n_rings} cycles > {config.skip_3d_above_fused_rings}"
-        # Condition 3: Tables couvrent tout
+
         if skip_3d_reason is None:
             coverage = _check_tables_coverage(base)
             if coverage.get('all_covered', False):
                 skip_3d_reason = f"skip_3d: tables couvrent tout"
-    
+
     if skip_3d_reason:
         use_3d = False
         if DEBUG_LOGGING:
             print(f"[FAST MODE] {skip_3d_reason}")
             print(f"[FAST MODE] Utilisation des tables de J uniquement (pas de génération 3D)")
-    
+
     if use_3d and molH.GetNumConformers() == 0:
         try:
             try:
@@ -15302,7 +11443,7 @@ def simulate_multiplicity_per_proton(
             except Exception:
                 ps = AllChem.ETKDG()
             ps.randomSeed = int(config.random_seed)
-            # ✅ Limiter les tentatives pour les grosses molécules
+
             if n_heavy > 50:
                 ps.maxAttempts = 5
                 ps.useRandomCoords = True
@@ -15311,32 +11452,28 @@ def simulate_multiplicity_per_proton(
                 _optimize_molecule_geometry(molH, config.force_field, config.force_field_max_iters, 0)
         except Exception:
             pass
-    
+
     D = _topological_distances(base)
     aromatic_dmap = _precompute_aromatic_distance_map(base)
     heavy_is_sp2_cache = [_is_sp2_like(base.GetAtomWithIdx(i)) for i in range(base.GetNumAtoms())]
     ranks = _canonical_ranks(base)
-    
-    # ✅ MODE RAPIDE: Désactiver automatiquement l'averaging pour grosses molécules
+
     n_heavy_atoms = base.GetNumHeavyAtoms()
     use_averaging = config.use_conformational_averaging
-    
-    # ✅ Calculate ultra_fast_mode early for averaging decision
+
     ultra_fast_mode = (config.ultra_fast_mode and n_heavy_atoms > config.ultra_fast_above_heavy_atoms)
-    
-    # ✅ CRITICAL FIX: Disable averaging if ultra_fast_mode is ON (prevents expensive conformer generation)
+
     if ultra_fast_mode:
         use_averaging = False
         if DEBUG_LOGGING:
             print(f"[ULTRA-FAST MODE] Disabling conformational averaging (ultra_fast_mode=True)")
-    
+
     if config.fast_mode_for_large_molecules and n_heavy_atoms > config.auto_disable_averaging_above_atoms:
         use_averaging = False
         if DEBUG_LOGGING:
             print(f"[FAST MODE] Molecule has {n_heavy_atoms} heavy atoms > {config.auto_disable_averaging_above_atoms} threshold")
             print(f"[FAST MODE] Disabling conformational averaging for speed (tables-only mode)")
-    
-    # ✅ MODE SMART CONFORMERS: Analyse intelligente du besoin de conformères
+
     smart_skip_reason = None
     if use_averaging and config.smart_conformer_mode:
         needs_conf, smart_reason = _molecule_needs_conformers(base)
@@ -15346,25 +11483,23 @@ def simulate_multiplicity_per_proton(
             if DEBUG_LOGGING:
                 print(f"[SMART MODE] Conformers NOT needed: {smart_reason}")
                 print(f"[SMART MODE] Using tables + fixed J values for flexible bonds")
-    
-    # ✅ NOUVEAU: Créer le cache de conformères avec adaptation à la flexibilité
+
     conformer_cache = None
     if use_averaging:
-        # Adapter le nombre de conformères selon la flexibilité
+
         n_conf = config.n_conformers
         if config.flexible_chain_boost:
             n_conf = _get_adaptive_n_conformers(base, config.n_conformers)
-        
+
         conformer_cache = ConformerCache(
-            base, 
+            base,
             n_conformers=n_conf,
             energy_cutoff_kcal=config.conformer_energy_cutoff_kcal,
             random_seed=config.random_seed,
             force_field=config.force_field
         )
         conformer_cache.initialize()
-    
-    # === NOUVEAU: Pré-calculer les systèmes de spin avancés ===
+
     spin_systems: Dict[int, Tuple[Optional[str], Dict[str, Any]]] = {}
     if config.advanced_spin_system_detection:
         for heavy_idx in x_h_connectivity.keys():
@@ -15375,7 +11510,7 @@ def simulate_multiplicity_per_proton(
             )
             if spin_sys:
                 spin_systems[heavy_idx] = (spin_sys, spin_info)
-    
+
     suppressed_heavy = set()
     for A in base.GetAtoms():
         t = _is_exchangeable_H_on_X(base, A.GetIdx())
@@ -15387,63 +11522,53 @@ def simulate_multiplicity_per_proton(
             continue
         if not (solv["name"] == "DMSO-d6" and eff_regime == "slow"):
             suppressed_heavy.add(A.GetIdx())
-    
-    # ✅ NOVO: Mode ultra-rápido ya calculado antes (línea ~14289)
-    # Solo mostramos el mensaje si aún no se mostró
+
     if ultra_fast_mode and DEBUG_LOGGING:
         print(f"[ULTRA-FAST MODE] Molécule {n_heavy_atoms} atomes > {config.ultra_fast_above_heavy_atoms} seuil")
         print(f"[ULTRA-FAST MODE] Skip détections diastéréotopiques coûteuses, J vicinal = {config.ultra_fast_default_vicinal_J} Hz")
-    
-    # ✅ NOUVEAU: Cache diastéréotopique pré-calculé (si pas en mode ultra-rapide)
-    # Inclut TOUTES les méthodes de détection: centres chiraux ET prochiralité
+
     diastereotopic_cache: Dict[int, Tuple[bool, float]] = {}
-    chiral_indices_cache: set = set()  # Cache des centres chiraux
-    
+    chiral_indices_cache: set = set()
+
     if not ultra_fast_mode:
-        # ✅ OPTIMISATION CRITIQUE: Pré-calculer les centres chiraux UNE SEULE FOIS
+
         try:
             chiral_centers_list = Chem.FindMolChiralCenters(base, includeUnassigned=True)
             chiral_indices_cache = {idx for idx, _ in chiral_centers_list}
         except Exception:
             chiral_indices_cache = set()
-        
-        # Maintenant, créer le cache diastéréotopique avec TOUTES les méthodes
+
         for c_idx in heavy_to_H.keys():
-            if len(heavy_to_H[c_idx]) == 2:  # CH2 uniquement
-                # Méthode 1: Détection par centres chiraux
+            if len(heavy_to_H[c_idx]) == 2:
+
                 is_diast, delta = _detect_diastereotopic_protons(
                     molH, c_idx, chiral_indices=chiral_indices_cache
                 )
-                
-                # Méthode 2: Si pas diastéréotopique, vérifier prochiralité
+
                 if not is_diast:
                     is_prochiral, prochiral_reason = _is_prochiral_CH2(molH, c_idx)
                     if is_prochiral:
                         is_diast = True
-                        delta = 0.10  # Valeur par défaut pour prochiralité
-                
+                        delta = 0.10
+
                 diastereotopic_cache[c_idx] = (is_diast, delta)
-    
-    # === ÉTAPE 3 : Calculer la multiplicité pour chaque proton ===
+
     result: Dict[int, Dict[str, Any]] = {}
-    
+
     for key, h_list in sorted(expanded_connectivity.items(), key=lambda kv: kv[0]):
         if not h_list:
             continue
-        
+
         h_idx = h_list[0]
         true_heavy_idx = proton_to_heavy[h_idx]
         geminal_partner = geminal_partners.get(h_idx, None)
-        
-        # ✅ NOUVEAU: Détecter l'élargissement pour protons labiles
-        # Utiliser molH car base n'a pas les H explicites
+
         broadening = None
         if config.mark_labile_protons_broad:
             broadening = _estimate_labile_proton_broadening(
                 molH, true_heavy_idx, solv.get("name", solvent), temperature_k
             )
-        
-        # ✅ NOUVEAU: Détecter imidazole H2 → singulet
+
         if _is_imidazole_H2_carbon(base, true_heavy_idx):
             result[h_idx] = {
                 "label": "s",
@@ -15457,12 +11582,11 @@ def simulate_multiplicity_per_proton(
                 "partners": [],
                 "satellites_13C_hz": [],
                 "broadening": broadening,
-                "heterocycle_position": 2,  # Position 2 pour imidazole H2
+                "heterocycle_position": 2,
                 "sugar_position": None,
             }
             continue
-        
-        # Vérifier si c'est un proton échangeable
+
         exch = _is_exchangeable_H_on_X(base, true_heavy_idx)
         if exch:
             eff = solv["chemical_shift_effects"].get(exch.replace("SH", "OH"), None)
@@ -15477,13 +11601,12 @@ def simulate_multiplicity_per_proton(
                 "virtual_coupling": False,
                 "partners": [],
                 "satellites_13C_hz": [],
-                "broadening": broadening,  # ✅ NOUVEAU
+                "broadening": broadening,
                 "heterocycle_position": None,
                 "sugar_position": None,
             }
             continue
-        
-        # Calculer J pour ce proton
+
         (J_vals, second_order, partners, sat, homo_pairs,
          partner_heavy_idx_kept, partner_is_sp2_kept,
          second_order_type, system_type, delta_nu_min_hz, J_orders) = _estimate_Js_for_group(
@@ -15496,9 +11619,7 @@ def simulate_multiplicity_per_proton(
             ultra_fast_mode=ultra_fast_mode,
             diastereotopic_cache=diastereotopic_cache
         )
-        
-        # ✅ NOUVEAU: Post-processing dynamics (pH, solvant, température)
-        # Applique les corrections dynamiques aux J_vals calculés
+
         if enable_dynamics and DYNAMICS_MODULE_AVAILABLE and J_vals and partners:
             J_vals_corrected = []
             partners_corrected = []
@@ -15513,30 +11634,26 @@ def simulate_multiplicity_per_proton(
                     temperature_k=temperature_k,
                     use_cache=True
                 )
-                # Garder seulement les J effectifs non-nuls
+
                 if J_effective is not None and abs(J_effective) > 0.001:
                     J_vals_corrected.append(J_effective)
                     partners_corrected.append(partner_h_idx)
-            # Remplacer les listes originales
+
             J_vals = J_vals_corrected
             partners = partners_corrected
-        
-        # Initialiser heterocycle_position à None (sera défini si hétérocycle détecté)
+
         heterocycle_position = None
-        
-        # === NOUVEAU: Utiliser le système de spin détecté si disponible ===
+
         if config.advanced_spin_system_detection and true_heavy_idx in spin_systems:
             detected_sys, spin_info = spin_systems[true_heavy_idx]
             if detected_sys and system_type is None:
                 system_type = detected_sys
-            # Marquer comme second ordre si système fortement couplé
+
             if detected_sys in ("AB", "AB₂", "AA'BB'", "A₂B₃", "ABX", "complex_second_order"):
                 if not second_order:
                     second_order = True
                     second_order_type = "strong_coupling"
-        
-        # Détection couplage virtuel
-        # ✅ IMPORTANT: Ne pas détecter le couplage virtuel pour les hétérocycles gérés par le module
+
         is_heterocycle_managed = system_type is not None and system_type.startswith("heterocycle_")
         is_virtual = False
         if J_vals and partners and not is_heterocycle_managed:
@@ -15546,15 +11663,14 @@ def simulate_multiplicity_per_proton(
                 )
             except Exception:
                 is_virtual = False
-        
+
         if is_virtual:
             J_vals = [j / 2.0 for j in J_vals]
-        
-        # ✅ NOUVEAU: Détecter les systèmes AA'BB' aromatiques symétriques → singulet apparent
+
         heavy = base.GetAtomWithIdx(true_heavy_idx)
         if heavy.GetSymbol() == "C" and heavy.GetIsAromatic():
             if _is_symmetric_para_disubstituted_benzene(base, true_heavy_idx, aromatic_dmap, ranks):
-                # Para-disubstitué symétrique: AA'BB' fortement couplé → singulet apparent
+
                 result[h_idx] = {
                     "label": "s",
                     "label_idx": LABEL2IDX["s"],
@@ -15571,18 +11687,14 @@ def simulate_multiplicity_per_proton(
                     "sugar_position": None,
                 }
                 continue
-        
-        # Fallback aromatique
-        # ✅ IMPORTANT: Ne pas appliquer le fallback si le module hétérocycle a déjà géré ce proton
-        # (is_heterocycle_managed est déjà défini avant la détection du couplage virtuel)
+
         if heavy_is_sp2_cache[true_heavy_idx] and not J_vals and heavy.GetSymbol() == "C" and heavy.GetIsAromatic() and not is_heterocycle_managed:
             J_fallback = _fallback_aromatic_J_when_empty(base, aromatic_dmap, true_heavy_idx, heavy_to_H, config, ranks=ranks)
             if J_fallback:
                 J_vals = J_fallback
                 second_order = False
                 second_order_type = "first_order"
-        
-        # H sp2 sans J
+
         if heavy_is_sp2_cache[true_heavy_idx] and not J_vals:
             label = "s"
             label_idx = LABEL2IDX["s"]
@@ -15602,9 +11714,7 @@ def simulate_multiplicity_per_proton(
                 "sugar_position": None,
             }
             continue
-        
-        # 🔴 Méthyles isolés sp3 (benzyl, méthoxy, N-méthyl, gem-diméthyle)
-        # Ces groupes ne montrent pas de couplage visible même si des J faibles sont calculés
+
         if _is_isolated_methyl(base, true_heavy_idx, heavy_to_H):
             label = "s"
             label_idx = LABEL2IDX["s"]
@@ -15624,28 +11734,20 @@ def simulate_multiplicity_per_proton(
                 "sugar_position": None,
             }
             continue
-        
-        # ===========================================================================
-        # ✅ NOUVEAU: FILTRAGE FRÉQUENCE-DÉPENDANT DES J
-        # ===========================================================================
-        # Applique les seuils de résolution réalistes selon la fréquence du spectromètre
-        # Les couplages trop faibles pour être résolus sont éliminés
-        # ===========================================================================
-        J_vals_original = list(J_vals)  # Garder une copie pour debug
-        
+
+        J_vals_original = list(J_vals)
+
         if config.use_frequency_dependent_resolution and J_vals:
-            # Filtrer les J selon la fréquence du spectromètre
+
             J_vals_filtered, kept_indices = filter_J_by_frequency(
                 J_vals, spectrometer_mhz, coupling_orders=None, config=config
             )
-            
-            # Si des J ont été filtrés, mettre à jour les partenaires correspondants
+
             if len(J_vals_filtered) < len(J_vals):
                 if config.verbose:
                     removed = [j for j in J_vals if j not in J_vals_filtered]
                     print(f"[FREQ_FILTER] H{h_idx} @ {spectrometer_mhz}MHz: filtré {removed} (sous seuil)")
-                
-                # Mettre à jour homo_pairs pour ne garder que les partenaires avec J résolu
+
                 homo_pairs_filtered: List[Tuple[int, float, str]] = []
                 for hp_tuple in homo_pairs:
                     partner_h_idx, J_val = hp_tuple[0], hp_tuple[1]
@@ -15653,10 +11755,9 @@ def simulate_multiplicity_per_proton(
                     if J_val in J_vals_filtered or abs(J_val) >= get_resolution_thresholds(spectrometer_mhz)["min_resolvable"]:
                         homo_pairs_filtered.append((partner_h_idx, J_val, hp_source))
                 homo_pairs = homo_pairs_filtered
-                
+
                 J_vals = J_vals_filtered
-        
-        # Si tous les J ont été filtrés → singulet
+
         if not J_vals:
             result[h_idx] = {
                 "label": "s",
@@ -15672,19 +11773,15 @@ def simulate_multiplicity_per_proton(
                 "broadening": broadening,
                 "heterocycle_position": None,
                 "sugar_position": None,
-                "unresolved_J": J_vals_original if config.verbose else None,  # Debug info
+                "unresolved_J": J_vals_original if config.verbose else None,
             }
             continue
-        
-        # Regroupement des J
+
         anis_high = (solv.get("anisotropy", "normal") == "high")
 
-        # ✅ FIX: Filtrer les J incorrects (12.0 Hz) pour les aromatiques
-        # Si un proton aromatique a des J 12.0 Hz qui sont probablement des erreurs,
-        # les supprimer si des valeurs correctes (ortho~7.8, meta~2.3, para~0.6) existent
         heavy = base.GetAtomWithIdx(true_heavy_idx)
         if heavy.GetSymbol() == "C" and heavy.GetIsAromatic() and homo_pairs and J_vals:
-            # Détecter les valeurs 12.0 Hz suspectes
+
             suspect_J = 12.0
             tol_suspect = 0.5
             has_suspect = any(abs(j - suspect_J) < tol_suspect for j in J_vals)
@@ -15692,7 +11789,7 @@ def simulate_multiplicity_per_proton(
             has_correct = any(any(abs(j - av) < 0.5 for av in correct_aromatic_J) for j in J_vals)
 
             if has_suspect and has_correct:
-                # Supprimer les valeurs 12.0 Hz incorrectes
+
                 filtered_J_vals = []
                 filtered_homo_pairs: List[Tuple[int, float, str]] = []
                 filtered_J_orders = []
@@ -15705,10 +11802,9 @@ def simulate_multiplicity_per_proton(
                     is_suspect = abs(j_val - suspect_J) < tol_suspect
                     is_correct = any(abs(j_val - av) < 0.5 for av in correct_aromatic_J)
 
-                    # Garder si c'est une valeur correcte, ou si ce partenaire n'a pas de valeur correcte
                     if is_correct or partner_h not in seen_partners_filter:
                         if not is_suspect or partner_h not in seen_partners_filter:
-                            filtered_homo_pairs.append((partner_h, j_val, j_source_hp))  # ✅ Préserver la source
+                            filtered_homo_pairs.append((partner_h, j_val, j_source_hp))
                             if i < len(J_vals):
                                 filtered_J_vals.append(J_vals[i])
                             if J_orders and i < len(J_orders):
@@ -15717,7 +11813,6 @@ def simulate_multiplicity_per_proton(
                                 filtered_partners.append(partners[i])
                             seen_partners_filter.add(partner_h)
 
-                # Appliquer le filtrage
                 if len(filtered_J_vals) > 0:
                     homo_pairs = filtered_homo_pairs
                     J_vals = filtered_J_vals
@@ -15726,14 +11821,11 @@ def simulate_multiplicity_per_proton(
                     if filtered_partners:
                         partners = filtered_partners
 
-        # ✅ NOUVEAU: Pour les CH₂ diastéréotopiques, utiliser le regroupement avec séparation geminal/vicinal
-        # Cela garantit que le J geminal ne sera jamais fusionné avec un J vicinal de valeur similaire
-        # Résultat: "ddd" au lieu de "td" quand J_gem ≈ J_vic
         if geminal_partner is not None and config.separate_geminal_vicinal_J and J_orders:
             groups = _group_J_values_with_orders(
-                J_vals, J_orders, 
-                tol=_field_based_tol, 
-                anisotropy_high=anis_high, 
+                J_vals, J_orders,
+                tol=_field_based_tol,
+                anisotropy_high=anis_high,
                 config=config,
                 separate_geminal_vicinal=True
             )
@@ -15743,7 +11835,6 @@ def simulate_multiplicity_per_proton(
         if not groups:
             groups = [[]]
 
-        # J_couplings structurés
         J_couplings: List[Dict[str, float]] = []
         for g in groups:
             if not g:
@@ -15755,16 +11846,14 @@ def simulate_multiplicity_per_proton(
                     "J_hz": round(J_mean, 3),
                     "n_equiv": int(n_eq),
                 })
-        
-        # Détermination du label
-        # ✅ NOUVEAU: Si le module hétérocycle a fourni une multiplicité, l'utiliser directement
+
         heterocycle_expected_mult = None
         heterocycle_position = None
         sugar_expected_mult = None
         sugar_position = None
-        
+
         if is_heterocycle_managed and system_type and ':' in system_type:
-            # Extraire la multiplicité et position du format "heterocycle_<type>:<mult>:<position>"
+
             parts = system_type.split(':')
             if len(parts) >= 2:
                 heterocycle_expected_mult = parts[1]
@@ -15773,12 +11862,11 @@ def simulate_multiplicity_per_proton(
                     heterocycle_position = int(parts[2])
                 except (ValueError, TypeError):
                     heterocycle_position = parts[2] if parts[2] else None
-            # Nettoyer le system_type pour ne garder que le type
+
             system_type = parts[0]
-        
-        # ✅ NOUVEAU: Si le module sucre a fourni une multiplicité, l'utiliser directement
+
         if system_type and system_type.startswith('sugar_') and ':' in system_type:
-            # Extraire la multiplicité et position du format "sugar_<type>:<mult>:<position>"
+
             parts = system_type.split(':')
             if len(parts) >= 2:
                 sugar_expected_mult = parts[1]
@@ -15787,22 +11875,21 @@ def simulate_multiplicity_per_proton(
                     sugar_position = int(parts[2])
                 except (ValueError, TypeError):
                     sugar_position = parts[2] if parts[2] else None
-            # Nettoyer le system_type pour ne garder que le type (ex: sugar_pyranose)
+
             system_type = parts[0]
-        
+
         if heterocycle_expected_mult and heterocycle_expected_mult in LABEL2IDX:
-            # Utiliser la multiplicité du module hétérocycle
+
             label = heterocycle_expected_mult
         elif sugar_expected_mult and sugar_expected_mult in LABEL2IDX:
-            # Utiliser la multiplicité du module sucre
+
             label = sugar_expected_mult
         elif second_order:
-            # ✅ FIX: Si strong coupling, forcer label "m" (multiplet complexe)
-            # Le pattern spectral ne suit PAS les règles simples de multiplicité
+
             if second_order_type == "strong_coupling":
                 label = "m"
             else:
-                # Weak second order → approximation premier ordre acceptable
+
                 label2 = _first_order_label_from_groups(groups) if groups else "m"
                 if heavy_is_sp2_cache[true_heavy_idx] and heavy.GetSymbol() == "C" and J_vals:
                     label2 = _apparent_sp2_label_from_J(J_vals, minJ=0.4)
@@ -15811,41 +11898,35 @@ def simulate_multiplicity_per_proton(
             label = _first_order_label_from_groups(groups)
             if heavy_is_sp2_cache[true_heavy_idx] and heavy.GetSymbol() == "C" and J_vals:
                 label = _apparent_sp2_label_from_J(J_vals, minJ=0.4)
-        
+
         label_idx = LABEL2IDX.get(label, LABEL2IDX["m"])
-        
-        # ✅ CORRECTION: Protons diastéréotopiques doivent avoir des multiplicités distinctes
-        # Un proton diastéréotopique a un partenaire geminal + couplages vicinaux avec des voisins
-        # Ce qui donne typiquement ddd, dd, dt selon le nombre de couplages distincts
+
         if geminal_partner is not None and len(h_list) == 1:
-            # C'est un proton diastéréotopique séparé de son partenaire
-            # Les J devraient inclure: 1 geminal + n vicinaux
+
             n_j_groups = len(groups) if groups else 0
             n_j_total = len(J_vals) if J_vals else 0
-            
-            # Vérifier si on a le couplage geminal avec le partenaire
+
             has_geminal = any(abs(J - _get_geminal_2J(heavy, base)) < 2.0 for J in J_vals) if J_vals else False
-            
+
             if n_j_total >= 2:
-                # Pour proton benzylique diastéréotopique: généralement ddd
-                # (geminal ²J + 2 vicinaux ³J distincts avec les H sur C voisin)
+
                 if label in ("t", "q") and n_j_groups >= 1:
-                    # Convertir t → dd ou ddd selon le nombre de couplages distincts
+
                     if n_j_total == 2 and len(groups) == 1:
-                        # 2 J groupés ensemble mais devraient être distincts pour diastéréotope
+
                         label = "dd"
                         label_idx = LABEL2IDX["dd"]
                     elif n_j_total >= 3:
-                        # 3+ J → ddd minimum
+
                         if len(groups) == 1:
-                            # Tous groupés mais diastéréotope → ils sont en fait distincts
+
                             label = "ddd"
                             label_idx = LABEL2IDX["ddd"]
                         elif len(groups) == 2:
-                            # 2 groupes → le plus petit groupe donne dt ou td
+
                             g_sizes = sorted([len(g) for g in groups])
                             if g_sizes == [1, 2]:
-                                label = "dt"  # ou td selon l'ordre
+                                label = "dt"
                                 label_idx = LABEL2IDX["dt"]
                             else:
                                 label = "ddd"
@@ -15853,65 +11934,51 @@ def simulate_multiplicity_per_proton(
                         else:
                             label = "ddd"
                             label_idx = LABEL2IDX["ddd"]
-        
-        # ✅ CORRECTION: Protons couplant avec CH₂ diastéréotopiques
-        # Un proton (=CH ou autre) qui couple avec 2 protons diastéréotopiques
-        # doit avoir des J différents → pas de triplet mais doublet de doublets
+
         if label == "t" and len(homo_pairs) >= 2 and geminal_partner is None:
-            # Vérifier si les partenaires sont des protons diastéréotopiques
-            # ✅ FIX: Inclure les couplages gauche (2.5-5 Hz) en plus des anti (> 5 Hz)
-            partner_h_indices = [hp[0] for hp in homo_pairs if hp[1] > 2.5]  # J > 2.5 Hz (vicinaux gauche ou anti)
+
+            partner_h_indices = [hp[0] for hp in homo_pairs if hp[1] > 2.5]
             if len(partner_h_indices) >= 2:
-                # Vérifier si ces partenaires partagent le même heavy (même CH₂)
+
                 partner_heavies = []
-                # ✅ FIX BUG: Renommé 'ph' → 'partner_h_idx' pour éviter shadowing du paramètre pH
+
                 for partner_h_idx in partner_h_indices:
                     for hv, hs in heavy_to_H.items():
                         if partner_h_idx in hs:
                             partner_heavies.append(hv)
                             break
-                # Si 2+ partenaires sont sur le même CH₂
+
                 if len(partner_heavies) >= 2 and len(set(partner_heavies)) == 1:
-                    # Les partenaires sont sur le même CH₂ → probablement diastéréotopiques
-                    # Vérifier si ce CH₂ est proche d'un centre chiral
+
                     shared_heavy = partner_heavies[0]
                     is_diast, _ = _detect_diastereotopic_protons(molH, shared_heavy)
                     if is_diast:
-                        # Les J avec les deux H diastéréotopiques devraient être différents
-                        # Récupérer les J des partenaires diastéréotopiques
+
                         diast_J_vals = [hp[1] for hp in homo_pairs if hp[0] in partner_h_indices[:2]]
                         if len(diast_J_vals) >= 2:
-                            # Vérifier si les J sont vraiment différents
+
                             J_diff = abs(diast_J_vals[0] - diast_J_vals[1])
                             if J_diff > 2.0:
-                                # J significativement différents → dd (doublet de doublets)
+
                                 label = "dd"
                                 label_idx = LABEL2IDX["dd"]
                             else:
-                                # J similaires → t reste t (ou dt si autres couplages)
-                                pass  # Garder le label existant
+
+                                pass
                         else:
-                            # Par défaut si on ne peut pas comparer → dd
+
                             label = "dd"
                             label_idx = LABEL2IDX["dd"]
-        
-        # Simplification solvants visqueux
+
         complicated = label in {"ddt", "dtt", "ddd", "dddd", "ttq", "qqt", "tqq", "qtq"}
         if solv.get("viscosity", "low") != "low" and complicated:
             if (J_vals and max(J_vals) <= config.viscosity_simplify_maxJ_hz) or (len(groups) > config.viscosity_simplify_max_groups):
                 label = "m"
                 label_idx = LABEL2IDX["m"]
 
-        # =========================================================================
-        # ✅ NOUVEAU: HARMONISATION CH₃ - Protons équivalents DOIVENT avoir même J
-        # =========================================================================
-        # Si des partenaires viennent d'un groupe CH₃ (3 H sur même heavy),
-        # ils DOIVENT avoir le même J (physiquement impossible autrement).
-        # On fait la moyenne des J et on applique à tous.
-        # =========================================================================
         if homo_pairs:
-            # Grouper les partenaires par leur heavy atom
-            partner_heavy_map: Dict[int, List[int]] = {}  # partner_h_idx -> heavy_idx
+
+            partner_heavy_map: Dict[int, List[int]] = {}
             for hp_tuple in homo_pairs:
                 partner_h_idx = hp_tuple[0]
                 for hv_idx, hv_list in heavy_to_H.items():
@@ -15919,8 +11986,6 @@ def simulate_multiplicity_per_proton(
                         partner_heavy_map[partner_h_idx] = hv_idx
                         break
 
-            # Identifier les groupes CH₃ parmi les partenaires
-            # heavy_idx -> liste des (index dans homo_pairs, J, source)
             ch3_groups: Dict[int, List[Tuple[int, float, str]]] = {}
             for i, hp_tuple in enumerate(homo_pairs):
                 partner_h_idx, J_val = hp_tuple[0], hp_tuple[1]
@@ -15928,31 +11993,26 @@ def simulate_multiplicity_per_proton(
 
                 if partner_h_idx in partner_heavy_map:
                     hv = partner_heavy_map[partner_h_idx]
-                    # Est-ce un CH₃? (3 H sur ce heavy atom)
+
                     if hv in heavy_to_H and len(heavy_to_H[hv]) == 3:
                         if hv not in ch3_groups:
                             ch3_groups[hv] = []
                         ch3_groups[hv].append((i, J_val, hp_source))
 
-            # Pour chaque groupe CH₃, harmoniser les J
-            homo_pairs_list = list(homo_pairs)  # Convertir en liste modifiable
+            homo_pairs_list = list(homo_pairs)
             for hv_idx, entries in ch3_groups.items():
                 if len(entries) < 2:
                     continue
 
-                # Calculer la moyenne des J (ignorer les valeurs aberrantes trop différentes)
                 J_vals_ch3 = [e[1] for e in entries if e[1] > 0]
                 if not J_vals_ch3:
                     continue
 
-                # Vérifier la variance - si grande, préférer la valeur majoritaire
                 J_mean = sum(J_vals_ch3) / len(J_vals_ch3)
 
-                # Détecter les outliers (valeurs très différentes de la moyenne)
-                # Si une valeur est > 2x différente des autres, c'est probablement un artefact Karplus
                 J_filtered = []
                 for j in J_vals_ch3:
-                    if abs(j - J_mean) < 3.0:  # Tolérance de 3 Hz
+                    if abs(j - J_mean) < 3.0:
                         J_filtered.append(j)
 
                 if J_filtered:
@@ -15960,8 +12020,6 @@ def simulate_multiplicity_per_proton(
                 else:
                     J_harmonized = J_mean
 
-                # Trouver la meilleure source parmi les entrées
-                # Tables expérimentales > Karplus 3D > Fallback
                 source_priority = {
                     "vinylic": 20, "alkyne": 20, "aromatic_exact": 19, "heterocycle": 19,
                     "heterocycle_table": 19, "heterocycle_expected_mult": 19, "heterocycle_singlet": 19,
@@ -15979,19 +12037,14 @@ def simulate_multiplicity_per_proton(
                 }
                 best_source = max(entries, key=lambda e: source_priority.get(e[2], 1))[2]
 
-                # Appliquer le J harmonisé à toutes les entrées du groupe CH₃
                 for idx, _, _ in entries:
                     old_tuple = homo_pairs_list[idx]
                     homo_pairs_list[idx] = (old_tuple[0], round(J_harmonized, 2), best_source)
 
-            # Reconvertir en tuple si nécessaire
             homo_pairs = homo_pairs_list
 
-        # Partenaires - avec filtre pour éviter les doublons
-        # ✅ FIX: Si un partenaire apparaît plusieurs fois avec des J différents,
-        # garder la valeur correcte (ortho/meta/para) et supprimer les valeurs incorrectes (ex: 12.0 Hz)
         partner_info: List[Dict[str, Any]] = []
-        seen_partners: Dict[int, Tuple[int, float]] = {}  # partner_h_idx -> (index dans partner_info, J_val)
+        seen_partners: Dict[int, Tuple[int, float]] = {}
 
         for hp_tuple in homo_pairs:
             partner_h_idx, J_val = hp_tuple[0], hp_tuple[1]
@@ -16000,23 +12053,21 @@ def simulate_multiplicity_per_proton(
                 continue
 
             if partner_h_idx not in seen_partners:
-                # Premier ajout de ce partenaire
+
                 idx = len(partner_info)
-                # ✅ FIX: Utiliser corrected_shifts (avec deltas diastéréotopiques) si disponible
+
                 partner_shift = corrected_shifts.get(partner_h_idx, proton_shifts_ppm.get(partner_h_idx, 0.0))
                 partner_info.append({
                     "partner_h_index": int(partner_h_idx),
                     "partner_shift_ppm": round(float(partner_shift), 3),
                     "J_hz": round(float(J_val), 2),
-                    "J_source": hp_source,  # ✅ NOUVEAU: source explicite du J
+                    "J_source": hp_source,
                 })
                 seen_partners[partner_h_idx] = (idx, J_val, hp_source)
             else:
-                # Partenaire déjà vu - décider lequel garder basé sur la source
+
                 prev_idx, prev_J, prev_source = seen_partners[partner_h_idx]
 
-                # ✅ NOUVEAU: Utiliser les priorités de source au lieu de valeurs hardcodées
-                # Tables expérimentales > Karplus 3D > Fallback
                 source_priority = {
                     "vinylic": 20, "alkyne": 20, "aromatic_exact": 19, "heterocycle": 19,
                     "heterocycle_table": 19, "heterocycle_expected_mult": 19, "heterocycle_singlet": 19,
@@ -16035,31 +12086,28 @@ def simulate_multiplicity_per_proton(
                 new_priority = source_priority.get(hp_source, 1)
                 old_priority = source_priority.get(prev_source, 1)
 
-                # Remplacer si la nouvelle source a une priorité plus élevée
                 if new_priority > old_priority:
                     partner_info[prev_idx]["J_hz"] = round(float(J_val), 2)
                     partner_info[prev_idx]["J_source"] = hp_source
                     seen_partners[partner_h_idx] = (prev_idx, J_val, hp_source)
-                # Si même priorité et valeurs très différentes, garder celle non-standard
+
                 elif new_priority == old_priority and abs(J_val - prev_J) > 3.0:
-                    # Préférer la valeur non-standard (plus spécifique)
+
                     if 5.5 < prev_J < 8.5 and not (5.5 < J_val < 8.5):
                         partner_info[prev_idx]["J_hz"] = round(float(J_val), 2)
                         partner_info[prev_idx]["J_source"] = hp_source
                         seen_partners[partner_h_idx] = (prev_idx, J_val, hp_source)
-                # Sinon garder l'ancien (déjà dans partner_info)
-        
-        # === SIMULATION HAMILTONIEN EXACT pour systèmes second ordre ===
+
         exact_transitions = None
-        if (config.use_exact_spin_simulation and system_type is not None 
+        if (config.use_exact_spin_simulation and system_type is not None
             and system_type in ("AB", "AB_weak", "AB₂", "AA'BB'", "A₂X₂", "ABX", "A₂X₃", "A₂B₃")):
-            # Collecter les indices H du système
+
             h_indices = list(h_list)
-            # Ajouter les partenaires
+
             for pinfo in homo_pairs:
                 if pinfo[0] not in h_indices:
                     h_indices.append(pinfo[0])
-            
+
             if len(h_indices) <= config.exact_spin_max_spins:
                 try:
                     exact_transitions = _get_exact_spectrum_for_spin_system(
@@ -16071,10 +12119,9 @@ def simulate_multiplicity_per_proton(
                     )
                 except Exception:
                     exact_transitions = None
-        
-        # Construction des raies
+
         if exact_transitions is not None and len(exact_transitions) > 0:
-            # Utiliser les transitions exactes de l'Hamiltonien
+
             peaks = [(t[0], t[1]) for t in exact_transitions]
         elif second_order and second_order_type in {
             "strong_coupling", "moderate_second_order", "weak_second_order"
@@ -16083,18 +12130,17 @@ def simulate_multiplicity_per_proton(
             peaks = _calculate_roof_effect_intensities(Jmax, delta_nu_min_hz, label)
         else:
             peaks = _first_order_peak_positions(J_couplings, label)
-        
+
         J_AB = None
         if len(J_couplings) >= 1:
             J_AB = J_couplings[0]["J_hz"]
         peaks = _add_combination_lines(peaks, system_type, J_AB, config, delta_nu_hz=delta_nu_min_hz)
-        
+
         peak_positions = [float(p[0]) for p in peaks]
         peak_intensities = [float(p[1]) for p in peaks]
-        
-        # ✅ NOUVEAU: Récupérer le shift corrigé (avec corrections diastéréotopiques)
+
         corrected_shift = corrected_shifts.get(h_idx, proton_shifts_ppm.get(h_idx, 0.0)) if corrected_shifts else proton_shifts_ppm.get(h_idx, 0.0)
-        
+
         result[h_idx] = {
             "label": label,
             "label_idx": label_idx,
@@ -16106,21 +12152,15 @@ def simulate_multiplicity_per_proton(
             "virtual_coupling": is_virtual,
             "partners": partner_info,
             "satellites_13C_hz": [round(float(s), 2) for s in (sat or [])],
-            "broadening": broadening,  # ✅ NOUVEAU: None, "sharp", "broad", "very_broad", "exchanged"
-            "heterocycle_position": heterocycle_position,  # ✅ Position IUPAC pour hétérocycles (None si non applicable)
-            "sugar_position": sugar_position,  # ✅ Position pour sucres (None si non applicable)
-            "corrected_shift_ppm": round(float(corrected_shift), 6),  # ✅ Shift corrigé (avec diastéréotopie)
+            "broadening": broadening,
+            "heterocycle_position": heterocycle_position,
+            "sugar_position": sugar_position,
+            "corrected_shift_ppm": round(float(corrected_shift), 6),
         }
 
-    # =========================================================================
-    # ✅ POST-TRAITEMENT: Réciprocité J, partners manquants, cohérence J_couplings
-    # =========================================================================
-    # Détecter si grosse molécule (averaging conformationnel probablement désactivé)
     n_heavy_atoms = mol.GetNumHeavyAtoms() if mol else 0
-    is_large_mol = n_heavy_atoms > 40  # Seuil pour grosses molécules
+    is_large_mol = n_heavy_atoms > 40
 
-    # ✅ FIX: Utiliser corrected_shifts (avec deltas diastéréotopiques appliqués)
-    # au lieu de proton_shifts_ppm pour que partner_shift_ppm reflète les shifts réels
     result = _post_process_reciprocity_and_partners(
         result, corrected_shifts, heavy_to_H,
         is_large_molecule=is_large_mol
@@ -16128,9 +12168,6 @@ def simulate_multiplicity_per_proton(
 
     return result
 
-
-# ✅ PRÉPARATION MOLÉCULE (avec validation structure)
-# ---------------------------
 def prepare_molecule_for_nmr(
     smiles: str,
     generate_3d: bool = True,
@@ -16138,72 +12175,46 @@ def prepare_molecule_for_nmr(
     skip_validation: bool = False,
     force_field: str = "MMFF94s",
 ) -> Tuple[Chem.Mol, Dict[int, List[int]], Dict[int, int]]:
-    """
-    ✅ Version corrigée avec validation moléculaire.
-    
-    Prépare une molécule pour la simulation RMN :
-    - Valide la structure (valences, stéréochimie, cycles)
-    - Ajoute les hydrogènes explicites
-    - Génère éventuellement une géométrie 3D
-    - Construit la connectivité X-H
-    
-    Args:
-        smiles: SMILES de la molécule
-        generate_3d: Générer une conformation 3D
-        random_seed: Graine aléatoire pour la génération 3D
-        skip_validation: Passer la validation (dangereux, seulement pour debug)
-        force_field: Force field pour optimisation ("MMFF94", "MMFF94s", "UFF")
-    
-    Returns:
-        (molH, heavy_to_H, proton_to_heavy)
-        - molH : Mol avec H explicites
-        - heavy_to_H : {heavy_idx: [h_idx1, h_idx2, ...]}
-        - proton_to_heavy : {h_idx: heavy_idx}
-    
-    Raises:
-        ValueError: Si le SMILES est invalide ou la structure incorrecte
-    """
+
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"SMILES invalide: {smiles}")
-    
-    # ✅ VALIDATION OBLIGATOIRE (avec smiles pour messages d'erreur clairs)
+
     if not skip_validation:
         _validate_molecular_structure(mol, smiles)
-    
+
     molH = Chem.AddHs(mol, addCoords=True)
-    
+
     if generate_3d and molH.GetNumConformers() == 0:
-        # ✅ NOUVEAU: Skip 3D pour très grosses molécules
+
         n_heavy = mol.GetNumHeavyAtoms()
         n_rings = len(mol.GetRingInfo().AtomRings())
         should_skip_3d = n_heavy > 60 or n_rings > 6
-        
+
         if should_skip_3d:
-            # Pour grosses molécules, utiliser les tables de J au lieu de 3D
-            pass  # Skip silencieusement
+
+            pass
         else:
             try:
-                try: 
+                try:
                     ps = AllChem.ETKDGv3()
-                except AttributeError: 
+                except AttributeError:
                     ps = AllChem.ETKDG()
                 ps.randomSeed = int(random_seed)
-                # ✅ Limiter les tentatives pour éviter blocage
+
                 ps.maxAttempts = 10 if n_heavy > 50 else 50
                 if n_heavy > 50:
                     ps.useRandomCoords = True
                 res = AllChem.EmbedMolecule(molH, ps)
-                if res == 0: 
+                if res == 0:
                     _optimize_molecule_geometry(molH, force_field, 200, 0)
             except Exception as e:
                 if SimConfig().verbose:
                     print(f"[prepare_molecule_for_nmr] 3D generation failed: {e}")
-    
-    # Construction de la connectivité (indices à base 0)
+
     heavy_to_H: Dict[int, List[int]] = defaultdict(list)
     proton_to_heavy: Dict[int, int] = {}
-    
+
     for atom in molH.GetAtoms():
         if atom.GetSymbol() != "H":
             continue
@@ -16214,20 +12225,11 @@ def prepare_molecule_for_nmr(
         idx_h = atom.GetIdx()
         proton_to_heavy[idx_h] = heavy_idx
         heavy_to_H[heavy_idx].append(idx_h)
-    
-    # ✅ Convertir defaultdict en dict normal pour éviter des surprises
+
     return molH, dict(heavy_to_H), proton_to_heavy
 
-# ---------------------------
-# ESTIMATION HEURISTIQUE DES SHIFTS
-# ---------------------------
 def _estimate_shifts_heuristic(molH: Chem.Mol, proton_to_heavy: Dict[int, int]) -> Dict[int, float]:
-    """
-    Estime les déplacements chimiques ¹H basés sur l'environnement structural.
 
-    Cette fonction fournit des valeurs approximatives pour la simulation
-    de multiplicités. Pour des prédictions précises, utilisez un modèle ML.
-    """
     shifts = {}
 
     for h_idx, heavy_idx in proton_to_heavy.items():
@@ -16238,26 +12240,26 @@ def _estimate_shifts_heuristic(molH: Chem.Mol, proton_to_heavy: Dict[int, int]) 
         if symbol == 'C':
             if hyb == Chem.rdchem.HybridizationType.SP3:
                 shift = 1.5
-                # Effet des hétéroatomes voisins
+
                 for n in heavy.GetNeighbors():
-                    if n.GetAtomicNum() in [7, 8, 9, 17, 35]:  # N, O, F, Cl, Br
+                    if n.GetAtomicNum() in [7, 8, 9, 17, 35]:
                         shift += 1.5
                     elif n.GetSymbol() == 'C' and n.GetIsAromatic():
-                        shift += 0.8  # Benzylique
+                        shift += 0.8
                 shift = min(shift, 5.5)
             elif hyb == Chem.rdchem.HybridizationType.SP2:
                 if heavy.GetIsAromatic():
-                    shift = 7.2  # Aromatique
+                    shift = 7.2
                 else:
-                    shift = 5.5  # Vinylique
+                    shift = 5.5
             elif hyb == Chem.rdchem.HybridizationType.SP:
-                shift = 2.5  # Alcyne terminal
+                shift = 2.5
             else:
                 shift = 2.0
         elif symbol == 'N':
-            shift = 6.5  # NH amide/amine
+            shift = 6.5
         elif symbol == 'O':
-            shift = 4.0  # OH
+            shift = 4.0
         else:
             shift = 2.0
 
@@ -16265,10 +12267,6 @@ def _estimate_shifts_heuristic(molH: Chem.Mol, proton_to_heavy: Dict[int, int]) 
 
     return shifts
 
-
-# ---------------------------
-# API SIMPLE : simulate_molecule
-# ---------------------------
 def simulate_molecule(
     smiles: str,
     solvent: str = DEFAULT_SOLVENT,
@@ -16276,32 +12274,11 @@ def simulate_molecule(
     temperature_k: float = DEFAULT_TEMPERATURE_K,
     generate_3d: bool = True,
     config: Optional[SimConfig] = None,
-    # Paramètres dynamics post-processeur
+
     enable_dynamics: bool = False,
     ph: float = 7.4,
 ) -> Dict[int, Dict[str, Any]]:
-    """
-    ✅ API principale "one-liner" corrigée.
-    
-    Simule le spectre RMN ¹H d'une molécule à partir de son SMILES.
-    
-    Args:
-        smiles: SMILES de la molécule
-        solvent: Solvant deutéré (CDCl3, DMSO-d6, D2O, etc.)
-        spectrometer_mhz: Fréquence du spectromètre (MHz)
-        temperature_k: Température (K)
-        generate_3d: Générer une géométrie 3D
-        config: Configuration avancée (SimConfig)
-    
-    Returns:
-        { h_idx: {label, J_couplings, peak_positions_hz, ...}, ... }
-        Un dictionnaire par proton avec toutes les informations RMN
-    
-    Example:
-        >>> result = simulate_molecule("CC(O)C")
-        >>> for h_idx, data in result.items():
-        ...     print(f"H{h_idx}: {data['label']} @ {data.get('shift_ppm', 'N/A')} ppm")
-    """
+
     if config is None:
         config = SimConfig()
 
@@ -16309,12 +12286,9 @@ def simulate_molecule(
     if mol is None:
         raise ValueError(f"SMILES invalide ou non supporté: '{smiles}'")
 
-    # ✅ NOUVEAU: Vérification PRÉCOCE de la taille pour skip 3D
-    # Pour très grosses molécules, la génération 3D peut prendre > 5 min
-    # On détecte cela ICI avant d'appeler prepare_molecule_for_nmr
     n_heavy = mol.GetNumHeavyAtoms()
     n_rings = len(mol.GetRingInfo().AtomRings())
-    
+
     actual_generate_3d = generate_3d
     if config.skip_3d_for_large_molecules:
         if n_heavy > config.skip_3d_above_heavy_atoms:
@@ -16326,17 +12300,14 @@ def simulate_molecule(
             if config.verbose:
                 print(f"[FAST MODE] Skip 3D: {n_rings} cycles > {config.skip_3d_above_fused_rings} seuil")
 
-    # Préparer la molécule et la connectivité X–H (avec validation)
     molH, connectivity, proton_to_heavy = prepare_molecule_for_nmr(
         smiles,
-        generate_3d=actual_generate_3d,  # ✅ Utiliser le flag modifié
+        generate_3d=actual_generate_3d,
         random_seed=config.random_seed,
     )
 
-    # Estimation fallback des shifts (remplaçable par un prédicteur sérieux)
     shifts = _estimate_shifts_heuristic(molH, proton_to_heavy)
 
-    # L'algorithme complet de multiplicité est dans simulate_multiplicity_per_proton
     return simulate_multiplicity_per_proton(
         mol=mol,
         x_h_connectivity=connectivity,
@@ -16350,11 +12321,3 @@ def simulate_molecule(
         enable_dynamics=enable_dynamics,
         ph=ph,
     )
-
-
-
-
-
-
-
-

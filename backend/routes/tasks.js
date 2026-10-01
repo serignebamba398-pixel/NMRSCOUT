@@ -205,7 +205,7 @@ router.get('/api/inspect/:taskId', (req, res) => {
   }
 });
 
-// NEW: Get annotation parameters for a task
+// Get annotation parameters for a task
 router.get('/api/tasks/:taskId/params', (req, res) => {
   try {
     const taskId = req.params.taskId;
@@ -229,7 +229,7 @@ router.get('/api/tasks/:taskId/params', (req, res) => {
 
 /**
  * GET /api/tasks/pending
- * Liste toutes les tâches qui peuvent être reprises après une déconnexion
+ * List tasks that can resume after a disconnected session.
  */
 router.get('/api/tasks/pending', (req, res) => {
   try {
@@ -249,7 +249,7 @@ router.get('/api/tasks/pending', (req, res) => {
 
 /**
  * GET /api/tasks/pending/count
- * Retourne simplement le nombre de tâches en attente (léger pour polling)
+ * Return the pending task count for lightweight polling.
  */
 router.get('/api/tasks/pending/count', (req, res) => {
   try {
@@ -262,7 +262,7 @@ router.get('/api/tasks/pending/count', (req, res) => {
 
 /**
  * GET /api/tasks/:taskId/checkpoint
- * Récupère le checkpoint d'une tâche spécifique
+ * Read the checkpoint for a task.
  */
 router.get('/api/tasks/:taskId/checkpoint', (req, res) => {
   try {
@@ -288,13 +288,13 @@ router.get('/api/tasks/:taskId/checkpoint', (req, res) => {
 
 /**
  * GET /api/tasks/:taskId/status
- * Vérifie le statut d'une tâche (en cours, terminée, interrompue)
+ * Read task status: running, completed, or interrupted.
  */
 router.get('/api/tasks/:taskId/status', (req, res) => {
   try {
     const taskId = req.params.taskId;
     
-    // Vérifier si la tâche est en cours d'exécution
+    // Check whether the task is running.
     const runningTask = getTask(taskId);
     if (runningTask) {
       return res.json({
@@ -305,7 +305,7 @@ router.get('/api/tasks/:taskId/status', (req, res) => {
       });
     }
     
-    // Vérifier le checkpoint
+    // Check the saved checkpoint.
     const checkpoint = loadCheckpoint(taskId);
     if (checkpoint) {
       return res.json({
@@ -317,7 +317,7 @@ router.get('/api/tasks/:taskId/status', (req, res) => {
       });
     }
     
-    // Vérifier si le dossier existe (tâche terminée sans checkpoint)
+    // Check for a task directory when no checkpoint was saved.
     const workDir = path.join(getActiveOutputsDir(), taskId);
     if (fs.existsSync(workDir)) {
       return res.json({
@@ -338,7 +338,7 @@ router.get('/api/tasks/:taskId/status', (req, res) => {
 
 /**
  * DELETE /api/tasks/:taskId/pending
- * Supprime une tâche de la liste des tâches en attente (sans la reprendre)
+ * Dismiss a pending task without resuming it.
  */
 router.delete('/api/tasks/:taskId/pending', (req, res) => {
   try {
@@ -355,7 +355,7 @@ router.delete('/api/tasks/:taskId/pending', (req, res) => {
 
 /**
  * POST /api/tasks/:taskId/dismiss
- * Marque une tâche pendante comme "vue" (l'utilisateur ne veut pas la reprendre)
+ * Mark a pending task as dismissed.
  */
 router.post('/api/tasks/:taskId/dismiss', (req, res) => {
   try {
@@ -377,7 +377,7 @@ router.post('/api/tasks/:taskId/dismiss', (req, res) => {
 
 /**
  * POST /api/tasks/:taskId/tolerance-results
- * Sauvegarde les résultats d'optimisation de tolérance
+ * Save tolerance optimization results.
  */
 router.post('/api/tasks/:taskId/tolerance-results', (req, res) => {
   try {
@@ -412,7 +412,7 @@ router.post('/api/tasks/:taskId/tolerance-results', (req, res) => {
 
 /**
  * GET /api/tasks/:taskId/tolerance-results
- * Récupère les résultats d'optimisation de tolérance sauvegardés
+ * Load saved tolerance optimization results.
  */
 router.get('/api/tasks/:taskId/tolerance-results', (req, res) => {
   try {
@@ -443,7 +443,7 @@ router.get('/api/tasks/:taskId/tolerance-results', (req, res) => {
 
 /**
  * DELETE /api/tasks/:taskId/tolerance-results
- * Supprime les résultats d'optimisation de tolérance sauvegardés
+ * Delete saved tolerance optimization results.
  */
 router.delete('/api/tasks/:taskId/tolerance-results', (req, res) => {
   try {

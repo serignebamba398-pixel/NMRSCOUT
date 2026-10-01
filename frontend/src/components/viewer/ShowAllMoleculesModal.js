@@ -107,7 +107,7 @@ function ShowAllMoleculesModal({
         const { molblock: cleanMol } = stripExplicitHFromMolblock(mol);
         const tmpMol = rdkit.get_mol(cleanMol);
         if (!tmpMol) continue;
-        // Convertir en SMILES puis recréer pour obtenir une 2D propre sans coordonnées 3D
+        // Rebuild from SMILES to generate a 2D layout without the original 3D coordinates.
         const smiles = tmpMol.get_smiles();
         tmpMol.delete();
         if (!smiles) continue;

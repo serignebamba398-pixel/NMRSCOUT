@@ -16,13 +16,13 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     height: 500,
   });
 
-  // Responsive canvas sizing avec ResizeObserver
+  // Resize the canvas with its container.
   useEffect(() => {
     const updateSize = () => {
       if (!wrapperRef.current) return;
       const rect = wrapperRef.current.getBoundingClientRect();
 
-      // Utiliser la largeur du conteneur, pas la fenêtre
+      // Size the chart to its container.
       const containerWidth = rect.width;
       const isSingleColumn = containerWidth < 700;
       const columns = isSingleColumn ? 1 : 2;
@@ -32,7 +32,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       const innerHeight = Math.max(260, innerWidth * 0.65);
 
       setCanvasSize(prev => {
-        // Éviter les mises à jour inutiles
+        // Skip unchanged dimensions.
         if (prev.width === Math.round(innerWidth) && prev.height === Math.round(innerHeight)) {
           return prev;
         }
@@ -45,7 +45,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
 
     updateSize();
     
-    // Utiliser ResizeObserver pour détecter les changements de taille du conteneur
+    // Observe container size changes.
     let resizeObserver;
     if (wrapperRef.current && typeof ResizeObserver !== 'undefined') {
       resizeObserver = new ResizeObserver(() => {
@@ -53,7 +53,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       });
       resizeObserver.observe(wrapperRef.current);
       
-      // Observer aussi le parent modal s'il existe
+      // Observe the containing modal when present.
       const modalContainer = wrapperRef.current.closest('.modal-container');
       if (modalContainer) {
         resizeObserver.observe(modalContainer);
@@ -75,8 +75,8 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const is2D = data.type === "COSY" || data.type === "HSQC";
-    const PAD = { top: 35, bottom: is2D ? 120 : 95, left: 45, right: 85 }; // Légende à droite
+    const is2D = data.type === "COSY" || data.type === "TOCSY" || data.type === "HSQC";
+    const PAD = { top: 35, bottom: is2D ? 120 : 95, left: 45, right: 85 }; // Right-hand legend.
     const graphW = width - PAD.left - PAD.right;
     const graphH = height - PAD.top - PAD.bottom;
 
@@ -116,7 +116,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const binLabels = ["0–20%", "20–40%", "40–60%", "60–80%", "80–100%"];
     const maxY = 100;
 
-    // Calcul cumuls
+    // Calculate cumulative values.
     const stacked = [];
     resultsFiltered.forEach((r) => {
       const totalMol = r.totalMolecules || 0;
@@ -141,7 +141,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       stacked.push({ binsPct, cumBase, cumTop });
     });
 
-    // Dessin aires empilées
+    // Draw stacked areas.
     for (let bin = 0; bin < 5; bin++) {
       ctx.beginPath();
 
@@ -170,7 +170,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       ctx.stroke();
     }
 
-    // Légende (compacte)
+    // Compact legend.
     binLabels.forEach((label, bin) => {
       const legendX = PAD.left + graphW + 8;
       const legendY = PAD.top + bin * 18;
@@ -242,7 +242,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const is2D = data.type === "COSY" || data.type === "HSQC";
+    const is2D = data.type === "COSY" || data.type === "TOCSY" || data.type === "HSQC";
     const PAD = { top: 35, bottom: is2D ? 120 : 95, left: 45, right: 20 };
     const graphW = width - PAD.left - PAD.right;
     const graphH = height - PAD.top - PAD.bottom;
@@ -389,7 +389,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const ctx = canvas.getContext("2d");
     const width = canvas.width;
     const height = canvas.height;
-    const is2D = data.type === "COSY" || data.type === "HSQC";
+    const is2D = data.type === "COSY" || data.type === "TOCSY" || data.type === "HSQC";
     const PAD = { top: 30, bottom: is2D ? 125 : 100, left: 40, right: 15 };
     const graphW = width - PAD.left - PAD.right;
     const graphH = height - PAD.top - PAD.bottom;
@@ -409,7 +409,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
     const resultsFiltered = data.results.filter((r) => !r.error);
     if (resultsFiltered.length === 0) return;
 
-    // Calculer recouvrements
+    // Calculate overlaps.
     const overlapInfo = resultsFiltered.map((r, idx) => {
       const currSignals = new Set(r.matchedSignals || []);
       const commonWithOthers = new Set();
@@ -456,7 +456,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
       let tolLabel = "";
       if (r.toleranceParams.tol_correspondence !== undefined) {
         tolLabel = r.toleranceParams.tol_correspondence.toFixed(2);
-      } else if (data.type === "COSY" || data.type === "HSQC") {
+      } else if (data.type === "COSY" || data.type === "TOCSY" || data.type === "HSQC") {
         tolLabel = `${r.toleranceParams.tol_correspondence_f1.toFixed(1)}/${r.toleranceParams.tol_correspondence_f2.toFixed(1)}`;
       }
 
@@ -605,7 +605,7 @@ export const ToleranceResultsCharts = ({ resultSet, onDelete }) => {
           className="btn btn-danger btn-small"
           title="Delete this test result"
         >
-          🗑️ Delete
+          Delete
         </button>
       </div>
 

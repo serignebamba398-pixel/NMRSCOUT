@@ -1,0 +1,17 @@
+{
+  "source": "backend\\ml_dependencies\\data\\fingerprint_database.pkl",
+  "replacements": [
+    {
+      "target": "dist\\win-unpacked\\resources\\app.asar.unpacked\\backend\\ml_dependencies\\data\\fingerprint_database.pkl",
+      "backup": "fingerprint_database_1.pkl",
+      "old_sha256": "5a54d3eccf454173a1f349e654c5d87287d85655144ae0cd879bd96fa7212888",
+      "new_sha256": "e6c8515172816dfdcd76b24f3c88056b667deaeac53dad0bd304da403f81dc9a"
+    },
+    {
+      "target": "dist\\win-unpacked\\resources\\python\\nmr_engine_production\\_internal\\ml_dependencies\\data\\fingerprint_database.pkl",
+      "backup": "fingerprint_database_2.pkl",
+      "old_sha256": "5a54d3eccf454173a1f349e654c5d87287d85655144ae0cd879bd96fa7212888",
+      "new_sha256": "e6c8515172816dfdcd76b24f3c88056b667deaeac53dad0bd304da403f81dc9a"
+    }
+  ]
+}

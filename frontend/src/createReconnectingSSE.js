@@ -183,7 +183,7 @@ export function createReconnectingSSE({
         return;
       }
 
-      // [NOTE] Important: API_BASE_URL already includes "/api" if needed
+      // Important: API_BASE_URL already includes "/api" if needed
       const r = await fetch(`${API_BASE_URL}/tasks/${taskId}`);
       if (!r.ok) return;
 

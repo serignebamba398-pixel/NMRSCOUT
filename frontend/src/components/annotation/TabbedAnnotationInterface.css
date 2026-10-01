@@ -1,4 +1,4 @@
-/* Style onglets MS-FINDER pour les modales */
+/* Tabbed annotation settings. */
 
 .tabbed-annotation {
   display: flex;
@@ -63,7 +63,7 @@
   gap: 16px;
 }
 
-/* Sections de paramètres */
+/* Parameter sections. */
 .settings-section {
   background: #fafafa;
   border: 1px solid #e0e0e0;
@@ -133,7 +133,7 @@
   color: #666;
 }
 
-/* Grille CSV */
+/* CSV grid. */
 .csv-grid {
   display: flex;
   gap: 8px;
@@ -177,7 +177,7 @@
   font-style: italic;
 }
 
-/* Liste des méthodes améliorée */
+/* Method list. */
 .methods-list {
   display: flex;
   flex-direction: column;
@@ -269,7 +269,7 @@
   cursor: not-allowed;
 }
 
-/* Résumé des méthodes */
+/* Method summary. */
 .methods-summary {
   margin-top: 12px;
   padding: 10px;
@@ -288,7 +288,7 @@
   font-weight: 600;
 }
 
-/* Ancien grid gardé pour compatibilité */
+/* Legacy grid retained for compatibility. */
 .methods-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -338,7 +338,7 @@
   color: #4caf50;
 }
 
-/* Grille paramètres */
+/* Parameter grid. */
 .params-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -384,7 +384,7 @@
   color: #888;
 }
 
-/* Statut fond */
+/* Background status. */
 .bg-status {
   margin-top: 8px;
   padding: 6px 10px;
@@ -458,7 +458,7 @@
   background: #e8e8e8;
 }
 
-/* Message succès */
+/* Success message. */
 .success-message {
   padding: 10px 16px;
   background: #e8f5e9;

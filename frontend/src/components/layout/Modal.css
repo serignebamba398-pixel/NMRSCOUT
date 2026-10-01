@@ -62,7 +62,7 @@
   border-radius: 4px;
 }
 
-/* Transition douce entre les tailles */
+/* Animate changes in modal size. */
 .modal-container {
   transition: width 0.3s ease, height 0.3s ease, max-width 0.3s ease, max-height 0.3s ease;
 }

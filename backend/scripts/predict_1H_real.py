@@ -1,30 +1,6 @@
 ﻿#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""predict_1H_real.py (integrated utils version)
-------------------------------------------------
-Extract individual 1H shifts from SDF files containing an atom-level shift vector
-stored in any SDF property (arbitrary name). The vector is retrieved robustly via
-ml_sdf_utils.get_atom_shift_vector().
-
-The SDF is expected to be already corrected:
-- Equivalent H have identical shifts
-- Diastereotopic H have different shifts (corrected upstream)
-
-Features:
-- Preserves RDKit indexing (0-based) and explicit Hs (important).
-- Lists all protons individually with their direct shifts (no grouping, no averaging).
-- GroupType (CH3/CH2/CH) indicates how many H are on the parent carbon.
-- Computes an ECFP4 (bitstring) for each molecule.
-- Exports a CSV: Filename | Assignment | H_index | Parent_C_index | GroupType | Delta_ppm | Nb_H | ECFP4
-
-Usage (batch):
-    python predict_1H_real.py --input_folder /path/to/sdfs --output_csv /path/out/all_signals_1H.csv
-    # + --recursive for subfolders
-
-Usage (single):
-    python predict_1H_real.py --sdf_path /path/to/file.sdf --output_csv /path/out/signals_1H.csv
-"""
 
 import os
 import sys
@@ -124,17 +100,7 @@ def get_all_protons_with_shifts(
     shifts: List[float],
     keep_exchangeable: bool = False
 ) -> List[Tuple[int, int, str, float]]:
-    """
-    Return all protons individually with their shifts (no grouping, no averaging).
-
-    Returns list of tuples: (parent_idx, H_idx, group_type, shift_ppm)
-    group_type ∈ {"CH3","CH2","CH"} based on how many H are on the parent carbon.
-
-    Args:
-        mol: RDKit molecule with explicit H
-        shifts: Atom shift vector from SDF
-        keep_exchangeable: Include OH, NH, SH protons (default False)
-    """
+    
     parent2Hs = build_parent_to_hydrogens(mol, keep_exchangeable=keep_exchangeable)
     protons: List[Tuple[int, int, str, float]] = []
 
@@ -167,18 +133,7 @@ def build_1h_table_for_sdf(
     sdf_path: str,
     keep_exchangeable: bool = False
 ) -> pd.DataFrame:
-    """
-    Build a DataFrame with individual proton shifts (no grouping, no averaging).
-    The SDF is already corrected: equivalent H have identical shifts, diastereotopic H have different shifts.
-
-    Columns:
-      Filename | Assignment | H_index | Parent_C_index | GroupType | Delta_ppm | Nb_H | ECFP4
-    - Assignment == H_index (single proton index, for backward compatibility)
-    - Delta_ppm = direct shift from the SDF (no averaging)
-    - GroupType = CH3/CH2/CH based on how many H are on the parent carbon
-    - Nb_H = always 1 (individual proton)
-    - keep_exchangeable: if True, include exchangeable protons (OH, NH, SH)
-    """
+    
     try:
         send_progress(10, f"Reading {os.path.basename(sdf_path)}...")
         mol = read_molecule_keepH(sdf_path)
@@ -228,10 +183,7 @@ def process_folder_to_csv(
     recursive: bool = False,
     keep_exchangeable: bool = False
 ) -> int:
-    """
-    Process all SDF files from a folder and concatenate the tables.
-    Returns 0 on success, 1 otherwise.
-    """
+    
     sdf_files = find_sdf_files(input_folder, recursive=recursive)
     if not sdf_files:
         print("[ERROR] No .sdf file found.")

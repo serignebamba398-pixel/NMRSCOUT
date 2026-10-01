@@ -1,4 +1,4 @@
-/* Toolbar style SIRIUS - fond gris clair, icônes rondes bleues */
+/* Toolbar with a gray background and round blue buttons. */
 .sirius-toolbar {
   display: flex;
   align-items: center;
@@ -42,7 +42,7 @@
   cursor: not-allowed;
 }
 
-/* Icônes rondes bleues style SIRIUS - TOUTES identiques */
+/* Consistent round toolbar buttons. */
 .toolbar-icon {
   width: 32px;
   height: 32px;
@@ -61,7 +61,7 @@
   fill: white;
 }
 
-/* ========== BOUTONS COMPUTE ========== */
+/* Task launch buttons */
 .toolbar-compute-section {
   gap: 6px;
 }
@@ -102,12 +102,12 @@
   to { transform: rotate(360deg); }
 }
 
-/* Icône play dans les boutons compute */
+/* Play icon in task launch buttons. */
 .spinner-icon {
   stroke: white;
 }
 
-/* Label sous l'icône */
+/* Label below the icon. */
 .toolbar-label {
   font-size: 10px;
   font-weight: 400;
@@ -115,7 +115,7 @@
   margin-top: 1px;
 }
 
-/* Séparateur */
+/* Separator. */
 .toolbar-separator {
   width: 1px;
   height: 36px;

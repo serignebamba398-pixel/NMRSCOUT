@@ -14,7 +14,7 @@ let hasLoadedProdUI = false;
 const forceProdUI = process.env.ELECTRON_FORCE_PROD_UI === 'true';
 const isDev = forceProdUI ? false : !app.isPackaged;
 
-// Fichier de configuration pour stocker le dernier projet ouvert
+// Store the path of the last opened project.
 const getConfigPath = () => path.join(app.getPath('userData'), 'config.json');
 
 const loadConfig = () => {
@@ -147,7 +147,7 @@ function createWindow() {
     // (backend sends an IPC "ready" message; see startBackend())
     hasLoadedProdUI = false;
     mainWindow.loadURL('about:blank');
-    // DevTools activé temporairement pour debug
+    // Open DevTools for debugging.
     mainWindow.webContents.openDevTools();
   }
 
@@ -161,7 +161,7 @@ function startBackend(projectPath = null) {
     ensureDir(getLogsDir());
     logMain('INFO', 'Starting backend process', { projectPath, isDev });
 
-    // Arrêter le backend existant si présent
+    // Stop an existing backend process before starting another.
     if (backendProcess) {
       backendProcess.kill();
       backendProcess = null;
@@ -250,7 +250,7 @@ function startBackend(projectPath = null) {
       fs.mkdirSync(env.CACHE_DIR, { recursive: true });
     }
 
-    // Si un projet est spécifié, utiliser son dossier pour uploads/outputs
+    // Use project-specific upload and output directories when a project is open.
     if (projectPath) {
       currentProjectPath = projectPath;
       env.PROJECT_PATH = projectPath;
@@ -258,7 +258,7 @@ function startBackend(projectPath = null) {
       env.OUTPUTS_DIR = path.join(projectPath, 'outputs');
       env.NMR_DATA_DIR = path.join(projectPath, 'data');
       
-      // Créer les dossiers du projet
+      // Create the project directories.
       fs.mkdirSync(env.UPLOADS_DIR, { recursive: true });
       fs.mkdirSync(env.OUTPUTS_DIR, { recursive: true });
       fs.mkdirSync(env.NMR_DATA_DIR, { recursive: true });
@@ -292,7 +292,7 @@ function startBackend(projectPath = null) {
       appendTextLog(backendLogPath(), '[STDERR]', msg.trim());
     });
 
-    // Timeout: si pas de "ready", on considère que le backend n'a pas démarré.
+    // Treat a missing ready signal as a startup timeout.
     const timeout = setTimeout(() => {
       console.error('[Main] Backend ready timeout');
       try {
@@ -307,7 +307,7 @@ function startBackend(projectPath = null) {
       resolve({ ready: false, timeout: true, error: 'Backend did not become ready (timeout)' });
     }, 15000);
 
-    // Communiquer avec le backend via IPC
+    // Backend IPC handlers.
     backendProcess.on('message', (msg) => {
       console.log('[Main] Message from backend:', msg);
       logMain('INFO', 'Message from backend', { msg });
@@ -432,9 +432,9 @@ ipcMain.handle('export-logs', async (event, payload = {}) => {
   }
 });
 
-// IPC Handlers pour la gestion des projets
+// Project management IPC handlers.
 
-// Créer un nouveau projet (choisir un dossier vide ou nouveau)
+// Create a project in a new or empty directory.
 ipcMain.handle('create-project', async () => {
   console.log('[Main] IPC create-project called');
   const result = await dialog.showOpenDialog(mainWindow, {
@@ -447,12 +447,12 @@ ipcMain.handle('create-project', async () => {
   
   const projectDir = result.filePaths[0];
   
-  // Créer la structure du projet
+  // Create the project directory structure.
   const projectFile = path.join(projectDir, 'project.nmrproj');
   let projectData;
   if (fs.existsSync(projectFile)) {
-    // Ne jamais écraser un projet existant à la création.
-    // L'écrasement doit arriver uniquement via Save / Save As.
+    // Creating a project must not overwrite an existing project.
+    // Only Save and Save As may overwrite a project.
     projectData = JSON.parse(fs.readFileSync(projectFile, 'utf8'));
   } else {
     projectData = {
@@ -471,7 +471,7 @@ ipcMain.handle('create-project', async () => {
   // Sauvegarder comme dernier projet
   saveConfig({ lastProject: projectDir });
   
-  // Redémarrer le backend avec le nouveau projet et attendre qu'il soit prêt
+  // Restart the backend for the new project and wait for readiness.
   const r = await startBackend(projectDir);
   if (!r?.ready) {
     throw new Error(r?.error || 'Backend failed to start for new project');
@@ -494,12 +494,12 @@ ipcMain.handle('open-project', async () => {
   const projectDir = result.filePaths[0];
   const projectFile = path.join(projectDir, 'project.nmrproj');
   
-  // Vérifier si c'est un projet valide ou créer un nouveau fichier projet
+  // Validate the project or create its metadata file.
   let projectData;
   if (fs.existsSync(projectFile)) {
     projectData = JSON.parse(fs.readFileSync(projectFile, 'utf8'));
   } else {
-    // Créer un fichier projet pour un dossier existant
+    // Create project metadata for an existing directory.
     projectData = {
       name: path.basename(projectDir),
       createdAt: new Date().toISOString(),
@@ -510,7 +510,7 @@ ipcMain.handle('open-project', async () => {
     fs.writeFileSync(projectFile, JSON.stringify(projectData, null, 2));
   }
   
-  // Créer les sous-dossiers si nécessaire
+  // Create missing subdirectories.
   fs.mkdirSync(path.join(projectDir, 'uploads'), { recursive: true });
   fs.mkdirSync(path.join(projectDir, 'outputs'), { recursive: true });
   fs.mkdirSync(path.join(projectDir, 'data'), { recursive: true });
@@ -518,7 +518,7 @@ ipcMain.handle('open-project', async () => {
   // Sauvegarder comme dernier projet
   saveConfig({ lastProject: projectDir });
   
-  // Redémarrer le backend avec ce projet et attendre qu'il soit prêt
+  // Restart the backend for this project and wait for readiness.
   const r = await startBackend(projectDir);
   if (!r?.ready) {
     throw new Error(r?.error || 'Backend failed to start for opened project');
@@ -527,7 +527,7 @@ ipcMain.handle('open-project', async () => {
   return { path: projectDir, ...projectData };
 });
 
-// Sauvegarder l'état du projet
+// Save project state.
 ipcMain.handle('save-project-state', async (event, state) => {
   if (!currentProjectPath) return { success: false, error: 'Aucun projet ouvert' };
   
@@ -578,14 +578,14 @@ ipcMain.handle('get-last-project', () => {
 // Fermer le projet courant
 ipcMain.handle('close-project', async () => {
   currentProjectPath = null;
-  const r = await startBackend(null); // Redémarrer sans projet
+  const r = await startBackend(null); // Restart without a project.
   if (!r?.ready) {
     throw new Error(r?.error || 'Backend failed to start after closing project');
   }
   return { success: true };
 });
 
-// Sauvegarder sous (Save As) - copier vers un nouveau dossier
+// Save As copies the project to another directory.
 ipcMain.handle('save-project-as', async (event, state) => {
   console.log('[Main] Save As: starting...');
 
@@ -604,7 +604,7 @@ ipcMain.handle('save-project-as', async (event, state) => {
   console.log('[Main] Save As: target directory:', newProjectDir);
 
   try {
-    // Copier les fichiers du projet actuel si existant
+    // Copy existing project files.
     if (currentProjectPath && fs.existsSync(currentProjectPath)) {
       console.log('[Main] Save As: copying from', currentProjectPath);
       const copyRecursive = (src, dest) => {
@@ -633,13 +633,13 @@ ipcMain.handle('save-project-as', async (event, state) => {
       });
     } else {
       console.log('[Main] Save As: no current project, creating empty folders');
-      // Créer les dossiers vides
+      // Create empty project directories.
       fs.mkdirSync(path.join(newProjectDir, 'uploads'), { recursive: true });
       fs.mkdirSync(path.join(newProjectDir, 'outputs'), { recursive: true });
       fs.mkdirSync(path.join(newProjectDir, 'data'), { recursive: true });
     }
 
-    // Créer le fichier projet
+    // Write the project metadata file.
     const projectFile = path.join(newProjectDir, 'project.nmrproj');
     const projectData = {
       name: path.basename(newProjectDir),
@@ -655,7 +655,7 @@ ipcMain.handle('save-project-as', async (event, state) => {
     // Sauvegarder comme dernier projet
     saveConfig({ lastProject: newProjectDir });
 
-    // Redémarrer le backend avec le nouveau projet et attendre qu'il soit prêt
+    // Restart the backend for the new project and wait for readiness.
     console.log('[Main] Save As: restarting backend...');
     const r = await startBackend(newProjectDir);
     if (!r?.ready) {
@@ -695,7 +695,7 @@ ipcMain.handle('get-documents-path', () => {
 });
 
 app.on('ready', () => {
-  // Charger le dernier projet si disponible
+  // Reopen the last project if it is available.
   const config = loadConfig();
   const lastProject = config.lastProject && fs.existsSync(config.lastProject) ? config.lastProject : null;
   

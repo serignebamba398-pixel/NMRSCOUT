@@ -101,7 +101,7 @@ class OneDViewer:
         self.ax.set_navigate(True)
 
         # --- interactions ---
-        # SpanSelector = zoom horizontal robuste pour 1D
+        # Use SpanSelector for horizontal zoom in 1D.
         self.selector = SpanSelector(
             self.ax, self.on_span, "horizontal",
             useblit=True, minspan=1e-6,
@@ -130,7 +130,7 @@ class OneDViewer:
             return
         factor = 1.15 if event.button == "up" else (1/1.15)
         ymin, ymax = self.ax.get_ylim()
-        cy = 0.0  # centre autour de 0
+        cy = 0.0  # Center around zero.
         new_ymin = cy + (ymin - cy) / factor
         new_ymax = cy + (ymax - cy) / factor
         # limite min
@@ -177,7 +177,7 @@ class TwoDViewer:
         self.f1, self.f2, self.Z = load_2d(pdata_dir)
         self.mode = str(mode).lower()  # "contour" | "image"
         self.n_levels = 20
-        self.level_start = 0.10   # fraction du max positif
+        self.level_start = 0.10   # Fraction of the positive maximum
         self.mult = 1.20
 
         self.fig, self.ax = plt.subplots(figsize=(9.5, 7.8))

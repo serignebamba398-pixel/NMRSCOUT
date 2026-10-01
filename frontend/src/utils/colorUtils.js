@@ -1,14 +1,14 @@
 // src/utils/colorUtils.js
-// Utilitaires de conversion et manipulation des couleurs
+// Color conversion utilities.
 
 /**
- * Clamp une valeur entre min et max
+ * Clamp an integer to the given range.
  */
 export const clamp = (v, min = 0, max = 255) =>
   Math.max(min, Math.min(max, v | 0));
 
 /**
- * Convertit une couleur hexadécimale en RGB (0-255)
+ * Convert a hex color to RGB channels in the range 0–255.
  */
 export const hexToRgb255 = (hex) => {
   const h = (hex || "").replace("#", "").trim();
@@ -28,7 +28,7 @@ export const hexToRgb255 = (hex) => {
 };
 
 /**
- * Convertit RGB (0-255) en hexadécimal
+ * Convert RGB channels in the range 0–255 to a hex color.
  */
 export const rgb255ToHex = ({ r, g, b }) => {
   const to2 = (n) => clamp(n).toString(16).padStart(2, "0");
@@ -36,12 +36,12 @@ export const rgb255ToHex = ({ r, g, b }) => {
 };
 
 /**
- * Convertit RGB (0-255) en RGB float (0-1)
+ * Normalize RGB channels from 0–255 to 0–1.
  */
 export const rgb255ToFloat = ({ r, g, b }) => [r / 255, g / 255, b / 255];
 
 /**
- * Convertit HSL en Hex
+ * Convert HSL to a hex color.
  */
 export const hslToHex = (h, s, l) => {
   l /= 100;
@@ -57,7 +57,7 @@ export const hslToHex = (h, s, l) => {
 };
 
 /**
- * Convertit Hex en HSL
+ * Convert a hex color to HSL.
  */
 export const hexToHsl = (hex) => {
   const rgb = hexToRgb255(hex);

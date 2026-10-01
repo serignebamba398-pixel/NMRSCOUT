@@ -36,13 +36,13 @@ code {
   animation: pulse-soft 2s infinite;
 }
 
-/* Styles pour la barre de progression */
+/* Progress bar. */
 .progress-bar {
   background: linear-gradient(90deg, #3b82f6, #1d4ed8);
   transition: width 0.5s ease-in-out;
 }
 
-/* Styles pour les onglets */
+/* Tabs. */
 .tab-active {
   background: linear-gradient(135deg, #eff6ff, #dbeafe);
   border-color: #3b82f6;
@@ -60,7 +60,7 @@ code {
   background-color: #f9fafb;
 }
 
-/* Styles pour les inputs */
+/* Input fields. */
 .input-field {
   transition: all 0.2s ease;
   border: 1px solid #d1d5db;
@@ -72,7 +72,7 @@ code {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* Styles pour les boutons */
+/* Buttons. */
 .btn-primary {
   background: linear-gradient(135deg, #3b82f6, #1d4ed8);
   transition: all 0.2s ease;
@@ -102,7 +102,7 @@ code {
   border-color: #9ca3af;
 }
 
-/* Styles pour la console de logs */
+/* Log console. */
 .log-console {
   background: #1f2937;
   color: #f9fafb;
@@ -136,7 +136,7 @@ code {
   border: 1px solid #fbbf24;
 }
 
-/* Animation de chargement */
+/* Loading animation. */
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -165,7 +165,7 @@ code {
   }
 }
 
-/* Styles pour les alertes */
+/* Alerts. */
 .alert {
   border-radius: 0.5rem;
   padding: 1rem;
@@ -196,7 +196,7 @@ code {
   color: #1e40af;
 }
 
-/* Effet de survol sur les cartes */
+/* Card hover styles. */
 .card-hover {
   transition: all 0.2s ease;
 }

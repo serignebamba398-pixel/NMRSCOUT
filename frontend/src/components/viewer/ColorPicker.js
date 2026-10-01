@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 // src/components/viewer/ColorPicker.js
 // Advanced color picker Word-style
 
@@ -25,6 +26,7 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
     H1:   { ...DEFAULT_COLORS.H1,   ...customColors?.H1 },
     C13:  { ...DEFAULT_COLORS.C13,  ...customColors?.C13 },
     COSY: { ...DEFAULT_COLORS.COSY, ...customColors?.COSY },
+    TOCSY: { ...DEFAULT_COLORS.TOCSY, ...customColors?.TOCSY },
     HSQC: { ...DEFAULT_COLORS.HSQC, ...customColors?.HSQC },
   };
   const [draft, setDraft] = useState(safeColors);
@@ -37,6 +39,7 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
       H1:   { ...DEFAULT_COLORS.H1,   ...customColors?.H1 },
       C13:  { ...DEFAULT_COLORS.C13,  ...customColors?.C13 },
       COSY: { ...DEFAULT_COLORS.COSY, ...customColors?.COSY },
+      TOCSY: { ...DEFAULT_COLORS.TOCSY, ...customColors?.TOCSY },
       HSQC: { ...DEFAULT_COLORS.HSQC, ...customColors?.HSQC },
     });
   }, [customColors]);
@@ -64,7 +67,7 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
   };
 
   const applyAll = () => {
-    ["H1", "C13", "COSY", "HSQC"].forEach((m) => {
+    ["H1", "C13", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).forEach((m) => {
       onColorChange(m, draft[m]);
     });
     onClose();
@@ -512,7 +515,7 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
         </div>
 
         <div style={{ display: "flex", gap: 8, margin: "12px 0" }}>
-          {["H1", "C13", "COSY", "HSQC"].map((m) => (
+          {["H1", "C13", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((m) => (
             <button
               key={m}
               onClick={() => {
@@ -537,6 +540,7 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
         {active === "H1" && <MethodRow method="H1" title="¹H NMR" />}
         {active === "C13" && <MethodRow method="C13" title="¹³C NMR" />}
         {active === "COSY" && <MethodRow method="COSY" title="COSY" />}
+        {isMethodAvailable("TOCSY") && active === "TOCSY" && <MethodRow method="TOCSY" title="TOCSY" />}
         {active === "HSQC" && <MethodRow method="HSQC" title="HSQC" />}
 
         <div
@@ -549,7 +553,7 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
         >
           <button
             onClick={() => {
-              ["H1", "C13", "COSY", "HSQC"].forEach((m) =>
+              ["H1", "C13", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).forEach((m) =>
                 onColorChange(m, DEFAULT_COLORS[m])
               );
             }}

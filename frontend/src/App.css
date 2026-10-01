@@ -1,10 +1,4 @@
-/* App.css — NMR TopSpin + Modern Web theme
-   - TopSpin-inspired look (blue banner + light gray)
-   - Modern web style (cards, shadows, rounded corners)
-*/
 
-/* =================== Tokens =================== */
-/* Modern NMR web theme inspired by TopSpin */
 :root{
   --content-width-xs: calc(100vw - 0.67rem);
   --content-width-sm: calc(100vw - 1rem);
@@ -30,7 +24,7 @@
   --blue-600: #2f80de;
   --blue-100: #e2efff;
 
-  /* Un peu de violet pour les accents modernes */
+  /* Purple accent colors. */
   --violet-500: #6366f1;
   --violet-600: #4f46e5;
   --violet-700: #4338ca;
@@ -65,7 +59,7 @@
   --space-5: 1.1rem;
   --space-6: 1.4rem;
 
-  /* Ombres légères type app SaaS */
+  /* Panel shadows. */
   --shadow-1: 0 1px 3px rgba(15, 23, 42, 0.06);
   --shadow-2: 0 4px 10px rgba(15, 23, 42, 0.12);
   --shadow-3: 0 10px 30px rgba(15, 23, 42, 0.18);
@@ -101,7 +95,7 @@ body{
   background: transparent;
 }
 
-/* Layout SIRIUS - pas de padding sur le contenu principal */
+/* Main content layout without padding. */
 .app.sirius-layout {
   background: #f5f5f5;
 }
@@ -202,7 +196,7 @@ body{
   font-size: clamp(0.85rem, 2vw, 0.95rem);
 }
 
-/* Panneaux = fenêtres TopSpin modernisées */
+/* Spectrum panels. */
 .card,
 .file-section, .parameters-section, .action-section,
 .progress-section, .error-section, .results-section,
@@ -382,7 +376,7 @@ input[type="file"]:hover:not(:disabled){
   font-size: clamp(0.75rem, 1.5vw, 0.82rem);
 }
 
-/* Grille paramètres compacte */
+/* Compact parameter grid. */
 .parameters-grid{
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 240px));
@@ -607,7 +601,7 @@ h4{
   box-shadow: 0 1px 3px rgba(15,23,42,0.08);
 }
 
-/* =================== Boutons =================== */
+/* Buttons */
 .btn{
   display: inline-flex;
   align-items: center;
@@ -753,7 +747,7 @@ h4{
   position: relative;
 }
 
-/* Animation rayée pour montrer l'activité */
+/* Striped animation for active progress. */
 .progress-bar::after {
   content: "";
   position: absolute;
@@ -780,7 +774,7 @@ h4{
   }
 }
 
-/* Désactiver l'animation quand terminé (100%) */
+/* Stop the animation at completion. */
 .progress-bar[style*="width: 100%"]::after,
 .progress-bar[style*="width:100%"]::after {
   animation: none;
@@ -806,7 +800,7 @@ h4{
   text-align: center;
 }
 
-/* =================== Résultats =================== */
+/* Results */
 .duration-info{
   margin-top: .5rem;
   padding: .35rem .5rem;
@@ -838,7 +832,7 @@ h4{
   color: var(--text);
 }
 
-/* 🆕 Conteneur pour tous les résultats de tests empilés */
+/* Stacked test results. */
 .all-tolerance-results {
   display: flex;
   flex-direction: column;
@@ -896,7 +890,7 @@ h4{
   flex-shrink: 0;
 }
 
-/* =================== Tâches =================== */
+/* Tasks */
 .task-details{
   margin-top: var(--space-3);
 }
@@ -1044,7 +1038,7 @@ h4{
   to{ transform: rotate(360deg); }
 }
 
-/* =================== Utilitaires =================== */
+/* Utilities */
 .results-actions{
   display: flex;
   gap: .67rem;
@@ -1149,9 +1143,7 @@ h4{
   background: var(--surface-soft);
 }
 
-/* ===========================
-   Sélecteur de couleurs custom - CROSS-BROWSER
-   =========================== */
+/* Custom color picker */
 
 /* Slider Teinte (Hue) */
 input[type="range"] {
@@ -1303,7 +1295,7 @@ input[type="number"]::-webkit-outer-spin-button {
 }
 
 /* =================== Modal Form Styles =================== */
-/* Styles compacts pour les formulaires dans les modales */
+/* Compact form controls in modals. */
 .modal-content .type-tabs {
   grid-template-columns: repeat(4, 1fr);
   gap: 0.4rem;
@@ -1388,7 +1380,7 @@ input[type="number"]::-webkit-outer-spin-button {
   max-width: 450px;
 }
 
-/* =================== Dialog overlay pour projets (mode web) =================== */
+/* Project dialog overlay in browser mode */
 .dialog-overlay {
   position: fixed;
   top: 0;

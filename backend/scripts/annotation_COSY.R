@@ -22,6 +22,7 @@ spectrum_matrix_file <- args[3]
 
 # Default parameters (backend compatibility)
 params <- list(
+    annotation_type = "COSY",
     tol_correspondance_F1 = 0.2,
     tol_correspondance_F2 = 0.2,
     tol_match_F1 = 0.2,
@@ -125,6 +126,19 @@ if (length(args) >= 4) {
     }
 }
 
+annotation_type <- if (!is.null(params$annotation_type)) {
+    toupper(as.character(params$annotation_type))
+} else {
+    "COSY"
+}
+if (!annotation_type %in% c("COSY", "TOCSY")) annotation_type <- "COSY"
+annotation_label <- annotation_type
+output_basename <- if (annotation_type == "TOCSY") {
+    "TOCSY_With_Ransy_and_ECFP4.csv"
+} else {
+    "COSY_With_Ransy_and_ECFP4.csv"
+}
+
 nb_cores <- sanitize_threads(params$nb_cores)
 if (is.na(nb_cores)) nb_cores <- 1L
 available <- tryCatch(parallel::detectCores(), error = function(e) NA_integer_)
@@ -199,7 +213,7 @@ ppm_idx_lookup <- NULL # Pre-computed named index for fast ppm_matrix lookups
 # -------------------------------
 tryCatch(
     {
-        log_message("=== COSY ANNOTATION START — STOCSY ===")
+        log_message(paste("===", annotation_label, "ANNOTATION START — STOCSY ==="))
         log_message(paste("Working directory:", work_dir))
         log_message(paste("data.table threads:", data.table::getDTthreads()))
         log_memory("initial")
@@ -531,7 +545,7 @@ calculer_RANSY_2D <- function(ppms, intensity_cols, cv_th, driver_ppm) {
 # 12) Substring coverage (FIXED)
 # -------------------------------
 
-# Helper: grouper les paires 2D quasi-dégénérées (chevauchement COSY: ΔF1≤0.05 ET ΔF2≤0.05)
+# Group nearly degenerate 2D pairs (COSY overlap: ΔF1≤0.05 and ΔF2≤0.05).
 # OPTIMIZED: Vectorized distance matrix + union-find instead of O(n²) loops
 get_overlap_groups_2D <- function(dt_shifts, overlap_tol_F1, overlap_tol_F2) {
     n <- nrow(dt_shifts)
@@ -579,7 +593,7 @@ calculer_coverage_sub_ratio_2D <- function(sub_chain, molecule_shifts, tol_F1, t
     uniq_ms <- unique(molecule_shifts[, .(shift_value_F1, shift_value_F2)])
     avail_sub <- spectrum_matrix[ppm_matrix %in% sub_chain, .(ppm_F1, ppm_F2, ppm_matrix)]
 
-    # Grouper les paires quasi-dégénérées — 1 match par groupe
+    # Group nearly degenerate pairs, allowing one match per group.
     grp_ids <- get_overlap_groups_2D(uniq_ms, overlap_tol_F1, overlap_tol_F2)
     groupes_uniques <- unique(grp_ids)
     nb_groupes <- length(groupes_uniques)
@@ -656,9 +670,9 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
     # Step 2: pivots
     baseline_candidates <- head(ppms_desc, min(max_pivots, length(ppms_desc)))
 
-    # Target deduplication F1/F2 - collecter TOUS les H1/H2 pour les protons équivalents
-    # Pour chaque paire de shifts unique, on collecte tous les indices H possibles
-    # Séparateur '~' pour éviter conflit avec ',' et ';' du CSV et '||' des paires
+    # Deduplicate F1/F2 targets while collecting all H1/H2 indices for equivalent protons.
+    # Collect all possible H indices for each unique shift pair.
+    # Use '~' to avoid conflicts with CSV delimiters ',' and ';' and the pair separator '||'.
     unique_mppm <- molecule_shifts[, .(
         H1_all = paste(unique(H1), collapse = "~"),
         H2_all = paste(unique(H2), collapse = "~")
@@ -729,7 +743,7 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         max_cv_all <- max(avail$cv, na.rm = TRUE)
         if (!is.finite(max_cv_all) || max_cv_all == 0) max_cv_all <- 1
 
-        # RANSY pairings — par groupes quasi-dégénérés (ΔF1≤0.05 ET ΔF2≤0.05 pour COSY)
+        # RANSY pairings by nearly degenerate groups (COSY: ΔF1≤0.05 and ΔF2≤0.05).
         overlap_tol_cosy_F1 <- 0.1
         overlap_tol_cosy_F2 <- 0.1
         grp_ids_ransy <- get_overlap_groups_2D(unique_mppm, overlap_tol_cosy_F1, overlap_tol_cosy_F2)
@@ -749,7 +763,7 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
                     best_r <- cand[which.min(cost), ppm_matrix]
                     avail <- avail[ppm_matrix != best_r]
                     nb_groupes_ransy_matches <- nb_groupes_ransy_matches + 1L
-                    # Enregistrer la paire pour chaque membre du groupe
+                    # Record the pair for every group member.
                     for (ii in idx_membres) {
                         h1_ii <- if ("H1_all" %in% names(unique_mppm)) unique_mppm$H1_all[ii] else ""
                         h2_ii <- if ("H2_all" %in% names(unique_mppm)) unique_mppm$H2_all[ii] else ""
@@ -778,12 +792,12 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         intensity_ratios_str <- paste(round(avg_mat_all / max_int_all, 3), collapse = "|")
         ransy_var_str <- paste(paste(dt_ransy$ppm_matrix, round(dt_ransy$cv, 4), sep = ":"), collapse = "|")
 
-        # Calcul de l'erreur 2D moyenne ppm pour les paires appariées COSY
+        # Calculate the mean 2D error in ppm for matched COSY pairs.
         avg_error_ppm_2D <- if (nrow(pairs_dt) > 0) {
             ppm_ransy_idx <- fast_ppm_idx(pairs_dt$ppm_ransy)
             errors_F1 <- abs(pairs_dt$mol_F1 - spectrum_matrix$ppm_F1[ppm_ransy_idx])
             errors_F2 <- abs(pairs_dt$mol_F2 - spectrum_matrix$ppm_F2[ppm_ransy_idx])
-            # Distance euclidienne normalisée pour COSY (F1=F2=1H)
+            # Normalized Euclidean distance for COSY (F1=F2=1H)
             dist_2D <- sqrt((errors_F1 / tol_match_F1)^2 + (errors_F2 / tol_match_F2)^2)
             round(mean(dist_2D, na.rm = TRUE), 4)
         } else {
@@ -1051,7 +1065,7 @@ tryCatch(
                                     ppm_molecule_matched <- if (nrow(pairs)) paste(paste(pairs$mol_F1, pairs$mol_F2, sep = "|"), collapse = "||") else ""
 
                                     # Build matched_atom_indices: H1_all:H2_all for each matched pair
-                                    # Format: "34,35,36:34,35,36" pour protons équivalents
+                                    # Format for equivalent protons: "34,35,36:34,35,36"
                                     matched_atom_indices <- ""
                                     if (nrow(pairs) && "H1_all" %in% names(pairs) && "H2_all" %in% names(pairs)) {
                                         idx_parts <- vapply(seq_len(nrow(pairs)), function(ii) {
@@ -1151,7 +1165,7 @@ tryCatch(
             quit(status = 1)
         }
 
-        output_file <- file.path(work_dir, "COSY_With_Ransy_and_ECFP4.csv")
+        output_file <- file.path(work_dir, output_basename)
         data.table::fwrite(best_per_sourceCOSY, output_file, na = "NA", sep = ";", quote = TRUE, bom = TRUE)
 
         if (enable_checkpoints && file.exists(checkpoint_file)) {
@@ -1178,7 +1192,7 @@ tryCatch(
             successful_sources = nrow(resultats_valides),
             error_sources = nrow(resultats_erreur),
             output_file = output_file,
-            annotation_type = "COSY",
+            annotation_type = annotation_type,
             version = "stocsy_pipeline_optimise_dt",
             batches_processed = ceiling(length(sources) / batch_size),
             memory_optimized = TRUE,
@@ -1195,7 +1209,7 @@ tryCatch(
             )
         ))
 
-        log_progress(100, 100, "COSY completed")
+        log_progress(100, 100, paste(annotation_label, "completed"))
     },
     error = function(e) {
         log_error(paste("Critical error in pipeline:", e$message))
@@ -1203,4 +1217,4 @@ tryCatch(
     }
 )
 
-log_message("=== COSY ANNOTATION WITH STOCSY (OK) ===")
+log_message(paste("===", annotation_label, "ANNOTATION WITH STOCSY (OK) ==="))

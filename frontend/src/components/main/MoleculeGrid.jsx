@@ -53,7 +53,7 @@ async function tryFetchText(url) {
   return null;
 }
 
-// Extraire le premier molblock d'un fichier SDF
+// Extract the first molblock from an SDF file.
 function extractFirstMolBlock(text) {
   if (!text) return null;
   const endMarker = text.indexOf('M  END');
@@ -62,7 +62,7 @@ function extractFirstMolBlock(text) {
 }
 
 /**
- * Composant MoleculeGrid - Affichage en grille style SIRIUS/MS-FINDER
+ * Molecule structure grid.
  */
 export const MoleculeGrid = ({ 
   molecules = [], 
@@ -80,7 +80,7 @@ export const MoleculeGrid = ({
   const [moleculesData, setMoleculesData] = useState([]);
   const gridRef = useRef(null);
 
-  // Charger RDKit
+  // Load RDKit.
   useEffect(() => {
     loadRDKit()
       .then(mod => setRdkit(mod))
@@ -88,11 +88,11 @@ export const MoleculeGrid = ({
       .finally(() => setLoading(false));
   }, []);
 
-  // Charger les molblocks pour chaque molécule
+  // Load a molblock for each molecule.
   useEffect(() => {
     const loadMolblocks = async () => {
       if (!viewerData?.taskId || molecules.length === 0) {
-        // Utiliser les molécules directement sans molblock
+        // Use the supplied molecules when no molblock is available.
         setMoleculesData(molecules.map((mol, idx) => ({
           ...mol,
           rank: idx + 1,
@@ -113,7 +113,7 @@ export const MoleculeGrid = ({
             .replace(/_predicted$/i, '')
             .replace(/\.sdf$/i, '');
           
-          // Essayer différentes variantes de noms de fichiers
+          // Try supported filename variants.
           const candidates = [
             `${baseUrl}${baseName}.sdf`,
             `${baseUrl}${baseName}_predicted.sdf`,
@@ -146,7 +146,7 @@ export const MoleculeGrid = ({
     loadMolblocks();
   }, [viewerData, molecules]);
 
-  // Générer les SVG des molécules
+  // Render molecules as SVGs.
   useEffect(() => {
     if (!rdkit || moleculesData.length === 0) return;
 
@@ -195,14 +195,14 @@ export const MoleculeGrid = ({
     generateSvgs();
   }, [rdkit, moleculesData]);
 
-  // Téléchargement de la grille
+  // Export the molecule grid.
   const handleDownload = useCallback(async (format = 'png') => {
     if (!gridRef.current) return;
 
     const count = Math.min(downloadCount, moleculesData.length);
     const modsToExport = moleculesData.slice(0, count);
     
-    // Créer un canvas pour le rendu
+    // Create a canvas for rendering.
     const cols = columnsPerRow;
     const rows = Math.ceil(count / cols);
     const cellWidth = 180;
@@ -214,11 +214,11 @@ export const MoleculeGrid = ({
     canvas.height = rows * cellHeight + padding * 2;
     const ctx = canvas.getContext('2d');
     
-    // Fond blanc
+    // White background.
     ctx.fillStyle = 'white';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    // Dessiner chaque molécule
+    // Draw each molecule.
     for (let i = 0; i < modsToExport.length; i++) {
       const mol = modsToExport[i];
       const col = i % cols;
@@ -226,11 +226,11 @@ export const MoleculeGrid = ({
       const x = padding + col * cellWidth;
       const y = padding + row * cellHeight;
       
-      // Cadre
+      // Cell border.
       ctx.strokeStyle = '#e0e0e0';
       ctx.strokeRect(x, y, cellWidth - 4, cellHeight - 4);
       
-      // SVG de la molécule
+      // Molecule SVG.
       const svg = moleculesSvg[mol.source];
       if (svg) {
         const img = new Image();
@@ -257,7 +257,7 @@ export const MoleculeGrid = ({
       ctx.fillText(`Deviation: ${mol.deviation}`, x + 5, y + 174);
     }
     
-    // Télécharger
+    // Download the image.
     const link = document.createElement('a');
     link.download = `molecules_grid_${count}.${format}`;
     link.href = canvas.toDataURL(`image/${format}`, 0.95);
@@ -316,7 +316,7 @@ export const MoleculeGrid = ({
         </div>
       </div>
 
-      {/* Dialogue de téléchargement */}
+      {/* Export dialog. */}
       {showDownloadDialog && (
         <div className="download-dialog-overlay">
           <div className="download-dialog">
@@ -344,10 +344,10 @@ export const MoleculeGrid = ({
             </div>
             <div className="download-actions">
               <button onClick={() => handleDownload('png')} className="download-btn-png">
-                📷 PNG
+                PNG
               </button>
               <button onClick={() => handleDownload('jpeg')} className="download-btn-jpg">
-                🖼️ JPEG
+                JPEG
               </button>
               <button onClick={() => setShowDownloadDialog(false)} className="download-btn-cancel">
                 Annuler
@@ -357,7 +357,7 @@ export const MoleculeGrid = ({
         </div>
       )}
 
-      {/* Grille des molécules */}
+      {/* Molecule grid. */}
       <div 
         className="molecule-grid" 
         ref={gridRef}
@@ -378,7 +378,7 @@ export const MoleculeGrid = ({
                 />
               ) : (
                 <div className="mol-placeholder">
-                  <span>🧪</span>
+                  <span>No preview</span>
                 </div>
               )}
             </div>

@@ -1,0 +1,1356 @@
+{
+  "original_file": "backend\\ml_dependencies\\data\\sdf_bmrb_rdkit_v2\\bmrb_all_molecules.sdf",
+  "original_sha256": "01d2220477da0a6a72c67c6844e9e8721a9f4cf2f1a93cf9b86775c1e96a2dd5",
+  "cleaned_sha256": "d5364c67c2b878b13d7ce3624207d1b6ba737485ac7d6916cc910d81484d94fe",
+  "original_entries": 1560,
+  "retained_entries": 1369,
+  "excluded_entries": 191,
+  "reason_counts": {
+    "formula_mismatch": 7,
+    "suspect_13C_shift": 3,
+    "invalid_structure": 1,
+    "no_nonzero_shifts": 1,
+    "data_type_mismatch": 181
+  },
+  "excluded_records": [
+    {
+      "record": 269,
+      "bmrb_id": "bmse000304",
+      "reasons": [
+        "formula_mismatch"
+      ]
+    },
+    {
+      "record": 461,
+      "bmrb_id": "bmse000510",
+      "reasons": [
+        "suspect_13C_shift"
+      ]
+    },
+    {
+      "record": 795,
+      "bmrb_id": "bmse000931",
+      "reasons": [
+        "invalid_structure"
+      ]
+    },
+    {
+      "record": 800,
+      "bmrb_id": "bmse000937",
+      "reasons": [
+        "no_nonzero_shifts",
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1096,
+      "bmrb_id": "bmse010014",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1101,
+      "bmrb_id": "bmse010019",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1118,
+      "bmrb_id": "bmse010037",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1142,
+      "bmrb_id": "bmse010061",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1152,
+      "bmrb_id": "bmse010071",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1154,
+      "bmrb_id": "bmse010073",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1155,
+      "bmrb_id": "bmse010074",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1156,
+      "bmrb_id": "bmse010075",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1157,
+      "bmrb_id": "bmse010076",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1158,
+      "bmrb_id": "bmse010077",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1159,
+      "bmrb_id": "bmse010078",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1160,
+      "bmrb_id": "bmse010079",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1162,
+      "bmrb_id": "bmse010081",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1163,
+      "bmrb_id": "bmse010082",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1166,
+      "bmrb_id": "bmse010085",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1167,
+      "bmrb_id": "bmse010086",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1168,
+      "bmrb_id": "bmse010087",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1169,
+      "bmrb_id": "bmse010088",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1170,
+      "bmrb_id": "bmse010089",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1171,
+      "bmrb_id": "bmse010090",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1172,
+      "bmrb_id": "bmse010091",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1173,
+      "bmrb_id": "bmse010092",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1174,
+      "bmrb_id": "bmse010093",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1175,
+      "bmrb_id": "bmse010094",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1176,
+      "bmrb_id": "bmse010095",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1177,
+      "bmrb_id": "bmse010096",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1178,
+      "bmrb_id": "bmse010097",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1179,
+      "bmrb_id": "bmse010098",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1180,
+      "bmrb_id": "bmse010099",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1181,
+      "bmrb_id": "bmse010100",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1183,
+      "bmrb_id": "bmse010102",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1184,
+      "bmrb_id": "bmse010103",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1185,
+      "bmrb_id": "bmse010104",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1186,
+      "bmrb_id": "bmse010105",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1187,
+      "bmrb_id": "bmse010106",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1188,
+      "bmrb_id": "bmse010107",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1189,
+      "bmrb_id": "bmse010108",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1190,
+      "bmrb_id": "bmse010109",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1191,
+      "bmrb_id": "bmse010110",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1192,
+      "bmrb_id": "bmse010111",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1193,
+      "bmrb_id": "bmse010112",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1194,
+      "bmrb_id": "bmse010113",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1195,
+      "bmrb_id": "bmse010114",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1196,
+      "bmrb_id": "bmse010115",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1197,
+      "bmrb_id": "bmse010116",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1198,
+      "bmrb_id": "bmse010117",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1199,
+      "bmrb_id": "bmse010118",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1200,
+      "bmrb_id": "bmse010119",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1201,
+      "bmrb_id": "bmse010120",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1202,
+      "bmrb_id": "bmse010121",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1203,
+      "bmrb_id": "bmse010122",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1204,
+      "bmrb_id": "bmse010123",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1205,
+      "bmrb_id": "bmse010124",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1206,
+      "bmrb_id": "bmse010125",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1207,
+      "bmrb_id": "bmse010126",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1208,
+      "bmrb_id": "bmse010127",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1209,
+      "bmrb_id": "bmse010128",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1210,
+      "bmrb_id": "bmse010129",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1211,
+      "bmrb_id": "bmse010130",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1212,
+      "bmrb_id": "bmse010131",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1213,
+      "bmrb_id": "bmse010132",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1214,
+      "bmrb_id": "bmse010133",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1215,
+      "bmrb_id": "bmse010134",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1216,
+      "bmrb_id": "bmse010135",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1217,
+      "bmrb_id": "bmse010136",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1218,
+      "bmrb_id": "bmse010137",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1219,
+      "bmrb_id": "bmse010138",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1220,
+      "bmrb_id": "bmse010139",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1221,
+      "bmrb_id": "bmse010140",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1222,
+      "bmrb_id": "bmse010141",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1223,
+      "bmrb_id": "bmse010142",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1224,
+      "bmrb_id": "bmse010143",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1225,
+      "bmrb_id": "bmse010144",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1226,
+      "bmrb_id": "bmse010145",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1228,
+      "bmrb_id": "bmse010147",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1229,
+      "bmrb_id": "bmse010148",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1230,
+      "bmrb_id": "bmse010149",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1231,
+      "bmrb_id": "bmse010150",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1232,
+      "bmrb_id": "bmse010151",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1233,
+      "bmrb_id": "bmse010152",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1234,
+      "bmrb_id": "bmse010153",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1235,
+      "bmrb_id": "bmse010154",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1236,
+      "bmrb_id": "bmse010155",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1238,
+      "bmrb_id": "bmse010157",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1239,
+      "bmrb_id": "bmse010158",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1240,
+      "bmrb_id": "bmse010159",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1241,
+      "bmrb_id": "bmse010160",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1242,
+      "bmrb_id": "bmse010161",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1243,
+      "bmrb_id": "bmse010162",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1244,
+      "bmrb_id": "bmse010163",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1245,
+      "bmrb_id": "bmse010164",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1246,
+      "bmrb_id": "bmse010165",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1252,
+      "bmrb_id": "bmse010171",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1253,
+      "bmrb_id": "bmse010172",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1254,
+      "bmrb_id": "bmse010173",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1289,
+      "bmrb_id": "bmse010208",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1290,
+      "bmrb_id": "bmse010209",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1292,
+      "bmrb_id": "bmse010211",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1329,
+      "bmrb_id": "bmse010248",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1330,
+      "bmrb_id": "bmse010249",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1331,
+      "bmrb_id": "bmse010250",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1332,
+      "bmrb_id": "bmse010251",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1333,
+      "bmrb_id": "bmse010252",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1341,
+      "bmrb_id": "bmse010260",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1366,
+      "bmrb_id": "bmse010285",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1367,
+      "bmrb_id": "bmse010286",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1368,
+      "bmrb_id": "bmse010287",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1369,
+      "bmrb_id": "bmse010288",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1370,
+      "bmrb_id": "bmse010289",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1371,
+      "bmrb_id": "bmse010290",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1372,
+      "bmrb_id": "bmse010291",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1374,
+      "bmrb_id": "bmse010293",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1375,
+      "bmrb_id": "bmse010294",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1376,
+      "bmrb_id": "bmse010295",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1377,
+      "bmrb_id": "bmse010296",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1378,
+      "bmrb_id": "bmse010297",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1379,
+      "bmrb_id": "bmse010298",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1380,
+      "bmrb_id": "bmse010299",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1383,
+      "bmrb_id": "bmse010302",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1385,
+      "bmrb_id": "bmse010304",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1387,
+      "bmrb_id": "bmse010306",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1388,
+      "bmrb_id": "bmse010307",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1389,
+      "bmrb_id": "bmse010308",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1391,
+      "bmrb_id": "bmse010310",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1394,
+      "bmrb_id": "bmse010313",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1397,
+      "bmrb_id": "bmse010316",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1398,
+      "bmrb_id": "bmse010317",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1399,
+      "bmrb_id": "bmse010318",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1400,
+      "bmrb_id": "bmse010319",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1404,
+      "bmrb_id": "bmse010323",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1405,
+      "bmrb_id": "bmse010324",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1406,
+      "bmrb_id": "bmse010325",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1407,
+      "bmrb_id": "bmse010326",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1410,
+      "bmrb_id": "bmse010329",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1418,
+      "bmrb_id": "bmse010337",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1419,
+      "bmrb_id": "bmse010338",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1422,
+      "bmrb_id": "bmse010341",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1424,
+      "bmrb_id": "bmse010343",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1425,
+      "bmrb_id": "bmse010344",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1428,
+      "bmrb_id": "bmse010347",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1431,
+      "bmrb_id": "bmse010350",
+      "reasons": [
+        "suspect_13C_shift"
+      ]
+    },
+    {
+      "record": 1467,
+      "bmrb_id": "bmse010386",
+      "reasons": [
+        "formula_mismatch"
+      ]
+    },
+    {
+      "record": 1468,
+      "bmrb_id": "bmse010387",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1472,
+      "bmrb_id": "bmse010395",
+      "reasons": [
+        "formula_mismatch"
+      ]
+    },
+    {
+      "record": 1473,
+      "bmrb_id": "bmse010396",
+      "reasons": [
+        "formula_mismatch"
+      ]
+    },
+    {
+      "record": 1480,
+      "bmrb_id": "bmse010426",
+      "reasons": [
+        "formula_mismatch"
+      ]
+    },
+    {
+      "record": 1483,
+      "bmrb_id": "bmse010430",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1484,
+      "bmrb_id": "bmse010432",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1485,
+      "bmrb_id": "bmse010433",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1486,
+      "bmrb_id": "bmse010434",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1487,
+      "bmrb_id": "bmse010435",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1488,
+      "bmrb_id": "bmse010436",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1489,
+      "bmrb_id": "bmse010437",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1490,
+      "bmrb_id": "bmse010439",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1491,
+      "bmrb_id": "bmse010440",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1492,
+      "bmrb_id": "bmse010441",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1496,
+      "bmrb_id": "bmse010445",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1499,
+      "bmrb_id": "bmse010449",
+      "reasons": [
+        "formula_mismatch",
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1502,
+      "bmrb_id": "bmse010457",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1503,
+      "bmrb_id": "bmse010458",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1504,
+      "bmrb_id": "bmse010459",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1505,
+      "bmrb_id": "bmse010460",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1506,
+      "bmrb_id": "bmse010461",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1507,
+      "bmrb_id": "bmse010462",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1508,
+      "bmrb_id": "bmse010463",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1509,
+      "bmrb_id": "bmse010464",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1511,
+      "bmrb_id": "bmse010466",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1512,
+      "bmrb_id": "bmse010467",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1514,
+      "bmrb_id": "bmse010469",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1515,
+      "bmrb_id": "bmse010470",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1516,
+      "bmrb_id": "bmse010471",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1517,
+      "bmrb_id": "bmse010472",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1519,
+      "bmrb_id": "bmse010474",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1521,
+      "bmrb_id": "bmse010476",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1522,
+      "bmrb_id": "bmse010477",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1531,
+      "bmrb_id": "bmse010487",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1532,
+      "bmrb_id": "bmse010488",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1533,
+      "bmrb_id": "bmse010489",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1535,
+      "bmrb_id": "bmse010492",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1536,
+      "bmrb_id": "bmse010493",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1537,
+      "bmrb_id": "bmse010494",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1538,
+      "bmrb_id": "bmse010495",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1540,
+      "bmrb_id": "bmse010497",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1541,
+      "bmrb_id": "bmse010498",
+      "reasons": [
+        "suspect_13C_shift"
+      ]
+    },
+    {
+      "record": 1547,
+      "bmrb_id": "bmse010507",
+      "reasons": [
+        "formula_mismatch"
+      ]
+    },
+    {
+      "record": 1559,
+      "bmrb_id": "bmse010520",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    },
+    {
+      "record": 1560,
+      "bmrb_id": "bmse010521",
+      "reasons": [
+        "data_type_mismatch"
+      ]
+    }
+  ]
+}

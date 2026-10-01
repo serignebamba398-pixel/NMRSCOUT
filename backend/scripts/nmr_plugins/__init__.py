@@ -1,24 +1,24 @@
 # nmr_plugins/__init__.py
-# Système modulaire de plugins NMR pour couverture complète
+# Modular NMR plugins
 
 from typing import Dict, Any, Optional
 import importlib
 
-# Registry des plugins disponibles
-# NOTE: dynamics temporairement désactivé pour debug
+# Available plugin registry
+# Dynamics is temporarily disabled for debugging.
 AVAILABLE_PLUGINS = {
     'isotopomers': 'nmr_plugins.isotopomers',
-    # 'dynamics': 'nmr_plugins.dynamics',  # DÉSACTIVÉ - cause des problèmes de J coupling
+    # 'dynamics': 'nmr_plugins.dynamics',  # Disabled due to J-coupling issues.
     'exotic_carbocycles': 'nmr_plugins.exotic_carbocycles',
     'organometallic': 'nmr_plugins.organometallic',
     'polymers': 'nmr_plugins.polymers',
 }
 
-# Cache des modules chargés
+# Loaded module cache
 _loaded_plugins = {}
 
 def load_plugin(plugin_name: str):
-    """Charge un plugin de façon lazy."""
+    """Load a plugin on demand."""
     if plugin_name not in _loaded_plugins:
         if plugin_name in AVAILABLE_PLUGINS:
             module_name = AVAILABLE_PLUGINS[plugin_name]
@@ -28,20 +28,18 @@ def load_plugin(plugin_name: str):
     return _loaded_plugins[plugin_name]
 
 def get_all_couplings(mol, h1_idx: int, h2_idx: int, **kwargs) -> Dict[str, float]:
-    """
-    Orchestrateur principal - teste tous les plugins par ordre de priorité.
-    
+    """Try all plugins in priority order.
+
     Args:
-        mol: Molécule RDKit
-        h1_idx, h2_idx: Indices des atomes d'hydrogène
-        **kwargs: Arguments additionnels (température, fréquence, etc.)
-        
+        mol: RDKit molecule.
+        h1_idx, h2_idx: Hydrogen atom indices.
+        **kwargs: Additional conditions such as temperature and frequency.
+
     Returns:
-        Dict {plugin_name: coupling_value} des couplages détectés
-    """
+        A dictionary mapping plugin names to detected coupling values."""
     results = {}
     
-    # Ordre de priorité des plugins (dynamics désactivé)
+    # Plugin priority order (dynamics disabled)
     priority_order = ['isotopomers', 'exotic_carbocycles', 'organometallic', 'polymers']
     
     for plugin_name in priority_order:
@@ -51,18 +49,18 @@ def get_all_couplings(mol, h1_idx: int, h2_idx: int, **kwargs) -> Dict[str, floa
                 if plugin and hasattr(plugin, 'get_coupling'):
                     coupling = plugin.get_coupling(mol, h1_idx, h2_idx, **kwargs)
                     if coupling is not None:
-                        # S'assurer que c'est un nombre, pas un objet complexe
+                        # Require a numeric result rather than a complex object.
                         if isinstance(coupling, (int, float)):
                             results[plugin_name] = float(coupling)
                         else:
-                            # Essayer de convertir
+                            # Try numeric conversion.
                             try:
                                 results[plugin_name] = float(coupling)
                             except (ValueError, TypeError):
                                 print(f"Impossible de convertir couplage {plugin_name}: {coupling}")
                                 continue
             except Exception as e:
-                # Log l'erreur mais continue avec les autres plugins
+                # Log the error and continue with the other plugins.
                 print(f"Erreur plugin {plugin_name}: {e}")
                 continue
     
@@ -70,17 +68,14 @@ def get_all_couplings(mol, h1_idx: int, h2_idx: int, **kwargs) -> Dict[str, floa
 
 
 def get_first_coupling(mol, h1_idx: int, h2_idx: int) -> Optional[float]:
-    """
-    Version simple - retourne le premier couplage trouvé.
-    Fonction de compatibilité avec l'ancienne API.
-    """
-    # Ordre de priorité des plugins (dynamics désactivé)
+    """Return the first detected coupling for compatibility with the legacy API."""
+    # Plugin priority order (dynamics disabled)
     priority_order = [
-        'isotopomers',      # Plus spécifique
-        # 'dynamics',       # DÉSACTIVÉ
+        'isotopomers',      # More specific
+        # 'dynamics',       # Disabled
         'exotic_carbocycles',
         'organometallic',
-        'polymers',         # Plus général
+        'polymers',         # More general
     ]
     
     for plugin_name in priority_order:
@@ -91,7 +86,7 @@ def get_first_coupling(mol, h1_idx: int, h2_idx: int) -> Optional[float]:
                 if J is not None:
                     return J
         except Exception:
-            continue  # Plugin échoue, essayer le suivant
+            continue  # Try the next plugin after a failure.
     
     return None
 

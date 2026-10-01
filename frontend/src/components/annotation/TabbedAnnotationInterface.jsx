@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { LockOverlay, ProgressBar, FileUpload } from '../common';
@@ -48,7 +49,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
     bgStatus,
   } = annotationState;
 
-  // Active tab: 'source' | '1H' | '13C' | 'COSY' | 'HSQC'
+  // Active tab: 'source' | '1H' | '13C' | 'COSY' | 'TOCSY' | 'HSQC'
   const [activeTab, setActiveTab] = useState('source');
 
   const dimmed = uiLock.lockedBy === "PRED" || uiLock.lockedBy === "OPTIM";
@@ -135,7 +136,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
           <div className="settings-section">
             <h4 className="section-title">Available CSVs</h4>
             <div className="csv-grid">
-              {["1H", "13C", "COSY", "HSQC"].map((t) => {
+              {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((t) => {
                 const valid = hasCsvForMethod(t);
                 return (
                   <div key={t} className={`csv-item ${valid ? 'valid' : 'invalid'}`}>
@@ -153,7 +154,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
           <h4 className="section-title">Methods to Launch</h4>
           <p className="section-hint">Check the methods then configure each tab with the corresponding spectral matrix.</p>
           <div className="methods-list">
-            {["1H", "13C", "COSY", "HSQC"].map((t) => {
+            {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((t) => {
               const hasCsv = hasCsvForMethod(t);
               const hasMatrix = !!uploadedMatrixNames[t];
               const checked = selectedMethods.includes(t);
@@ -665,8 +666,9 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
     { id: '1H', label: '¹H' },
     { id: '13C', label: '¹³C' },
     { id: 'COSY', label: 'COSY' },
+    { id: 'TOCSY', label: 'TOCSY' },
     { id: 'HSQC', label: 'HSQC' },
-  ];
+  ].filter(tab => isMethodAvailable(tab.id));
 
   return (
     <div className="tabbed-annotation" style={{ position: "relative" }}>
@@ -694,6 +696,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
         {activeTab === '1H' && renderTypeTab('1H')}
         {activeTab === '13C' && renderTypeTab('13C')}
         {activeTab === 'COSY' && renderTypeTab('COSY')}
+        {isMethodAvailable('TOCSY') && activeTab === 'TOCSY' && renderTypeTab('TOCSY')}
         {activeTab === 'HSQC' && renderTypeTab('HSQC')}
       </div>
 

@@ -3,7 +3,7 @@
   display: flex;
   height: calc(100vh - 70px);
   background: #f5f5f5;
-  overflow: hidden; /* Empêcher le défilement global */
+  overflow: hidden; /* Keep scrolling inside the content panels. */
 }
 
 .main-view-empty {
@@ -64,7 +64,7 @@
   color: #555;
 }
 
-/* Panel liste molécules */
+/* Molecule list panel. */
 .molecule-list-panel {
   width: 180px;
   min-width: 140px;

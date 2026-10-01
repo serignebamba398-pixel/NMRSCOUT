@@ -533,7 +533,7 @@ calculer_RANSY_2D <- function(ppms, intensity_cols, cv_th, driver_ppm) {
 # 12) Substring coverage
 # -------------------------------
 
-# Helper: grouper les paires 2D quasi-dégénérées (chevauchement HSQC: ΔF1≤0.5 ET ΔF2≤0.05)
+# Group nearly degenerate 2D pairs (HSQC overlap: ΔF1≤0.5 and ΔF2≤0.05).
 # OPTIMIZED: Vectorized distance matrix + union-find instead of O(n²) loops
 get_overlap_groups_2D <- function(dt_shifts, overlap_tol_F1, overlap_tol_F2) {
     n <- nrow(dt_shifts)
@@ -581,7 +581,7 @@ calculer_coverage_sub_ratio_2D <- function(sub_chain, molecule_shifts, tol_F1, t
     uniq_ms <- unique(molecule_shifts[, .(shift_value_F1, shift_value_F2)])
     avail_sub <- spectrum_matrix[ppm_matrix %in% sub_chain, .(ppm_F1, ppm_F2, ppm_matrix)]
 
-    # Grouper les paires quasi-dégénérées — 1 match par groupe
+    # Group nearly degenerate pairs, allowing one match per group.
     grp_ids <- get_overlap_groups_2D(uniq_ms, overlap_tol_F1, overlap_tol_F2)
     groupes_uniques <- unique(grp_ids)
     nb_groupes <- length(groupes_uniques)
@@ -730,7 +730,7 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         max_cv_all <- max(avail$cv, na.rm = TRUE)
         if (!is.finite(max_cv_all) || max_cv_all == 0) max_cv_all <- 1
 
-        # RANSY pairings — par groupes quasi-dégénérés (ΔF1≤0.5 ET ΔF2≤0.05 pour HSQC)
+        # RANSY pairings by nearly degenerate groups (HSQC: ΔF1≤0.5 and ΔF2≤0.05).
         overlap_tol_hsqc_F1 <- 1.0
         overlap_tol_hsqc_F2 <- 0.1
         grp_ids_ransy <- get_overlap_groups_2D(unique_mppm, overlap_tol_hsqc_F1, overlap_tol_hsqc_F2)
@@ -750,7 +750,7 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
                     best_r <- cand[which.min(cost), ppm_matrix]
                     avail <- avail[ppm_matrix != best_r]
                     nb_groupes_ransy_matches <- nb_groupes_ransy_matches + 1L
-                    # Enregistrer la paire pour chaque membre du groupe
+                    # Record the pair for every group member.
                     for (ii in idx_membres) {
                         pairs_dt <- rbind(pairs_dt, data.table(mol_F1 = unique_mppm$shift_value_F1[ii], mol_F2 = unique_mppm$shift_value_F2[ii], ppm_ransy = best_r))
                     }
@@ -777,12 +777,12 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         intensity_ratios_str <- paste(round(avg_mat_all / max_int_all, 3), collapse = "|")
         ransy_var_str <- paste(paste(dt_ransy$ppm_matrix, round(dt_ransy$cv, 4), sep = ":"), collapse = "|")
 
-        # Calcul de l'erreur 2D moyenne ppm pour les paires appariées
+        # Calculate the mean 2D error in ppm for matched pairs.
         avg_error_ppm_2D <- if (nrow(pairs_dt) > 0) {
             ppm_ransy_idx <- fast_ppm_idx(pairs_dt$ppm_ransy)
             errors_F1 <- abs(pairs_dt$mol_F1 - spectrum_matrix$ppm_F1[ppm_ransy_idx])
             errors_F2 <- abs(pairs_dt$mol_F2 - spectrum_matrix$ppm_F2[ppm_ransy_idx])
-            # Distance euclidienne normalisée
+            # Normalized Euclidean distance
             dist_2D <- sqrt((errors_F1 / tol_match_F1)^2 + (errors_F2 / tol_match_F2)^2)
             round(mean(dist_2D, na.rm = TRUE), 4)
         } else {

@@ -5,14 +5,14 @@ from rdkit.Chem import inchi as rdkit_inchi
 import pickle
 import os
 
-# 1. InChIKey du SMILES utilisateur
+# InChIKey from the user's SMILES
 smiles = 'C([C@@H](C(=O)O)N)C(=O)O'
 mol_user = Chem.MolFromSmiles(smiles)
 ik_user = rdkit_inchi.MolToInchiKey(mol_user)
 print(f'SMILES utilisateur: {smiles}')
 print(f'InChIKey utilisateur: {ik_user}')
 
-# 2. Charger le SDF BMRB et trouver bmse000031
+# Load the BMRB SDF and find bmse000031.
 sdf_path = os.path.join(os.path.dirname(__file__), 'ml_dependencies/data/sdf_bmrb_rdkit_v2/bmrb_all_molecules.sdf')
 suppl = Chem.SDMolSupplier(sdf_path)
 for mol in suppl:
@@ -27,7 +27,7 @@ for mol in suppl:
         print(f'InChIKey BMRB:     {ik_bmrb}')
         print(f'Match exact: {ik_bmrb == ik_user}')
 
-        # Comparer les composants
+        # Compare components.
         user_parts = ik_user.split('-')
         bmrb_parts = ik_bmrb.split('-')
         print(f'\nComparaison InChIKey:')
@@ -37,7 +37,7 @@ for mol in suppl:
         print(f'  Stereo (2e partie): {user_parts[1]} vs {bmrb_parts[1]} -> {"MATCH" if user_parts[1]==bmrb_parts[1] else "DIFF"}')
         break
 
-# 3. Verifier le pickle
+# Check the pickle file.
 pkl_path = os.path.join(os.path.dirname(__file__), 'ml_dependencies/data/fingerprint_database.pkl')
 if os.path.exists(pkl_path):
     with open(pkl_path, 'rb') as f:
@@ -51,7 +51,7 @@ if os.path.exists(pkl_path):
         print(f'  Solvants: {list(exact_db[ik_user].keys())}')
     else:
         print(f'InChIKey utilisateur PAS dans exact_db')
-        # Chercher des InChIKeys similaires (meme connectivity)
+        # Find InChIKeys with the same connectivity.
         user_conn = ik_user.split('-')[0]
         similar = [ik for ik in exact_db.keys() if ik.split('-')[0] == user_conn]
         if similar:

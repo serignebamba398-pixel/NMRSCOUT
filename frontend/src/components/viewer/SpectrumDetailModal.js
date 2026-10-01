@@ -1,5 +1,5 @@
 // src/components/viewer/SpectrumDetailModal.js
-// Modal pour afficher le spectre 1H simulé avec formes de raie
+// Detailed simulated 1H spectrum with line shapes.
 
 import React, { useRef, useEffect, useState, useCallback } from "react";
 import { simulateSpectrum, getMultiplicityData, extractBrukerSpectrum, getTaskParams } from "../../api";
@@ -156,13 +156,13 @@ function SpectrumDetailModal({
   theoryShifts = [],
   expShifts = [],
   pdataDir1H = null,
-  matchTolerancePpm = 0.05,  // Tolérance d'annotation par défaut
-  multiplicityJson = null,   // Données de multiplicité pré-chargées
-  preloadedSpectrumData = null,  // Spectre simulé pré-chargé
-  isPreloading = false       // Indicateur de pré-chargement en cours
+  matchTolerancePpm = 0.05,  // Default annotation tolerance.
+  multiplicityJson = null,   // Preloaded multiplicity data.
+  preloadedSpectrumData = null,  // Preloaded simulated spectrum.
+  isPreloading = false       // Whether preloading is in progress.
 }) {
-  const canvasSimRef = useRef(null);  // Canvas pour spectre simulé (haut)
-  const canvasExpRef = useRef(null);  // Canvas pour spectre expérimental (bas)
+  const canvasSimRef = useRef(null);  // Simulated spectrum canvas (top).
+  const canvasExpRef = useRef(null);  // Experimental spectrum canvas (bottom).
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [spectrumData, setSpectrumData] = useState(null);
@@ -170,18 +170,18 @@ function SpectrumDetailModal({
   const [loadingMultiplicity, setLoadingMultiplicity] = useState(false);
   const [multiplicityError, setMultiplicityError] = useState(null);
 
-  // Données expérimentales Bruker
+  // Experimental Bruker data.
   const [expSpectrumData, setExpSpectrumData] = useState(null);
   const [loadingExpSpectrum, setLoadingExpSpectrum] = useState(false);
   const [expSpectrumError, setExpSpectrumError] = useState(null);
 
-  // Options de simulation
+  // Simulation options
   const [freqMhz, setFreqMhzInternal] = useState(700);
   const [lineShape, setLineShapeInternal] = useState("lorentzian");
 
-  // Fonction pour calculer la largeur de raie par défaut selon la fréquence
+  // Choose the default line width from the spectrometer frequency.
   const getDefaultLineWidth = useCallback((freq) => {
-    // Correspondance avec FREQ_LINEWIDTH_TABLE du backend
+    // Keep these values aligned with the backend FREQ_LINEWIDTH_TABLE.
     if (freq <= 150) return 1.80;
     if (freq <= 250) return 1.50;
     if (freq <= 350) return 1.30;
@@ -192,40 +192,40 @@ function SpectrumDetailModal({
   }, []);
 
   const [lineWidthHz, setLineWidthHzInternal] = useState(() => getDefaultLineWidth(700));
-  const [isLineWidthAuto, setIsLineWidthAuto] = useState(true); // Track si valeur auto ou manuelle
+  const [isLineWidthAuto, setIsLineWidthAuto] = useState(true); // Track whether the value was set automatically or manually.
 
-  // Paramètres dynamics post-processeur (solvant, température, pH)
-  // Le module dynamics gère automatiquement la visibilité des OH/NH selon le solvant
-  const [solvent, setSolventInternal] = useState('CDCl3');  // Solvant par défaut
-  const [temperature, setTemperatureInternal] = useState(298);  // Température en Kelvin
+  // Dynamics settings: solvent, temperature, and pH.
+  // The dynamics module handles solvent-dependent visibility of OH and NH protons.
+  const [solvent, setSolventInternal] = useState('CDCl3');  // Default solvent.
+  const [temperature, setTemperatureInternal] = useState(298);  // Temperature in kelvin.
   const [ph, setPhInternal] = useState(7.4);
 
-  // Flag pour forcer la re-simulation quand les paramètres changent
+  // Track changes that require a new simulation.
   const [userChangedParams, setUserChangedParams] = useState(false);
 
-  // Wrappers pour mettre à jour les paramètres (SANS déclencher auto-simulation)
-  // L'utilisateur doit cliquer sur "Refresh" pour simuler
+  // Update settings without automatically rerunning the simulation.
+  // Simulation starts when the user clicks Refresh.
   const setFreqMhz = useCallback((v) => {
     setFreqMhzInternal(v);
-    // Si mode auto, recalculer la largeur de raie
+    // Recalculate the line width in automatic mode.
     if (isLineWidthAuto) {
       setLineWidthHzInternal(getDefaultLineWidth(v));
     }
-    // ❌ SUPPRIMÉ: setUserChangedParams(true) - ne plus auto-simuler
+    
   }, [isLineWidthAuto, getDefaultLineWidth]);
 
   const setLineShape = useCallback((v) => { setLineShapeInternal(v); }, []);
 
   const setLineWidthHz = useCallback((v) => {
     setLineWidthHzInternal(v);
-    setIsLineWidthAuto(false); // Passage en mode manuel
-    // ❌ SUPPRIMÉ: setUserChangedParams(true) - ne plus auto-simuler
+    setIsLineWidthAuto(false); // Switch to manual mode.
+    
   }, []);
 
   const resetLineWidthToAuto = useCallback(() => {
     setLineWidthHzInternal(getDefaultLineWidth(freqMhz));
     setIsLineWidthAuto(true);
-    // ❌ SUPPRIMÉ: setUserChangedParams(true) - ne plus auto-simuler
+    
   }, [freqMhz, getDefaultLineWidth]);
 
   const setSolvent = useCallback((v) => { setSolventInternal(v); }, []);
@@ -234,20 +234,20 @@ function SpectrumDetailModal({
 
   // Zoom state
   const [zoomRange, setZoomRange] = useState(null);
-  const [verticalScaleSim, setVerticalScaleSim] = useState(1.0); // Échelle verticale spectre simulé
-  const [verticalScaleExp, setVerticalScaleExp] = useState(1.0); // Échelle verticale spectre expérimental
-  const [ppmOffsetExp, setPpmOffsetExp] = useState(0.0); // Décalage horizontal du spectre expérimental (ppm)
+  const [verticalScaleSim, setVerticalScaleSim] = useState(1.0); // Simulated spectrum intensity scale.
+  const [verticalScaleExp, setVerticalScaleExp] = useState(1.0); // Experimental spectrum intensity scale.
+  const [ppmOffsetExp, setPpmOffsetExp] = useState(0.0); // Experimental spectrum offset in ppm.
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
 
-  // Reset userChangedParams quand le modal se ferme
+  // Reset userChangedParams when the modal closes.
   useEffect(() => {
     if (!isOpen) {
       setUserChangedParams(false);
     }
   }, [isOpen]);
 
-  // Reset données quand molId change (nouvelle molécule sélectionnée)
+  // Reset data when the selected molecule changes.
   useEffect(() => {
     console.log('[SpectrumDetailModal] molId changed to:', molId, '- resetting data');
     setSpectrumData(null);
@@ -257,22 +257,22 @@ function SpectrumDetailModal({
     setError(null);
   }, [molId]);
 
-  // Tolérance d'annotation dynamique récupérée depuis les paramètres de la tâche
+  // Annotation tolerance loaded from the task settings.
   const [taskTolerancePpm, setTaskTolerancePpm] = useState(matchTolerancePpm);
 
-  // Récupérer les paramètres d'annotation de la tâche
+  // Load annotation settings for this task.
   useEffect(() => {
     if (isOpen && taskId) {
       getTaskParams(taskId)
         .then(params => {
-          // Chercher deltaPpm ou ppmTol dans les paramètres
+          // Read the tolerance from deltaPpm or ppmTol.
           const tolerance = params.deltaPpm || params.ppmTol || params.match_tolerance_ppm || matchTolerancePpm;
           setTaskTolerancePpm(tolerance);
           console.log('[SpectrumDetailModal] Tolérance d\'annotation:', tolerance, 'ppm');
         })
         .catch(err => {
           console.warn('[SpectrumDetailModal] Failed to get task params:', err);
-          setTaskTolerancePpm(matchTolerancePpm); // Fallback sur la valeur par défaut
+          setTaskTolerancePpm(matchTolerancePpm); // Use the default if no task-specific tolerance is available.
         });
     }
   }, [isOpen, taskId, matchTolerancePpm]);
@@ -351,16 +351,16 @@ function SpectrumDetailModal({
 
   // Fetch spectrum data
   const fetchSpectrum = useCallback(async () => {
-    // Priorité: multiplicityJson (prop) > fetchedMultiplicityData (API)
+    // Prefer multiplicity data passed as a prop over fetched data.
     const multData = multiplicityJson || fetchedMultiplicityData;
 
-    // Si on est en train de charger les données de multiplicité, attendre
+    // Wait for multiplicity data before simulating.
     if (loadingMultiplicity) {
       console.log('[SpectrumDetailModal] Still loading multiplicity data, waiting...');
       return;
     }
 
-    // Le JSON de multiplicité est REQUIS
+    // Simulation requires multiplicity JSON.
     if (!multData) {
       const errorMessage = multiplicityError
         ? `Failed to load multiplicity data: ${multiplicityError}`
@@ -374,16 +374,16 @@ function SpectrumDetailModal({
 
     try {
       const data = await simulateSpectrum({
-        // Utilise toujours le JSON de multiplicité
+        // Pass multiplicity JSON to the simulator.
         multiplicity_json: multData,
         mol_id: molId,
         freq_mhz: freqMhz,
         line_shape: lineShape,
         // ppm_range is auto-calculated by backend from molecule shifts
         digital_resolution_hz: 0.1,
-        line_width_hz: lineWidthHz, // Valeur par défaut auto ou manuelle
-        // Paramètres dynamics - le module gère automatiquement OH/NH selon le solvant
-        enable_dynamics: true,  // Toujours actif pour appliquer les corrections
+        line_width_hz: lineWidthHz, // Use the supplied line width or let the backend choose it.
+        // The dynamics module handles solvent-dependent OH and NH visibility.
+        enable_dynamics: true,  // Keep enabled so the corrections are applied.
         solvent: solvent,
         temperature_k: temperature,
         ph: ph,
@@ -407,33 +407,33 @@ function SpectrumDetailModal({
 
   // Trigger simulation ONLY on modal open (not on param changes)
   useEffect(() => {
-    // Ne pas lancer la simulation si on est encore en train de charger les données
+    // Wait for data loading to finish before starting the simulation.
     if (loadingMultiplicity || isPreloading) {
       console.log('[SpectrumDetailModal] Waiting for multiplicity data to load...');
       return;
     }
 
-    // ✅ MODIFICATION: Ne simuler QUE lors du premier chargement
-    // Les changements de paramètres ne déclenchent PAS la simulation automatiquement
-    // L'utilisateur doit cliquer sur "Refresh" pour re-simuler
+    //  Run automatically only when the molecule is first loaded.
+    // Changing settings does not automatically run the simulation.
+    // Click Refresh to rerun the simulation.
     if (isOpen && (multiplicityJson || fetchedMultiplicityData)) {
       if (!spectrumData && preloadedSpectrumData) {
-        // Utiliser les données pré-chargées seulement au premier rendu
+        // Use preloaded data only for the initial render.
         console.log('[SpectrumDetailModal] Using preloaded data (first load)');
         setSpectrumData(preloadedSpectrumData);
         setLoading(false);
         setError(null);
       } else if (!spectrumData) {
-        // Première simulation sans données pré-chargées
+        // Run the initial simulation when no preloaded spectrum is available.
         console.log('[SpectrumDetailModal] Initial spectrum simulation');
         fetchSpectrum();
       }
-      // ❌ SUPPRIMÉ: Ne plus re-simuler automatiquement quand userChangedParams = true
-      // L'utilisateur doit maintenant cliquer sur "Refresh"
+      
+      // Apply parameter changes when the user clicks Refresh.
     }
   }, [isOpen, loadingMultiplicity, isPreloading, multiplicityJson, fetchedMultiplicityData, preloadedSpectrumData, spectrumData, fetchSpectrum]);
-  // ✅ SUPPRIMÉ des dépendances: userChangedParams, freqMhz, lineShape, lineWidthHz, solvent, temperature, ph
-  // Car on ne veut PAS re-simuler automatiquement quand ces params changent
+  // Parameter changes are intentionally excluded from this effect; Refresh applies them.
+  // Parameter changes should not trigger simulation automatically.
 
   // Draw spectrum on canvas
   useEffect(() => {
@@ -484,7 +484,7 @@ function SpectrumDetailModal({
     }
     if (maxInt === 0) maxInt = 1;
     
-    // Appliquer l'échelle verticale (verticalScaleSim)
+    // Apply the simulated spectrum intensity scale.
     const intToY = (int) => PAD.top + plotH - (int / maxInt) * plotH * 0.9 * verticalScaleSim;
     
     // Draw grid with adaptive step based on zoom level
@@ -494,17 +494,17 @@ function SpectrumDetailModal({
     // Vertical grid lines (ppm) - adaptive step
     const ppmRange = range.max - range.min;
     let ppmStep;
-    if (ppmRange < 0.005) ppmStep = 0.0005;     // Zoom ultra serré: 0.0005 ppm (0.5 Hz à 1000 MHz)
-    else if (ppmRange < 0.01) ppmStep = 0.001;  // Zoom extrême: 0.001 ppm
-    else if (ppmRange < 0.05) ppmStep = 0.005;  // Zoom très très serré: 0.005 ppm
-    else if (ppmRange < 0.1) ppmStep = 0.01;    // Zoom très serré: 0.01 ppm
-    else if (ppmRange < 0.5) ppmStep = 0.05;    // Zoom serré: 0.05 ppm
+    if (ppmRange < 0.005) ppmStep = 0.0005;     // 0.0005 ppm ticks correspond to 0.5 Hz at 1000 MHz.
+    else if (ppmRange < 0.01) ppmStep = 0.001;  // 0.001 ppm tick spacing.
+    else if (ppmRange < 0.05) ppmStep = 0.005;  // 0.005 ppm tick spacing.
+    else if (ppmRange < 0.1) ppmStep = 0.01;    // 0.01 ppm tick spacing.
+    else if (ppmRange < 0.5) ppmStep = 0.05;    // 0.05 ppm tick spacing.
     else if (ppmRange < 1) ppmStep = 0.1;       // Zoom moyen: 0.1 ppm
-    else if (ppmRange < 3) ppmStep = 0.2;       // Zoom léger: 0.2 ppm
+    else if (ppmRange < 3) ppmStep = 0.2;       // 0.2 ppm tick spacing.
     else if (ppmRange < 6) ppmStep = 0.5;       // Vue large: 0.5 ppm
-    else ppmStep = 1;                            // Vue très large: 1 ppm
+    else ppmStep = 1;                            // 1 ppm tick spacing.
     
-    // Aligner sur des multiples du pas
+    // Align ticks to multiples of the step size.
     const startPpm = Math.floor(range.min / ppmStep) * ppmStep;
     for (let ppm = startPpm; ppm <= range.max; ppm += ppmStep) {
       if (ppm < range.min) continue;
@@ -586,7 +586,7 @@ function SpectrumDetailModal({
     ctx.fillStyle = "#374151";
     ctx.font = "11px system-ui, sans-serif";
     ctx.textAlign = "center";
-    // Adapter la précision au niveau de zoom
+    // Match label precision to the zoom level.
     const precision = ppmRange < 0.01 ? 4 : ppmRange < 0.1 ? 3 : ppmRange < 1 ? 2 : 1;
     const startPpmLabel = Math.floor(range.min / ppmStep) * ppmStep;
     for (let ppm = startPpmLabel; ppm <= range.max; ppm += ppmStep) {
@@ -702,15 +702,15 @@ function SpectrumDetailModal({
 
     const ppmRange = range.max - range.min;
     let ppmStep;
-    if (ppmRange < 0.005) ppmStep = 0.0005;     // Zoom ultra serré: 0.0005 ppm
-    else if (ppmRange < 0.01) ppmStep = 0.001;  // Zoom extrême: 0.001 ppm
-    else if (ppmRange < 0.05) ppmStep = 0.005;  // Zoom très très serré: 0.005 ppm
-    else if (ppmRange < 0.1) ppmStep = 0.01;    // Zoom très serré: 0.01 ppm
-    else if (ppmRange < 0.5) ppmStep = 0.05;    // Zoom serré: 0.05 ppm
+    if (ppmRange < 0.005) ppmStep = 0.0005;     // 0.0005 ppm tick spacing.
+    else if (ppmRange < 0.01) ppmStep = 0.001;  // 0.001 ppm tick spacing.
+    else if (ppmRange < 0.05) ppmStep = 0.005;  // 0.005 ppm tick spacing.
+    else if (ppmRange < 0.1) ppmStep = 0.01;    // 0.01 ppm tick spacing.
+    else if (ppmRange < 0.5) ppmStep = 0.05;    // 0.05 ppm tick spacing.
     else if (ppmRange < 1) ppmStep = 0.1;       // Zoom moyen: 0.1 ppm
-    else if (ppmRange < 3) ppmStep = 0.2;       // Zoom léger: 0.2 ppm
+    else if (ppmRange < 3) ppmStep = 0.2;       // 0.2 ppm tick spacing.
     else if (ppmRange < 6) ppmStep = 0.5;       // Vue large: 0.5 ppm
-    else ppmStep = 1;                            // Vue très large: 1 ppm
+    else ppmStep = 1;                            // 1 ppm tick spacing.
     
     const startPpm = Math.floor(range.min / ppmStep) * ppmStep;
     for (let ppm = startPpm; ppm <= range.max; ppm += ppmStep) {
@@ -768,7 +768,7 @@ function SpectrumDetailModal({
     ctx.fillStyle = "#64748b";
     ctx.font = "11px system-ui, sans-serif";
     ctx.textAlign = "center";
-    // Adapter la précision au niveau de zoom
+    // Match label precision to the zoom level.
     const precision = ppmRange < 0.01 ? 4 : ppmRange < 0.1 ? 3 : ppmRange < 1 ? 2 : 1;
     const startPpmLabel = Math.floor(range.min / ppmStep) * ppmStep;
     for (let ppm = startPpmLabel; ppm <= range.max; ppm += ppmStep) {
@@ -808,7 +808,7 @@ function SpectrumDetailModal({
       const zoomFactor = e.deltaY < 0 ? 0.8 : 1.25;
       const newWidth = (range.max - range.min) * zoomFactor;
 
-      // Permettre un zoom très précis jusqu'à 0.001 ppm (1 Hz à 1000 MHz)
+      // Allow zooming down to 0.001 ppm, equivalent to 1 Hz at 1000 MHz.
       if (newWidth < 0.001 || newWidth > 15) return;
 
       let newMin = centerPpm - newWidth / 2;
@@ -1080,7 +1080,7 @@ function SpectrumDetailModal({
                 Reset View
               </button>
               <span style={{ fontSize: 10, color: "#64748b", fontStyle: "italic" }}>
-                💡 Drag to zoom | Scroll to scale | Ctrl+Scroll for H-zoom | Shift+Drag on Exp. to align
+                Drag to zoom | Scroll to scale | Ctrl+Scroll for H-zoom | Shift+Drag on Exp. to align
               </span>
               <button
                 onClick={onClose}
@@ -1116,7 +1116,7 @@ function SpectrumDetailModal({
             
             {error && (
               <div style={MODAL_STYLES.error}>
-                <p>❌ {error}</p>
+                <p>{error}</p>
                 <button
                   onClick={fetchSpectrum}
                   style={{
@@ -1136,7 +1136,7 @@ function SpectrumDetailModal({
             
             {!loading && !error && (
               <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 8 }}>
-                {/* Spectre simulé (en haut) */}
+                {/* Simulated spectrum (top). */}
                 <div style={{ flex: 1, position: "relative", border: "1px solid #e5e7eb", borderRadius: 8, minHeight: 0 }}>
                   <div style={{
                     position: "absolute",
@@ -1165,7 +1165,7 @@ function SpectrumDetailModal({
                   />
                 </div>
 
-                {/* Spectre expérimental (en bas) */}
+                {/* Experimental spectrum (bottom). */}
                 <div style={{ flex: 1, position: "relative", border: "1px solid #e5e7eb", borderRadius: 8, minHeight: 0 }}>
                   <div style={{
                     position: "absolute",

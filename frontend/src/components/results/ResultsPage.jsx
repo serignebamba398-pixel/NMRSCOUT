@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../contexts/AppStateContext';
@@ -22,14 +23,14 @@ export const ResultsPage = () => {
     pdataDirs: {},
   };
 
-  const hasCSV = safeViewer.csvs && Object.keys(safeViewer.csvs).length > 0;
+  const hasCSV = safeViewer.csvs && Object.keys(safeViewer.csvs).some(isMethodAvailable);
   const dimmed = uiLock.lockedBy !== null;
 
   const normalizedCsvs = useMemo(() => {
     const csvs = safeViewer.csvs;
     if (!csvs || typeof csvs !== 'object') return {};
     return Object.fromEntries(
-      Object.entries(csvs).map(([k, v]) => [k, normalizeStaticUrl(v)])
+      Object.entries(csvs).filter(([type]) => isMethodAvailable(type)).map(([k, v]) => [k, normalizeStaticUrl(v)])
     );
   }, [safeViewer.csvs]);
 
@@ -63,7 +64,7 @@ export const ResultsPage = () => {
     return (
       <div className="results-page">
         <div className="warning-box">
-          <span className="warning-icon">⚠️</span>
+          <span className="warning-icon" aria-hidden="true">!</span>
           <div>
             <h3 className="warning-title">No project open</h3>
             <p className="warning-text">
@@ -118,7 +119,7 @@ export const ResultsPage = () => {
             <div className="card" style={{ marginBottom: 16 }}>
               <h3>Available downloads</h3>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {Object.entries(safeViewer.downloads || {}).map(([type, url]) => (
+                {Object.entries(safeViewer.downloads || {}).filter(([type]) => isMethodAvailable(type)).map(([type, url]) => (
                   <button
                     key={type}
                     className="btn btn-success"

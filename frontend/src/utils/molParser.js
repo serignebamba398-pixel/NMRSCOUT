@@ -53,7 +53,7 @@ export function extractShiftArrayFromSDFRecord(sdfText) {
 }
 
 /**
- * Parse un bloc de valeurs de shift
+ * Parse a block of chemical shift values.
  */
 function parseShiftBlock(block) {
   if (!block) return null;
@@ -72,11 +72,11 @@ function parseShiftBlock(block) {
 }
 
 /**
- * Parse les symboles atomiques depuis un bloc MOL
+ * MOL atom parsing and index handling.
  */
 /**
- * Supprime les H explicites d'un molblock V2000 pour un rendu 2D propre.
- * Retourne aussi le mapping oldIndex → newIndex pour remapper les highlights.
+ * Remove explicit hydrogens from a V2000 molblock for 2D rendering.
+ * Return an oldIndex → newIndex mapping to update highlight indices.
  */
 export function stripExplicitHFromMolblock(molblock) {
   if (!molblock) return { molblock, indexMap: {} };
@@ -148,9 +148,9 @@ export function parseAtomSymbolsFromMolblock(molblock) {
 }
 
 /**
- * Trouve les liaisons dans un chemin entre paires d'atomes
+ * Find bonds along a path between atom pairs.
  */
-export function findBondsInPath(molblock, atomPairs) {
+export function findBondsInPath(molblock, atomPairs, maxBonds = 5) {
   if (!molblock || !atomPairs.length) return [];
   const lines = molblock.split(/\r?\n/);
   const counts = lines[3] || "";
@@ -171,7 +171,7 @@ export function findBondsInPath(molblock, atomPairs) {
   }
 
   const findShortestPath = (start, end) => {
-    // Pour les diagonaux COSY (même proton) : retourner les bonds connectés (liaison C-H)
+    // For COSY diagonal matches, return bonds attached to the proton, including its C–H bond.
     if (start === end) {
       const bonds = adjacency.get(start) || [];
       return bonds.map(b => b.bondIndex);
@@ -180,9 +180,10 @@ export function findBondsInPath(molblock, atomPairs) {
     const seen = new Set([start]);
     while (q.length > 0) {
       const { atom, path } = q.shift();
+      if (path.length >= maxBonds) continue;
       for (const { neighbor, bondIndex } of adjacency.get(atom) || []) {
         if (neighbor === end) return [...path, bondIndex];
-        if (!seen.has(neighbor) && path.length < 4) {
+        if (!seen.has(neighbor) && path.length + 1 < maxBonds) {
           seen.add(neighbor);
           q.push({ atom: neighbor, path: [...path, bondIndex] });
         }

@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React from 'react';
 import { FileUpload, ParameterInput } from '../common';
 import { formatFileSize } from '../../utils';
@@ -39,7 +40,7 @@ export const AnnotationForm = ({
       <div className="type-selector">
         <h3>Annotation Type (parameters to edit)</h3>
         <div className="type-tabs">
-          {["1H", "13C", "COSY", "HSQC"].map((t) => {
+          {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((t) => {
             const available = hasCsvForMethod(t);
             return (
               <button

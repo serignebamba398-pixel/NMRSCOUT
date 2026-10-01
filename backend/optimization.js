@@ -163,7 +163,7 @@ class ModelCache {
 
     if (oldestKey) {
       this.cache.delete(oldestKey);
-      console.log(`🗑️ Cache eviction: ${oldestKey}`);
+      console.log(`Cache eviction: ${oldestKey}`);
     }
   }
 
@@ -244,7 +244,7 @@ class ModelCache {
     this.cleanup(true);
     this.hitCount = 0;
     this.missCount = 0;
-    console.log('🗑️ Cache completely cleared');
+    console.log('Cache completely cleared');
   }
 }
 

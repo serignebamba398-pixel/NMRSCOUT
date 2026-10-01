@@ -1,9 +1,8 @@
 #!/usr/bin/env Rscript
 
 # =====================================================================
-# 1H NMR Annotation — Multi-Pivot STOCSY Strategy (V2)
+# 1H NMR Annotation — Multi-Pivot STOCSY Strategy (
 # Pipeline: Match → 3 Anchor Pivots → STOCSY → Ratio → RANSY → Combinatorial Crossing
-# Compatible with existing frontend/backend (same parameter names and CSV + new columns)
 # =====================================================================
 
 suppressWarnings(suppressMessages({}))
@@ -849,7 +848,7 @@ cross_sub_groups <- function(sub_groups, molecule_ppm, tol_match,
   }
 
   # =====================================================================
-  # CAS: 1 seul groupe → pas de croisement, meilleur solo
+  # With one group, use the best solo result without cross-group comparison.
   # =====================================================================
   if (n_valid == 1) {
     g <- valid_group_indices[1]

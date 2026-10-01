@@ -1,11 +1,12 @@
-// src/Viewer.js - CORRECTED VERSION with timeouts, global color management, forced remount, reliable 2D reset
-// + "Show all molecules" button with paginated modal sorted by RANSY average
-// Combined view NMR + 2D/3D Molecules + sidebar
-// - Rect zoom, 2D relevel on scroll, state persistence
-// - "Word style" color picker with Hex/RGB + preview
-// - Colors by method for matched atoms (H1, C13, COSY, HSQC)
-// - FIX: safety timeouts to avoid UI blocking
-// - FIX: reliable 1D/2D reset via nonce + backend recompute + snapshots by type and source
+import { isMethodAvailable, availableMethodEntries } from './constants/releaseFeatures';
+// NMR results viewer with molecule rendering and spectrum controls.
+
+
+
+
+
+
+
 
 import React, {
   useEffect,
@@ -15,6 +16,7 @@ import React, {
   useRef,
 } from "react";
 import { jsPDF } from "jspdf";
+import MoleculeScoreSummary from "./components/viewer/MoleculeScoreSummary";
 
 import {
   interactive1H,
@@ -29,9 +31,9 @@ import {
   simulateSpectrumBatch,
 } from "./api";
 
-// ========================================
-// MODULARIZED IMPORTS
-// ========================================
+
+
+
 
 // Color constants and styles
 import {
@@ -43,43 +45,40 @@ import {
   SIDEBAR_W,
 } from "./constants/colors";
 
-// Utilitaires
+// Utilities
 import { debugLog, debugWarn } from "./utils/debug";
 import { fetchWithRetry } from "./utils/imageUtils";
 import { parseCSVSmart } from "./utils/csvParser";
+import { homonuclearSpectrumRows } from "./utils/homonuclearSpectrumRows";
 import { findBondsInPath } from "./utils/molParser";
+import { tocsyHighlights } from "./utils/tocsyHighlights";
+import { useSpectrumWindowSettings } from "./hooks/useSpectrumWindowSettings";
 import { 
   loadRDKitFromCDN, 
   load3DmolFromCDN, 
   isWebGLAvailable 
 } from "./utils/cdnLoaders";
-// colorUtils used only in sub-components
 
-// Composants viewer
+
+// Viewer components
 import { Pill, ColorPicker, StickChart, Scatter2D, SpectrumDetailModal } from "./components/viewer";
 
-// Hook de mesure
-// useMeasureWidth used only in sub-components
+
+
 
 // Enable debug by typing in console: window.DEBUG_NMR = true
 if (typeof window !== 'undefined' && !window.hasOwnProperty('DEBUG_NMR')) {
   window.DEBUG_NMR = false; // false by default in production
 }
 
-/* ===========================
-   CDN Loaders (RDKit, 3Dmol) - imported from utils/cdnLoaders.js
-   Helpers isProblematicBrowser, isWebGLAvailable also imported
-   =========================== */
+/*   CDN Loaders (RDKit, 3Dmol) - imported from utils/cdnLoaders.js
+   Helpers isProblematicBrowser, isWebGLAvailable also imported*/
 
-/* ===========================
-   CSV parsing + petits helpers
-   =========================== */
+/*   CSV helpers*/
 
 
 
-/* ===========================
-   SDF / MOL helpers
-   =========================== */
+/*   SDF / MOL helpers*/
 
 function extractFirstMolBlockPreserving(text) {
   if (!text) return null;
@@ -107,7 +106,7 @@ function extractShiftArrayFromSDFRecord(sdfText) {
   if (!sdfText) return null;
   const first = sdfText.split("$$$$")[0] || sdfText;
   
-  // [FIX] CORRECTION: search for <(1)> with backend exact format: >  <(1)>  (1)
+  // Match the SDF property header emitted by the backend: >  <(1)>  (1).
   // Format is: >  <(1)>  (1)\n22.067 54.492 0.000 ...
   const re = />\s*<\(1\)>\s*(?:\(\d+\))?\s*\r?\n([\s\S]*?)(?:\r?\n\r?\n|$$$$|$)/;
   const m = first.match(re);
@@ -132,7 +131,7 @@ function parseShiftBlock(block) {
 
   if (!cleaned) return null;
 
-  // [NOTE] Values are already space-separated
+  // Values are already space-separated
   return cleaned
     .split(/\s+/)
     .map(x => parseFloat(x.replace(",", ".")))
@@ -167,7 +166,7 @@ async function tryFetchText(url) {
 
 function dirnameFromUrl(u) {
   try {
-    // En Electron, utiliser API_BASE_URL comme base
+    // Use API_BASE_URL as the base URL in Electron.
     const baseUrl = typeof API_BASE_URL === 'string' && API_BASE_URL.startsWith('http')
       ? API_BASE_URL
       : window.location.href;
@@ -192,7 +191,7 @@ async function resolveMolForSource(csvUrl, sourceName, taskId = null) {
 
   if (taskId) {
     try {
-      // En Electron, utiliser API_BASE_URL pour construire l'URL de base
+      // Use API_BASE_URL for requests from Electron.
       const baseUrl = typeof API_BASE_URL === 'string' && API_BASE_URL.startsWith('http')
         ? API_BASE_URL
         : window.location.href;
@@ -246,7 +245,7 @@ async function resolveMolForSource(csvUrl, sourceName, taskId = null) {
   }
 
   try {
-    // En Electron, utiliser API_BASE_URL pour construire l'URL de base
+    // Use API_BASE_URL for requests from Electron.
     const baseUrl = typeof API_BASE_URL === 'string' && API_BASE_URL.startsWith('http')
       ? API_BASE_URL
       : window.location.href;
@@ -281,11 +280,11 @@ async function resolveMolForSource(csvUrl, sourceName, taskId = null) {
   return null;
 }
 
-/* useMeasureWidth importe depuis hooks/useMeasureWidth.js */
+/*  */
 
-/* StickChart importe depuis components/viewer/StickChart.jsx */
+/*  */
 
-/* Scatter2D importe depuis components/viewer/Scatter2D.jsx */
+/*  */
 
 function MoleculePane({
   csvUrl,
@@ -296,9 +295,9 @@ function MoleculePane({
   customColors,
   molZoom = 1,
   molHeight = MOL_HEIGHT,
-  flagsOverride = null,            // coches globales (optionnelles)
-  showLocalToggles = true,         // masquer/afficher les coches locales
-  compact = false,                 // mode miniatures: juste le SVG, sans cadres/titres
+  flagsOverride = null,            // Optional shared method toggles.
+  showLocalToggles = true,         // Show or hide the local method toggles.
+  compact = false,                 // Thumbnail mode renders only the SVG.
 }) {
   const [svg, setSvg] = useState(null);
   const [err, setErr] = useState(null);
@@ -306,7 +305,7 @@ function MoleculePane({
 
   // Local checkboxes (used only if flagsOverride is not provided)
   const [localFlags, setLocalFlags] = useState({
-    H1: true, C13: true, COSY: true, HSQC: true,
+    H1: true, C13: true, COSY: true, TOCSY: isMethodAvailable('TOCSY'), HSQC: true,
   });
   const flags = flagsOverride || localFlags;       // single source of truth
   const toggle = (k) => setLocalFlags(f => ({ ...f, [k]: !f[k] }));
@@ -315,8 +314,8 @@ function MoleculePane({
   const viewerRef = useRef(null);
 
   // Safe accessors — customColors may come from sessionStorage with missing fields
-  const defaultRgb = { H1: [0, 0.72, 0.66], C13: [0.23, 0.05, 0.64], COSY: [1, 0.69, 0], HSQC: [0.97, 0.15, 0.52] };
-  const defaultHex = { H1: '#00B8A9', C13: '#3A0CA3', COSY: '#FFB000', HSQC: '#F72585' };
+  const defaultRgb = { H1: [0, 0.72, 0.66], C13: [0.23, 0.05, 0.64], COSY: [1, 0.69, 0], TOCSY: [0, 0.66, 0.47], HSQC: [0.97, 0.15, 0.52] };
+  const defaultHex = { H1: '#00B8A9', C13: '#3A0CA3', COSY: '#FFB000', TOCSY: '#00A878', HSQC: '#F72585' };
   const safeRgb = (key) => customColors?.[key]?.rgb || defaultRgb[key] || [0, 0.5, 0.5];
   const safeHex = (key) => customColors?.[key]?.hex || defaultHex[key] || '#008080';
 
@@ -325,6 +324,7 @@ function MoleculePane({
     H1:  safeRgb('H1'),
     C13: safeRgb('C13'),
     COSY:safeRgb('COSY'),
+    TOCSY:safeRgb('TOCSY'),
     HSQC:safeRgb('HSQC'),
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -332,25 +332,32 @@ function MoleculePane({
     H1:  safeHex('H1'),
     C13: safeHex('C13'),
     COSY:safeHex('COSY'),
+    TOCSY:safeHex('TOCSY'),
     HSQC:safeHex('HSQC'),
   };
 
-  // --- HSQC: colorer la liaison C–H en 2D -----------------------------------
+  // HSQC C–H bond highlighting in 2D.
   const computeMultiHighlights = useCallback((resolved, rowsByType) => {
     const atoms  = parseAtomSymbolsFromMolblock(resolved.molblock) || [];
     const shifts = extractShiftArrayFromSDFRecord(resolved.rawText) || [];
     
-    // [FIX] CORRECTION : Logs conditionnels uniquement en mode debug
+    // Log diagnostics only in debug mode.
     debugLog("[DEBUG] Shifts extraits:", shifts);
     debugLog("[DEBUG] Symboles d'atomes:", atoms);
     debugLog("[DEBUG] Nombre d'atomes:", atoms.length);
     
-    // Protection contre les tableaux vides
+    // Handle empty arrays.
     if (!atoms.length || !shifts.length) {
       debugWarn("[WARN] No atoms or shifts found, coloring disabled");
       return { 
-        highlightByType: { H1: new Set(), C13: new Set(), COSY: new Set(), HSQC: new Set() }, 
-        bondsCOSY: [], 
+        highlightByType: { H1: new Set(), C13: new Set(), COSY: new Set(), TOCSY: new Set(), HSQC: new Set() },
+        bondsCOSY: [],
+        bondsTOCSY: [],
+        tocsyStickAtoms: new Set(),
+        tocsyCrossCarbons: new Set(),
+        cosyDiagonalProtons: new Set(),
+        cosyDiagonalCarbons: new Set(),
+        cosyCrosspeakCarbons: new Set(),
         bondsHSQC: [] 
       };
     }
@@ -360,18 +367,18 @@ function MoleculePane({
     const hIdx   = atoms.map((s,i)=>s==="H"?i:-1).filter(i=>i>=0);
     const cIdx   = atoms.map((s,i)=>s==="C"?i:-1).filter(i=>i>=0);
 
-    const sets   = { H1:new Set(), C13:new Set(), COSY:new Set(), HSQC:new Set() };
-    const cosyDiagonalProtons = new Set();  // Protons avec match diagonal COSY
-    const cosyDiagonalCarbons = new Set();  // Carbones parents des protons diagonaux COSY
-    const cosyCrosspeakCarbons = new Set(); // Carbones parents des protons cross-peak COSY
+    const sets   = { H1:new Set(), C13:new Set(), COSY:new Set(), TOCSY:new Set(), HSQC:new Set() };
+    const cosyDiagonalProtons = new Set();  // Protons matched to COSY diagonal peaks.
+    const cosyDiagonalCarbons = new Set();  // Parent carbons of COSY diagonal protons.
+    const cosyCrosspeakCarbons = new Set(); // Parent carbons of COSY cross-peak protons.
     let bondsCOSY = [];
-    let bondsCOSYDiagonal = [];  // Liaisons C-H des matchs diagonaux COSY
+    let bondsCOSYDiagonal = [];  // C–H bonds matched to COSY diagonal peaks.
     let bondsHSQC = [];
 
     // Helper: round to 3 decimals for exact matching
     const r3 = v => Math.round(v * 1000) / 1000;
     
-    // Helper: trouver le carbone parent d'un proton dans le molblock
+    // Find a proton's parent carbon in the molblock.
     const findCarbonParent = (hIdx) => {
       const lines = resolved.molblock.split(/\r?\n/);
       const counts = lines[3] || "";
@@ -384,7 +391,7 @@ function MoleculePane({
         const a2 = parseInt(l.slice(3,6).trim(),10)-1;
         if (a1 === hIdx || a2 === hIdx) {
           const other = a1 === hIdx ? a2 : a1;
-          // Vérifier si l'autre atome est un carbone
+          // Check whether the other atom is carbon.
           const atomLine = lines[4+other] || "";
           const symbol = atomLine.slice(31,34).trim();
           if (symbol === "C") {
@@ -451,7 +458,7 @@ function MoleculePane({
           const [h1Str, h2Str] = entry.split(":");
           if (!h1Str || !h2Str) continue;
           
-          // Parse tilde-separated indices for equivalent protons (using ~ to avoid all conflicts)
+          // Parse equivalent proton indices separated by ~.
           const h1List = h1Str.split("~").map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
           const h2List = h2Str.split("~").map(s => parseInt(s.trim(), 10)).filter(Number.isFinite);
           
@@ -463,8 +470,8 @@ function MoleculePane({
                             (h1List.length === 1 && h2List.length === 1 && h1List[0] === h2List[0]);
           
           if (isDiagonal) {
-            // Diagonal: ALL protons appear on the COSY diagonal (CH, CH2, CH3, aromatics...)
-            // This is the echo of the 1D 1H spectrum - every proton should be colored
+            // Highlight every proton in the matched diagonal group.
+            
             for (const h of h1List) {
               if (h >= 0) {
                 cosyDiagonalProtons.add(h);
@@ -499,7 +506,7 @@ function MoleculePane({
                 }
               }
             }
-            // Use first pair for path finding (or could expand to all combinations)
+            // Use the first proton pair to find the bond path.
             matchedNormal.push([h1List[0], h2List[0]]);
           }
         }
@@ -507,7 +514,7 @@ function MoleculePane({
           bondsCOSY = findBondsInPath(resolved.molblock, matchedNormal);
         }
         if (matchedDiagonal.length) {
-          // Pour les diagonaux, on obtient les liaisons C-H séparément
+          // Resolve C–H bonds separately for diagonal peaks.
           bondsCOSYDiagonal = findBondsInPath(resolved.molblock, matchedDiagonal);
         }
       } else {
@@ -524,7 +531,7 @@ function MoleculePane({
           for (const i of hIdx) if (i<=maxIdx && r3(shifts[i])===r2) a2.push(i);
           for (const x of a1) for (const y of a2) {
             matched.push([x,y]);
-            // Ajouter les protons au set COSY pour coloration
+            // Include protons in the COSY highlight set.
             sets.COSY.add(x);
             sets.COSY.add(y);
           }
@@ -534,8 +541,13 @@ function MoleculePane({
         }
       }
     }
-    
-    // HSQC (liaison directe C–H)
+
+    const tocsy = tocsyHighlights(
+      resolved.molblock, shifts, flags.TOCSY ? rowsByType.TOCSY : undefined
+    );
+    sets.TOCSY = tocsy.protons;
+
+    // HSQC direct C–H correlations.
     if (flags.HSQC && rowsByType["HSQC"]) {
       const lines = resolved.molblock.split(/\r?\n/);
       const counts = lines[3] || "";
@@ -608,28 +620,30 @@ function MoleculePane({
       }
     }
     
-    return { highlightByType: sets, bondsCOSY, bondsCOSYDiagonal, bondsHSQC, cosyDiagonalProtons, cosyDiagonalCarbons, cosyCrosspeakCarbons };
+    return { highlightByType: sets, bondsCOSY, bondsCOSYDiagonal, bondsHSQC, cosyDiagonalProtons, cosyDiagonalCarbons, cosyCrosspeakCarbons,
+      bondsTOCSY: tocsy.bonds, tocsyStickAtoms: tocsy.stickAtoms, tocsyCrossCarbons: tocsy.crossCarbons };
   }, [flags]);
-  // ---------------------------------------------------------------------------
+  
 
   const render2D = useCallback(async (resolved) => {
     setLoading(true);
     try {
       const RDKit = await loadRDKitFromCDN();
 
-      // Utiliser le molblock original avec H - les indices matched_atom_indices du backend sont H-inclusifs
+      // Keep explicit hydrogens: backend matched_atom_indices refer to the original molblock.
       const mol = RDKit.get_mol(resolved.molblock);
 
       let highlightAtoms=[], atomColorsMap={}, highlightBonds=[], bondColorsMap={};
 
       if (multi?.fromAll && multi?.rowsByType) {
-        const { highlightByType, bondsCOSY, bondsHSQC } =
+        const { highlightByType, bondsCOSY, bondsTOCSY, bondsHSQC } =
           computeMultiHighlights(resolved, multi.rowsByType);
 
         const cosySet = highlightByType.COSY;
+        const tocsySet = highlightByType.TOCSY;
         const hsqcSet = highlightByType.HSQC;
 
-        // Les indices sont directs - pas besoin de remapping
+        // Indices already refer to the original molblock.
         if (flags.C13)
           for (const i of highlightByType.C13)
             atomColorsMap[String(i)] = COLORS_RDK.C13;
@@ -642,12 +656,15 @@ function MoleculePane({
         if (flags.COSY)
           for (const i of cosySet)
             atomColorsMap[String(i)] = COLORS_RDK.COSY;
+        if (flags.TOCSY)
+          for (const i of tocsySet)
+            atomColorsMap[String(i)] = COLORS_RDK.TOCSY;
 
         highlightAtoms = Array.from(new Set(Object.keys(atomColorsMap).map(Number)));
 
-        // Union de tous les atomes matchés avec leur couleur prioritaire
+        // Combine matched atoms using the highlight color priority.
         const atomPriorityColor = {};
-        const priority = [COLORS_RDK.COSY, COLORS_RDK.HSQC, COLORS_RDK.H1, COLORS_RDK.C13];
+        const priority = [COLORS_RDK.COSY, COLORS_RDK.TOCSY, COLORS_RDK.HSQC, COLORS_RDK.H1, COLORS_RDK.C13];
         for (const [idxStr, color] of Object.entries(atomColorsMap)) {
           const idx = Number(idxStr);
           if (!atomPriorityColor[idx] ||
@@ -657,7 +674,7 @@ function MoleculePane({
         }
         const allMatched = new Set(Object.keys(atomPriorityColor).map(Number));
 
-        // Colorer les liaisons directes entre atomes matchés (molblock original avec H)
+        // Highlight direct bonds between matched atoms in the original molblock.
         const origLines = resolved.molblock.split(/\r?\n/);
         const nAtO = parseInt((origLines[3]||'').slice(0,3).trim(), 10) || 0;
         const nBdO = parseInt((origLines[3]||'').slice(3,6).trim(), 10) || 0;
@@ -676,6 +693,8 @@ function MoleculePane({
 
         if (flags.HSQC)
           for (const b of bondsHSQC) { highlightBonds.push(b); bondColorsMap[String(b)] = COLORS_RDK.HSQC; }
+        if (flags.TOCSY)
+          for (const b of bondsTOCSY) { highlightBonds.push(b); bondColorsMap[String(b)] = COLORS_RDK.TOCSY; }
         if (flags.COSY)
           for (const b of bondsCOSY) { highlightBonds.push(b); bondColorsMap[String(b)] = COLORS_RDK.COSY; }
 
@@ -730,7 +749,7 @@ function MoleculePane({
   const render3D = useCallback(async (resolved) => {
     setLoading(true);
     try {
-      // [FIX] Check WebGL before trying to create the viewer
+      // Check WebGL availability before creating the viewer.
       if (!isWebGLAvailable()) {
         throw new Error("WebGL is not available on this browser.\n\n" +
           "Solutions:\n" +
@@ -742,12 +761,12 @@ function MoleculePane({
       const $3Dmol = await load3DmolFromCDN();
       const el = div3DRef.current;
       
-      // [FIX] CHECK: Container must exist
+      // Wait for the viewer container.
       if (!el) {
         throw new Error("3D container not found");
       }
       
-      // [FIX] CHECK: Container must have size
+      // Wait until the container has a nonzero size.
       const elWidth = el.offsetWidth;
       const elHeight = el.offsetHeight;
       
@@ -774,7 +793,7 @@ function MoleculePane({
       
       const viewer = viewerRef.current;
       
-      // [FIX] CHECK: Viewer must be valid
+      // Check that the viewer was created.
       if (!viewer) {
         throw new Error("Failed to create 3D viewer");
       }
@@ -783,7 +802,7 @@ function MoleculePane({
       const sdf = resolved.firstRecord || resolved.rawText || resolved.molblock;
       const model = viewer.addModel(sdf, "sdf");
       
-      // [FIX] CRITICAL CHECK: Model must exist
+      // Stop if the molecule model could not be created.
       if (!model) {
         throw new Error("Failed to load 3D model");
       }
@@ -794,113 +813,127 @@ function MoleculePane({
       });
 
       if (multi?.fromAll && multi?.rowsByType) {
-        const { highlightByType, cosyDiagonalCarbons: diagCarbons, cosyDiagonalProtons: diagProtons, cosyCrosspeakCarbons: crossCarbons } = computeMultiHighlights(resolved, multi.rowsByType);
+        const { highlightByType, tocsyStickAtoms, tocsyCrossCarbons, cosyDiagonalCarbons: diagCarbons, cosyDiagonalProtons: diagProtons, cosyCrosspeakCarbons: crossCarbons } = computeMultiHighlights(resolved, multi.rowsByType);
         const CAtoms = flags.C13 ? Array.from(highlightByType.C13) : [];
         const cosySet = flags.COSY ? new Set(highlightByType.COSY) : new Set();
+        const tocsySet = flags.TOCSY ? new Set(highlightByType.TOCSY) : new Set();
         const hsqcSet = flags.HSQC ? new Set(highlightByType.HSQC) : new Set();
         const h1List  = flags.H1   ? Array.from(highlightByType.H1)  : [];
         
-        // Carbones parents des protons diagonaux COSY
+        // Parent carbons of COSY diagonal protons.
         const cosyDiagonalCarbons = flags.COSY ? diagCarbons : new Set();
-        // Protons diagonaux COSY (pour colorier leur stick en COSY)
+        // COSY diagonal protons whose bonds use the COSY color.
         const cosyDiagonalProtons = flags.COSY ? diagProtons : new Set();
-        // Carbones parents des protons cross-peak COSY (pour colorier leur stick C-H)
+        // Parent carbons of COSY cross-peak protons. (for C–H bond highlighting)
         const cosyCrosspeakCarbons = flags.COSY ? crossCarbons : new Set();
 
-        // ========== PRIORITÉS DE COLORATION ==========
-        // Sphère: H1 (vert) > HSQC (rouge) > C13 (bleu) > COSY (jaune)
-        // Stick: COSY (jaune) pour les liaisons COSY, sinon couleur de la sphère
-        // ===============================================
+        // Highlight priority
+        // Atom spheres: H1 > HSQC > C13 > COSY > TOCSY.
+        // Stick: preserve the experiment-specific color when available.
+        
 
-        // Créer des Sets pour vérification rapide
+        // Use sets for highlight membership checks.
         const c13Set = new Set(CAtoms);
         const h1Set = new Set(h1List);
 
-        // Collecter tous les atomes à colorier
+        // Collect atoms that need highlighting.
         const allAtoms = new Set([
           ...CAtoms,
           ...cosySet,
+          ...tocsySet,
+          ...tocsyStickAtoms,
           ...hsqcSet,
           ...h1List,
           ...cosyDiagonalCarbons,
           ...cosyDiagonalProtons,
-          ...cosyCrosspeakCarbons  // Carbones parents des protons cross-peak
+          ...cosyCrosspeakCarbons  // Parent carbons of cross-peak protons.
         ]);
 
-        // Appliquer le style pour chaque atome avec la bonne priorité
+        // Apply highlight styles in priority order.
         for (const i of allAtoms) {
           if (typeof i !== 'number' || i < 0) continue;
           
-          const inCOSY = cosySet.has(i);  // Cross-peak COSY (hors-diagonale) - protons
-          const inCOSYCrossC = cosyCrosspeakCarbons.has(i);  // Carbone parent d'un proton cross-peak
-          const inCOSYDiagC = cosyDiagonalCarbons.has(i);  // Carbone parent d'un proton diagonal
-          const inCOSYDiagH = cosyDiagonalProtons.has(i);  // Proton sur la diagonale
+          const inCOSY = cosySet.has(i);  // Protons in off-diagonal COSY peaks.
+          const inTOCSY = tocsySet.has(i) || tocsyStickAtoms.has(i);
+          const inCOSYCrossC = cosyCrosspeakCarbons.has(i);  // Parent carbon of a cross-peak proton.
+          const inCOSYDiagC = cosyDiagonalCarbons.has(i);  // Parent carbon of a diagonal proton.
+          const inCOSYDiagH = cosyDiagonalProtons.has(i);  // Diagonal proton.
           const inC13 = c13Set.has(i);
-          // HSQC: vérifier si dans hsqcSet (pas besoin de flags.HSQC car déjà filtré à la création du set)
+          // hsqcSet already excludes atoms when the HSQC toggle is off.
           const inHSQC = hsqcSet.has(i);
           const inH1 = h1Set.has(i);
           const inAnyCOSY = inCOSY || inCOSYCrossC || inCOSYDiagC || inCOSYDiagH;
           
-          // Déterminer si c'est un hydrogène COSY (dans COSY protons ou diagonal protons)
+          // Check whether the proton belongs to a COSY cross-peak or diagonal peak.
           const isHydrogenCOSY = inCOSYDiagH || (inCOSY && !inC13 && !inCOSYDiagC);
-          // Carbone COSY cross-peak: sphère SI cross-peak (priorité sur diagonal)
-          // Si un carbone est à la fois diagonal ET cross-peak, on privilégie cross-peak → sphère
-          const isCarbonCOSYCross = inCOSYCrossC;  // Cross-peak prioritaire!
-          // Carbone UNIQUEMENT diagonal (pas cross-peak): pas de sphère
+          // Draw spheres for carbons linked to COSY cross-peaks.
+          // Cross-peak highlighting takes priority when a carbon also belongs to a diagonal match.
+          const isCarbonCOSYCross = inCOSYCrossC;  
+          // Diagonal-only carbons have no sphere.
           const isCarbonCOSYDiagOnly = inCOSYDiagC && !inCOSYCrossC;
 
-          // Déterminer la couleur de la SPHÈRE (priorité: H1 > HSQC > C13 > COSY carbone cross-peak)
-          // Pour COSY diagonal UNIQUEMENT: pas de sphère sur le carbone, seulement stick C-H
+          // Choose the sphere color: H1 > HSQC > C13 > COSY cross-peak carbon.
+          // For diagonal-only COSY matches, highlight the C–H bond without a carbon sphere.
           let sphereColor = null, sphereRadius = 0;
           if (inH1) {
             sphereColor = COLORS_3D.H1;
             sphereRadius = 0.35;
           } else if (inHSQC) {
-            // HSQC prioritaire sur COSY pour les sphères
+            // HSQC takes priority over COSY for atom spheres.
             sphereColor = COLORS_3D.HSQC;
             sphereRadius = 0.35;
           } else if (inC13) {
             sphereColor = COLORS_3D.C13;
             sphereRadius = 0.4;
           } else if (isCarbonCOSYCross) {
-            // Sphère COSY pour cross-peak (priorité sur diagonal)
+            // COSY cross-peaks take priority over diagonal matches for atom spheres.
             sphereColor = COLORS_3D.COSY;
             sphereRadius = 0.4;
           } else if (isCarbonCOSYDiagOnly) {
-            // Carbone UNIQUEMENT diagonal COSY: PAS de sphère, seulement stick C-H
+            // Diagonal-only COSY carbons use a C–H bond highlight without a sphere.
+            sphereColor = null;
+            sphereRadius = 0;
+          } else if (tocsyCrossCarbons.has(i)) {
+            sphereColor = COLORS_3D.TOCSY;
+            sphereRadius = 0.4;
+          } else if (inTOCSY) {
+            // Like COSY: protons and diagonal carbons use sticks only.
             sphereColor = null;
             sphereRadius = 0;
           } else if (inAnyCOSY && isHydrogenCOSY) {
-            // Hydrogène COSY: pas de sphère, seulement stick (on continue pour appliquer le stick)
+            // COSY protons use bond highlights without spheres; continue to apply the bond style.
             sphereColor = null;
             sphereRadius = 0;
           } else {
-            continue; // Pas dans aucune liste, skip
+            continue; // Skip atoms outside the highlight sets.
           }
 
-          // Déterminer la couleur du STICK (priorité: HSQC rouge > COSY jaune > gris)
-          // Pour COSY: colorer le stick des protons ET de leurs carbones parents
-          // Cela permet d'avoir la barre C-H complètement colorée (pas à moitié)
+          // Choose the bond color: HSQC, then COSY, then the default gray.
+          // Apply the COSY bond color to both protons and their parent carbons.
+          // Styling both endpoints colors the full C–H bond.
           let stickColor, stickRadius;
           if (inHSQC) {
-            // HSQC prioritaire sur COSY pour le stick aussi
+            // HSQC also takes priority over COSY for bond colors.
             stickColor = COLORS_3D.HSQC;
             stickRadius = 0.2;
           } else if (inCOSY || inCOSYCrossC) {
-            // Cross-peaks COSY: colorer les sticks des protons ET de leurs carbones parents
+            // For COSY cross-peaks, color the bonds of both protons and their parent carbons.
             stickColor = COLORS_3D.COSY;
             stickRadius = 0.25;
           } else if (inCOSYDiagH || inCOSYDiagC) {
-            // Diagonal COSY: colorer le stick du proton ET du carbone parent
+            // For COSY diagonal matches, color the bonds of both the proton and its parent carbon.
             stickColor = COLORS_3D.COSY;
             stickRadius = 0.2;
+          } else if (inTOCSY) {
+            stickColor = COLORS_3D.TOCSY;
+            stickRadius = tocsyCrossCarbons.has(i) || tocsySet.has(i) ? 0.25 : 0.2;
           } else {
             stickColor = "#808080";
             stickRadius = 0.15;
           }
 
           try {
-            // Si pas de sphère (hydrogène COSY), appliquer seulement le stick
+            // Apply only the bond style when no atom sphere is needed.
             if (sphereColor === null) {
               model.setStyle({ index:i }, { 
                 stick:{radius:stickRadius,color:stickColor} 
@@ -1045,8 +1078,9 @@ function MoleculePane({
             ["H1", safeHex('H1')],
             ["C13", safeHex('C13')],
             ["COSY", safeHex('COSY')],
+            ["TOCSY", safeHex('TOCSY')],
             ["HSQC", safeHex('HSQC')],
-          ].map(([k,hex]) => (
+          ].filter(([k]) => isMethodAvailable(k) && multi?.rowsByType?.[k === "H1" ? "1H" : k === "C13" ? "13C" : k]).map(([k,hex]) => (
             <label key={k}
               style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 8px",
                       border:"1px solid #e5e7eb", borderRadius:999, background: flags[k]?"#f0f7ff":"#fff", cursor:"pointer" }}>
@@ -1060,7 +1094,7 @@ function MoleculePane({
         </div>
       )}
 
-      {/* [FIX] IMPROVED ERROR DISPLAY */}
+      {/* Molecule rendering errors. */}
       {err && (
         <div style={{ 
           padding:12, 
@@ -1086,7 +1120,7 @@ function MoleculePane({
               color:"#991b1b",
               border:"1px solid #fca5a5"
             }}>
-              <div style={{ fontWeight:700, marginBottom:6 }}>💡 Quick solutions:</div>
+              <div style={{ fontWeight:700, marginBottom:6 }}>Quick solutions:</div>
               <ol style={{ margin:0, paddingLeft:20, lineHeight:1.8 }}>
                 <li>
                   <strong>Firefox:</strong> Type <code style={{ background:"#fef2f2", padding:"2px 6px", borderRadius:3 }}>about:config</code> in the address bar, 
@@ -1108,15 +1142,13 @@ function MoleculePane({
 }
 
 
-/* ===========================
-   Metrics from a CSV row
-   =========================== */
+/*   Metrics from a CSV row*/
 
 const extractMetricsFromRow = (row, specType = null) => {
   if (!row) return {};
   const metrics = {};
-  // Pour 1H et 13C: utiliser ransy_score au lieu de coverage_ransy
-  // Pour COSY et HSQC: garder coverage_ransy
+  // For 1H and 13C, display ransy_score.
+  // For COSY and HSQC, display coverage_ransy.
   const use1D = specType === "1H" || specType === "13C";
   if (use1D && row.ransy_score !== undefined && row.ransy_score !== "") {
     const v = Number(row.ransy_score || 0).toFixed(1);
@@ -1135,13 +1167,11 @@ const extractMetricsFromRow = (row, specType = null) => {
   return metrics;
 };
 
-/* ===========================
-    MODAL - All molecules (visual grid)
-   =========================== */
+/*    Molecule grid modal*/
 
 function stripMethodPrefix(name) {
   if (!name) return name;
-  return String(name).replace(/^(?:1H|13C|COSY|HSQC)[\s_\-:]+/i, "");
+  return String(name).replace(/^(?:1H|13C|COSY|TOCSY|HSQC)[\s_\-:]+/i, "");
 }
 
 function ShowAllMoleculesModal({
@@ -1219,9 +1249,9 @@ function ShowAllMoleculesModal({
       doc.text(`${toExport.length} molecules • sorted by RANSY average score`, PAGE_W / 2, MARGIN + 8, { align: "center" });
       doc.setTextColor(0);
 
-      // Générer les SVGs directement depuis RDKit - pas de capture DOM
+      // Generate SVGs from RDKit for PDF export.
       const RDKit = await loadRDKitFromCDN();
-      const SVG_PX = 400; // taille interne SVG RDKit
+      const SVG_PX = 400; // RDKit SVG dimensions.
 
       let posInPdfPage = 0;
 
@@ -1229,7 +1259,7 @@ function ShowAllMoleculesModal({
         const { source, avgCoverage } = toExport[globalIdx];
         const name = stripMethodPrefix(source.replace(/_predicted$/i, ""));
 
-        // Nouvelle page PDF si nécessaire
+        // Start a PDF page when the grid is full.
         if (posInPdfPage === PER_PAGE) {
           doc.addPage();
           posInPdfPage = 0;
@@ -1247,12 +1277,12 @@ function ShowAllMoleculesModal({
 
         const molY = cellY;
 
-        // Générer SVG depuis RDKit avec highlights
+        // Render the molecule and highlights with RDKit.
         try {
           const resolved = await resolveMolForSource(csvUrl, source, taskId);
           const molBlock = resolved?.molblock;
           if (molBlock) {
-            // Utiliser le molblock original avec H - indices matched_atom_indices sont H-inclusifs
+            // Preserve explicit hydrogens to keep matched_atom_indices aligned with the molblock.
             const rdkMol = RDKit.get_mol(molBlock);
             if (rdkMol) {
               const PDF_COLORS = {
@@ -1309,7 +1339,7 @@ function ShowAllMoleculesModal({
               }
               rdkMol.delete();
 
-              // Convertir SVG → PNG via canvas, puis addImage dans jsPDF
+              // Rasterize the SVG on a canvas before adding it to the PDF.
               await new Promise((resolve) => {
                 const img = new Image();
                 const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -1334,7 +1364,7 @@ function ShowAllMoleculesModal({
           }
         } catch (pdfErr) { console.error('[PDF cell error]', source, pdfErr); }
 
-        // Nom en bas (italic bold)
+        // Molecule name below the structure.
         const label = name.length > 20 ? name.slice(0, 19) + "…" : name;
         const textY = molY + MOL_H;
         doc.setFontSize(6);
@@ -1342,7 +1372,7 @@ function ShowAllMoleculesModal({
         doc.setTextColor(20);
         doc.text(label, x + CELL_W / 2, textY + 3.5, { align: "center" });
 
-        // Score NMR
+        // NMR score.
         doc.setFontSize(5.5);
         doc.setFont("helvetica", "normal");
         doc.setTextColor(60);
@@ -1469,13 +1499,13 @@ function ShowAllMoleculesModal({
 
         {/* Pagination top */}
         <div style={{ padding:"8px 12px", display:"flex", gap:8, alignItems:"center", borderBottom:"1px solid #eef2f7" }}>
-          <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={clampedPage<=1}
+          <button aria-label="Previous page" title="Previous page" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={clampedPage<=1}
                   style={{ padding:"4px 8px", borderRadius:6, border:"1px solid #cbd5e1", background:"#fff", cursor:"pointer" }}>&lt;</button>
           <div style={{ fontSize:12, color:"#334155" }}>
             Page {clampedPage} / {totalPages} &nbsp;•&nbsp; {sources.length} molecules
           </div>
-          <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={clampedPage>=totalPages}
-                  style={{ padding:"4px 8px", borderRadius:6, border:"1px solid #cbd5e1", background:"#fff", cursor:"pointer" }}></button>
+          <button aria-label="Next page" title="Next page" onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={clampedPage>=totalPages}
+                  style={{ padding:"4px 8px", borderRadius:6, border:"1px solid #cbd5e1", background:"#fff", cursor:"pointer" }}>&gt;</button>
         </div>
 
 
@@ -1487,9 +1517,6 @@ function ShowAllMoleculesModal({
             gap:12
           }}>
             {pageSources.map((source, idx) => {
-              const globalIdx = start + idx + 1;
-              const moleculeName = stripMethodPrefix(source.replace(/_predicted$/i, ""));
-
               return (
                 <div key={source} data-mol-source={source} style={{
                   border:"1px solid #e5e7eb",
@@ -1535,16 +1562,11 @@ function ShowAllMoleculesModal({
                     />
                   </div>
                   
-                  {/* Molecule name */}
-                  <div style={{ 
-                    fontWeight:600, 
-                    fontSize:11, 
-                    marginBottom:6, 
-                    wordBreak:"break-word",
-                    textAlign:"center"
-                  }}>
-                    {moleculeName}
-                  </div>
+                  <MoleculeScoreSummary
+                    source={source}
+                    rowsByType={getRowsByType(source)}
+                    averageScore={scoreMap.get(source)}
+                  />
                 </div>
               );
             })}
@@ -1569,24 +1591,26 @@ function ShowAllMoleculesModal({
 
 
 
-/* ===========================
-   Main exported Viewer with SAFETY TIMEOUTS
-   =========================== */
+/*   Results viewer*/
 
 export default function Viewer({
-  csvs,
+  csvs: allCsvs,
   taskId = null,
   defaultShow3D = true,
   annotationResults = {},
-  pdataDirs = {},
+  pdataDirs: allPdataDirs = {},
   bgOptions = {},
   customColors: propsCustomColors,
   onColorChange,
-  // NEW: Props for external source control (SIRIUS-style)
+  // Optional external control of the selected source.
   externalSource = null,
   hideSidebar = false,
-  coverageMethods = ["1H", "13C", "COSY", "HSQC"],
+  coverageMethods: allCoverageMethods = ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable),
 }) {
+  const csvs = useMemo(() => availableMethodEntries(allCsvs), [allCsvs]);
+  const pdataDirs = useMemo(() => availableMethodEntries(allPdataDirs), [allPdataDirs]);
+  const coverageMethods = useMemo(() => allCoverageMethods.filter(isMethodAvailable), [allCoverageMethods]);
+
   // Use colors passed as props or default values
   const customColors = propsCustomColors || DEFAULT_COLORS;
 
@@ -1616,6 +1640,7 @@ export default function Viewer({
   const [query, setQuery] = useState("");
 
   const [showTheory, setShowTheory] = useState(true);
+  const [activeSpectrum, setActiveSpectrum] = useState("all");
   const [showExp, setShowExp] = useState(true);
   const [reverse1D, setReverse1D] = useState(true);
   const [show3D, setShow3D] = useState(defaultShow3D);
@@ -1624,7 +1649,7 @@ export default function Viewer({
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [relevel2DEnabled, setRelevel2DEnabled] = useState(false); // Disabled by default - only zoom updates background
 
-  // NEW: nonce par type pour forcer un remount des canvases
+  // A nonce per spectrum type forces canvas remounts.
   const [refreshKeyByType, setRefreshKeyByType] = useState({});
   const bumpKey = useCallback((type) => {
     setRefreshKeyByType(k => ({ ...k, [type]: (k[type] ?? 0) + 1 }));
@@ -1647,6 +1672,7 @@ export default function Viewer({
     "1H": null,
     "13C": null,
     COSY: null,
+    TOCSY: null,
     HSQC: null,
   });
   
@@ -1659,6 +1685,8 @@ export default function Viewer({
   });
 
   // State for intensity scale (controlled by mouse wheel)
+  useSpectrumWindowSettings(bgOptions, setZoomRangeByType);
+
   // TopSpin-style: scale controls how many contour levels are visible
   // Uses logarithmic mapping: log10(scale) determines threshold
   // Full range from 0.0001 to 10000:
@@ -1671,6 +1699,7 @@ export default function Viewer({
     "1H": 1.0,
     "13C": 1.0,
     COSY: 1.0,   // Start at center - scroll up for more, down for less
+    TOCSY: 1.0,
     HSQC: 1.0,   // Start at center - scroll up for more, down for less
   });
 
@@ -1679,21 +1708,23 @@ export default function Viewer({
     "1H":  { width_px: 1200, height_px: 500, dpi: 150 },
     "13C": { width_px: 1200, height_px: 500, dpi: 150 },
     COSY:  { width_px: 1000, height_px: 800, dpi: 150 },
+    TOCSY: { width_px: 1000, height_px: 800, dpi: 150 },
     HSQC:  { width_px: 1000, height_px: 800, dpi: 150 },
   });
 
   const [levelByType, setLevelByType] = useState({
     COSY: 0.005,
+    TOCSY: 0.005,
     HSQC: 0.005
   });
 
-  // 🔁 AVANT : const originalBgRef = useRef({});
-  // [FIX] AFTER: structure by type AND by source: { [type]: { [source]: snap } }
+  
+  // Snapshots are keyed by spectrum type and source: { [type]: { [source]: snap } }.
   const originalBgRef = useRef({});
 
   useEffect(() => {
     const snap = {};
-    for (const k of ["1H", "13C", "COSY", "HSQC"]) {
+    for (const k of ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable)) {
       if (annotationResults?.[k]) snap[k] = annotationResults[k];
     }
     setBgByType(prev => ({ ...prev, ...snap }));
@@ -1702,7 +1733,7 @@ export default function Viewer({
   // When initial results arrive, snap according to current source
   useEffect(() => {
     if (!selectedSource) return;
-    for (const k of ["1H", "13C", "COSY", "HSQC"]) {
+    for (const k of ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable)) {
       if (annotationResults?.[k]) {
         originalBgRef.current[k] = originalBgRef.current[k] || {};
         if (!originalBgRef.current[k][selectedSource]) {
@@ -1715,7 +1746,7 @@ export default function Viewer({
   // When source changes, if we have a background in memory, snap it too
   useEffect(() => {
     if (!selectedSource) return;
-    for (const k of ["1H", "13C", "COSY", "HSQC"]) {
+    for (const k of ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable)) {
       const bg = bgByType?.[k];
       if (bg) {
         originalBgRef.current[k] = originalBgRef.current[k] || {};
@@ -1734,7 +1765,7 @@ export default function Viewer({
   useEffect(() => {
     const loadRawData = async () => {
       const types1D = ["1H", "13C"];
-      const types2D = ["COSY", "HSQC"];
+      const types2D = ["COSY", "TOCSY", "HSQC"].filter(isMethodAvailable);
 
       // Load 1D spectra
       for (const type of types1D) {
@@ -1883,7 +1914,8 @@ export default function Viewer({
           try {
             const r = await fetchWithRetry(csvs[t], 3, 500);
             const text = await r.text();
-            const { data } = parseCSVSmart(text);
+            const parsed = parseCSVSmart(text);
+            const data = homonuclearSpectrumRows(parsed.data || [], t);
             const map = new Map();
             for (const row of data || []) {
               if (row?.Source) map.set(row.Source, row);
@@ -1946,16 +1978,16 @@ export default function Viewer({
 
     const parseCoverage = (row, type) => {
       if (!row) return null;
-      // Pour 1H et 13C: TOUJOURS utiliser intersection_coverage (score d'intersection des groupes STOCSY)
+      // Rank 1H and 13C by intersection_coverage, the STOCSY group intersection score.
       const use1D = type === "1H" || type === "13C";
       if (use1D) {
         if (row.intersection_coverage !== undefined && row.intersection_coverage !== null && row.intersection_coverage !== "") {
           const v = parseFloat(String(row.intersection_coverage).replace(",", "."));
           if (Number.isFinite(v)) return v;
         }
-        return 0; // Pas de intersection_coverage = score 0
+        return 0; // Missing intersection coverage contributes a zero score.
       }
-      // Pour COSY/HSQC: coverage_ransy
+      // Rank COSY and HSQC by coverage_ransy.
       const candidates = [
         row.coverage_ransy,
         row.coverage_ransy_mean,
@@ -1974,7 +2006,7 @@ export default function Viewer({
       let weightedSum = 0;
       let totalWeight = 0;
 
-      for (const type of ["1H", "13C", "COSY", "HSQC"]) {
+      for (const type of ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable)) {
         const row = mapsByType[type]?.get(source);
         const cov = parseCoverage(row, type);
         if (cov != null) {
@@ -1994,22 +2026,22 @@ export default function Viewer({
     return arr.filter(s => s.toLowerCase().includes(q));
   }, [mapsByType, query]);
 
-  // Auto-sélectionner la première molécule (meilleur coverage) après chargement
+  // Select the highest-ranked molecule after loading.
   const hasAutoSelectedRef = useRef(false);
   useEffect(() => {
-    // Sélectionner automatiquement la première molécule une seule fois après le chargement
+    // Select the first molecule once after loading.
     if (!loading && allSources.length > 0 && !selectedSource && !hasAutoSelectedRef.current) {
       debugLog('[Viewer] Auto-selecting first molecule:', allSources[0]);
       setSelectedSource(allSources[0]);
       hasAutoSelectedRef.current = true;
     }
-    // Reset le flag si les sources changent (nouveau chargement)
+    // Reset selection tracking when a new source set is loaded.
     if (allSources.length === 0) {
       hasAutoSelectedRef.current = false;
     }
   }, [loading, allSources, selectedSource, setSelectedSource]);
 
-  // 🔥 Global sorted list (without search filter) for the modal
+  //  Global sorted list (without search filter) for the modal
   const sortedSourcesWithScore = useMemo(() => {
     const union = new Set();
     Object.values(mapsByType).forEach(m => {
@@ -2019,16 +2051,16 @@ export default function Viewer({
 
     const parseCoverage = (row, type) => {
       if (!row) return null;
-      // Pour 1H et 13C: TOUJOURS utiliser intersection_coverage (score d'intersection des groupes STOCSY)
+      // Rank 1H and 13C by intersection_coverage, the STOCSY group intersection score.
       const use1D = type === "1H" || type === "13C";
       if (use1D) {
         if (row.intersection_coverage !== undefined && row.intersection_coverage !== null && row.intersection_coverage !== "") {
           const v = parseFloat(String(row.intersection_coverage).replace(",", "."));
           if (Number.isFinite(v)) return v;
         }
-        return 0; // Pas de intersection_coverage = score 0
+        return 0; // Missing intersection coverage contributes a zero score.
       }
-      // Pour COSY/HSQC: coverage_ransy
+      // Rank COSY and HSQC by coverage_ransy.
       const candidates = [
         row.coverage_ransy,
         row.coverage_ransy_mean,
@@ -2047,7 +2079,7 @@ export default function Viewer({
       let weightedSum = 0;
       let totalWeight = 0;
 
-      const methodsToUse = coverageMethods.length > 0 ? coverageMethods : ["1H", "13C", "COSY", "HSQC"];
+      const methodsToUse = coverageMethods.length > 0 ? coverageMethods : ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable);
       for (const type of methodsToUse) {
         const row = mapsByType[type]?.get(source);
         const v = parseCoverage(row, type);
@@ -2069,11 +2101,12 @@ export default function Viewer({
     [sortedSourcesWithScore]
   );
 
-  // Helper lines by method for a source (modal)
+  // Rows grouped by spectrum type for the molecule grid.
   const rowsByTypeForSource = useCallback((source) => ({
     "1H":   mapsByType["1H"]?.get(source),
     "13C":  mapsByType["13C"]?.get(source),
     "COSY": mapsByType["COSY"]?.get(source),
+    "TOCSY": mapsByType["TOCSY"]?.get(source),
     "HSQC": mapsByType["HSQC"]?.get(source),
   }), [mapsByType]);
 
@@ -2081,6 +2114,18 @@ export default function Viewer({
     (t) => mapsByType[t]?.get(selectedSource) || null,
     [mapsByType, selectedSource]
   );
+
+  const availableSpectrumTypes = useMemo(
+    () => ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).filter(type => rowFor(type) != null),
+    [rowFor]
+  );
+  const displayedSpectrum = availableSpectrumTypes.includes(activeSpectrum) ? activeSpectrum : "all";
+
+  useEffect(() => {
+    if (activeSpectrum !== "all" && !availableSpectrumTypes.includes(activeSpectrum)) {
+      setActiveSpectrum("all");
+    }
+  }, [activeSpectrum, availableSpectrumTypes]);
 
   const oneH = useMemo(() => {
     const r = rowFor("1H");
@@ -2152,6 +2197,25 @@ export default function Viewer({
     } : null;
   }, [rowFor]);
 
+  const tocsy = useMemo(() => {
+    const r = rowFor("TOCSY");
+    return r ? {
+      theory: (r.ppm_molecule || "")
+        .split("||").map(p => p.split("|").map(v => parseFloat(String(v).replace(",", "."))))
+        .filter(a => a.length === 2 && a.every(Number.isFinite)),
+      expPts: (r.RANSY_signals || "")
+        .split("||").map(p => p.split("|").map(v => parseFloat(String(v).replace(",", "."))))
+        .filter(a => a.length === 2 && a.every(Number.isFinite)),
+      expI: (r.RANSY_mean_intensities || r.intensity_ratios || "")
+        .split(";").map(v => parseFloat(String(v).replace(",", "."))).filter(Number.isFinite),
+      pairs: (r.ppm_molecule_matched || "")
+        .split("||").map(p => p.split("|").map(v => parseFloat(String(v).replace(",", "."))))
+        .filter(a => a.length === 2 && a.every(Number.isFinite)),
+      metrics: extractMetricsFromRow(r, "TOCSY"),
+      maxBonds: r.MaxBonds,
+    } : null;
+  }, [rowFor]);
+
   const hsqc = useMemo(() => {
     const r = rowFor("HSQC");
     return r ? {
@@ -2182,7 +2246,7 @@ export default function Viewer({
   }, [rowFor]);
 
   const pivotCsvUrl = useMemo(
-    () => csvs["1H"] || csvs["13C"] || csvs["COSY"] || csvs["HSQC"] || null,
+    () => csvs["1H"] || csvs["13C"] || csvs["COSY"] || csvs["TOCSY"] || csvs["HSQC"] || null,
     [csvs]
   );
 
@@ -2191,25 +2255,25 @@ export default function Viewer({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const setBusy = useCallback((type, v) => setBusyByType(prev => ({ ...prev, [type]: !!v })));
   
-  // [FIX] storeResult fix: adds anti-cache nonce and updates snapshot (type, source)
+  // Invalidate cached images and update the snapshot for this type and source.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const storeResult = useCallback((type, res) => {
     if (!res) return;
 
-    // nonce anti-cache
+    // Cache invalidation token.
     const nonce = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     res.meta = { ...(res.meta || {}), nonce };
 
     // updates current state (display)
     setBgByType(prev => ({ ...prev, [type]: res }));
 
-    // si 2D, on synchronise le lvl UI
-    if ((type === "COSY" || type === "HSQC") &&
+    // Synchronize the level control for 2D spectra.
+    if ((type === "COSY" || type === "TOCSY" || type === "HSQC") &&
         Number.isFinite(+res?.meta?.level_start)) {
       setLevelByType(p => ({ ...p, [type]: +res.meta.level_start }));
     }
 
-    // 🔒 initial snapshot by (type, source): only write if absent
+    //  initial snapshot by (type, source): only write if absent
     if (selectedSource) {
       originalBgRef.current[type] = originalBgRef.current[type] || {};
       if (!originalBgRef.current[type][selectedSource]) {
@@ -2256,7 +2320,7 @@ export default function Viewer({
   };
 
   
-  // FIX: Added safety timeout for applySettings
+  // Bound the time spent applying settings.
   const applySettings = useCallback(async (type) => {
     const pd = pdataDirs?.[type];
     if (!pd) return;
@@ -2297,7 +2361,7 @@ export default function Viewer({
           n_levels: 20,
           transparent: true,
         };
-        const fn = type === "COSY" ? interactiveCOSY : interactiveHSQC;
+        const fn = type === "COSY" || type === "TOCSY" ? interactiveCOSY : interactiveHSQC;
         res = await fn(pd, { ...win, size, contour, taskId });
       }
       
@@ -2313,30 +2377,31 @@ export default function Viewer({
   const canInteract1H   = !!pdataDirs?.["1H"];
   const canInteract13C  = !!pdataDirs?.["13C"];
   const canInteractCOSY = !!pdataDirs?.["COSY"];
+  const canInteractTOCSY = !!pdataDirs?.["TOCSY"];
   const canInteractHSQC = !!pdataDirs?.["HSQC"];
 
-  // État pour la modale "Afficher toutes les molécules"
+  // Molecule grid modal state.
   const [showAllOpen, setShowAllOpen] = useState(false);
   const [allPage, setAllPage] = useState(1);
   const [allPageSize, setAllPageSize] = useState(20);
 
-  // État pour le modal de spectre 1H détaillé
+  // Detailed 1H spectrum modal state.
   const [spectrumDetailOpen, setSpectrumDetailOpen] = useState(false);
 
-  // ============================================
-  // PRÉ-CHARGEMENT BATCH DES SPECTRES SIMULÉS
-  // ============================================
-  // Cache pour les spectres simulés (par molécule) - rempli par le batch
+  // ====
+  // Batch loading of simulated spectra
+  // ====
+  // Per-molecule cache populated by batch simulation.
   const simulatedSpectrumCache = useRef({});
-  // Données pour la molécule sélectionnée
+  // Simulation data for the selected molecule.
   const [preloadedMultiplicityData, setPreloadedMultiplicityData] = useState(null);
   const [preloadedSpectrumData, setPreloadedSpectrumData] = useState(null);
   const [preloadingSpectrum, setPreloadingSpectrum] = useState(false);
   const [preloadingMultiplicity, setPreloadingMultiplicity] = useState(false);
-  // Flag pour savoir si le batch a été lancé pour ce taskId
+  // Track whether batch simulation has started for this task.
   const batchLoadedForTask = useRef(null);
 
-  // Charger TOUS les spectres en batch quand taskId change
+  // Load simulated spectra in a batch when taskId changes.
   useEffect(() => {
     if (!taskId || batchLoadedForTask.current === taskId) {
       return;
@@ -2346,7 +2411,7 @@ export default function Viewer({
     batchLoadedForTask.current = taskId;
     setPreloadingSpectrum(true);
 
-    // Vider le cache pour une nouvelle tâche
+    // Clear spectra cached for the previous task.
     simulatedSpectrumCache.current = {};
 
     simulateSpectrumBatch({
@@ -2362,7 +2427,7 @@ export default function Viewer({
       .then(batchResult => {
         debugLog('[Viewer] Batch simulation complete:', batchResult.total_molecules, 'ok:', batchResult.successful);
 
-        // Stocker tous les spectres dans le cache
+        // Cache the simulated spectra.
         if (batchResult.spectra) {
           for (const spec of batchResult.spectra) {
             if (spec.mol_id && spec.status === 'ok') {
@@ -2371,14 +2436,14 @@ export default function Viewer({
           }
         }
 
-        // Si une molécule est déjà sélectionnée, charger son spectre
+        // Load the spectrum for the current selection, if any.
         if (selectedSource && simulatedSpectrumCache.current[selectedSource]) {
           setPreloadedSpectrumData(simulatedSpectrumCache.current[selectedSource]);
         }
       })
       .catch(err => {
         console.warn('[Viewer] Batch simulation failed:', err);
-        // En cas d'échec du batch, on fallback sur le mode individuel
+        // Fall back to individual requests if batch loading fails.
         batchLoadedForTask.current = null;
       })
       .finally(() => {
@@ -2386,7 +2451,7 @@ export default function Viewer({
       });
   }, [taskId, selectedSource]);
 
-  // Quand la molécule sélectionnée change, utiliser le cache ou fallback sur appel individuel
+  // Use cached data for the selected molecule, or request it separately.
   useEffect(() => {
     if (!taskId || !selectedSource) {
       setPreloadedMultiplicityData(null);
@@ -2396,14 +2461,14 @@ export default function Viewer({
 
     const molId = selectedSource;
     
-    // Variantes de nom pour chercher dans le cache
+    // Source name variants used for cache lookup.
     const molIdVariants = [
       molId,
       molId.replace(/_predicted$/i, ''),
       molId.replace(/_annotated$/i, ''),
     ];
 
-    // Chercher dans le cache avec toutes les variantes
+    // Try each source name variant in the cache.
     let cachedSpectrum = null;
     for (const variant of molIdVariants) {
       if (simulatedSpectrumCache.current[variant]) {
@@ -2415,11 +2480,11 @@ export default function Viewer({
 
     if (cachedSpectrum) {
       setPreloadedSpectrumData(cachedSpectrum);
-      setPreloadedMultiplicityData(null); // Pas besoin des données de multiplicité si on a le spectre
+      setPreloadedMultiplicityData(null); // A cached spectrum does not require a multiplicity request.
       return;
     }
 
-    // Si pas en cache, charger individuellement
+    // Fetch this molecule separately on a cache miss.
     debugLog('[Viewer] Spectrum not in cache, loading individually:', molId);
     setPreloadingMultiplicity(true);
     setPreloadedSpectrumData(null);
@@ -2428,7 +2493,7 @@ export default function Viewer({
     getMultiplicityData(taskId, molId)
       .then(data => {
         const multData = data.multiplicity_data;
-        // Seulement mettre à jour si c'est toujours la molécule sélectionnée
+        // Ignore responses for molecules that are no longer selected.
         if (selectedSource === molId) {
           setPreloadedMultiplicityData(multData);
         }
@@ -2448,7 +2513,7 @@ export default function Viewer({
       .then(specData => {
         debugLog('[Viewer] Loaded spectrum for:', molId);
         simulatedSpectrumCache.current[molId] = specData;
-        // Seulement mettre à jour si c'est toujours la molécule sélectionnée
+        // Ignore responses for molecules that are no longer selected.
         if (selectedSource === molId) {
           setPreloadedSpectrumData(specData);
         }
@@ -2461,21 +2526,21 @@ export default function Viewer({
       });
   }, [taskId, selectedSource]);
 
-  // Handler pour changer l'intensité avec la molette
-  // Facteur 1.1 pour un scroll plus progressif (besoin de ~100 scrolls pour aller de 1 à 10000)
+  // Adjust spectrum intensity with the mouse wheel.
+  // A factor of 1.1 gives gradual scaling: about 100 wheel steps from 1 to 10,000.
   const handleIntensityWheel = useCallback((type, delta) => {
     setIntensityScaleByType(prev => {
       const current = prev[type] || 1.0;
       // delta > 0 = scroll down = decrease (fewer signals), delta < 0 = scroll up = increase (more signals)
       // Factor 1.1 for smoother control (~100 scrolls for full range)
       const factor = delta > 0 ? (1 / 1.1) : 1.1;  // ~0.909 or 1.1
-      // No practical limits: 0.0001 to 10000 allows full range from no signals to all noise
+      // Clamp the scale to 0.0001–10000.
       const newScale = Math.max(0.0001, Math.min(10000, current * factor));
       return { ...prev, [type]: newScale };
     });
   }, []);
 
-  /* Panneaux de contrôle simplifiés - juste scale + reset */
+  /* Spectrum scale and reset controls. */
   const renderControls1D = (type) => {
     const scale = intensityScaleByType[type] || 1.0;
     return (
@@ -2592,9 +2657,7 @@ export default function Viewer({
     );
   };
 
-  /* =======================
-     Rendu principal
-     ======================= */
+  /*     Main layout*/
   return (
     <div className="viewer" style={{ marginTop: 0 }}>
 
@@ -2614,7 +2677,7 @@ export default function Viewer({
             alignItems: "start" ,
           }}
         >
-          {/* ==== Sidebar ==== */}
+          {/* Sidebar */}
           {!hideSidebar && (
           <aside
             style={{
@@ -2648,7 +2711,7 @@ export default function Viewer({
                 </div>
               )}
               {allSources.map((s) => {
-                const stripMethodPrefix = (name) => String(name).replace(/^(?:1H|13C|COSY|HSQC)[\s_\-:]+/i, "");
+                const stripMethodPrefix = (name) => String(name).replace(/^(?:1H|13C|COSY|TOCSY|HSQC)[\s_\-:]+/i, "");
                 const label = stripMethodPrefix(s.replace(/_predicted$/i, ""));
                 const active = selectedSource === s;
                 
@@ -2726,16 +2789,16 @@ export default function Viewer({
               </label>
               <div style={{ fontSize: 8, color: "#475569", marginTop: 2, lineHeight: 1.2 }}>
                 {(canInteract1H || canInteract13C ||
-                  canInteractCOSY || canInteractHSQC)
+                  canInteractCOSY || canInteractTOCSY || canInteractHSQC)
                   ? "✓ Interactions" : "✗ Pas d'interactions"}
               </div>
             </div>
           </aside>
           )}
 
-          {/* ==== Contenu ==== */}
+          {/* Results */}
           <section style={{ minWidth: 0 }}>
-            {/* Molécule + boutons */}
+            {/* Molecule and display controls */}
             <div style={{ marginBottom: 12 }}>
               <div
                 style={{
@@ -2791,6 +2854,7 @@ export default function Viewer({
                       "1H":  rowFor("1H"),
                       "13C": rowFor("13C"),
                       "COSY":rowFor("COSY"),
+                      "TOCSY":rowFor("TOCSY"),
                       "HSQC":rowFor("HSQC"),
                     },
                   }}
@@ -2811,9 +2875,22 @@ export default function Viewer({
               )}
             </div>
 
-            {/* Spectres */}
+            {/* Spectra */}
+            <div role="group" aria-label="Displayed spectrum" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+              {(availableSpectrumTypes.length ? ["all", ...availableSpectrumTypes] : []).map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={displayedSpectrum === type}
+                  onClick={() => setActiveSpectrum(type)}
+                  style={{ padding: "6px 12px", borderRadius: 6, cursor: "pointer", border: "1px solid #cbd5e1", background: displayedSpectrum === type ? "#2563eb" : "#fff", color: displayedSpectrum === type ? "#fff" : "#0f172a" }}
+                >
+                  {type === "all" ? "All spectra" : TYPE_LABELS[type] || type}
+                </button>
+              ))}
+            </div>
             {(() => {
-              const blocks = [];
+              let blocks = [];
 
               if (oneH) {
                 const raw1H = rawDataByType?.["1H"];
@@ -3137,6 +3214,64 @@ export default function Viewer({
                 });
               }
 
+              if (isMethodAvailable('TOCSY') && tocsy) {
+                const rawTOCSY = rawDataByType?.["TOCSY"];
+                const zoomTOCSY = zoomRangeByType?.["TOCSY"];
+                const hasDataTOCSY = rawTOCSY && rawTOCSY.contours?.length > 0;
+
+                blocks.push({
+                  key: "b-TOCSY",
+                  el: (
+                    <div style={{ border: "1px solid #e5e7eb", borderRadius: 6, padding: 4, overflow: "hidden" }}>
+                      <div style={{ fontWeight: 700, marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12 }}>
+                        <span>TOCSY</span>
+                        {tocsy.maxBonds && <span>Max bonds: {tocsy.maxBonds}</span>}
+                        {hasDataTOCSY && <span style={{ fontSize: 9, color: "#16a34a", background: "#dcfce7", padding: "1px 4px", borderRadius: 3 }}>OK</span>}
+                      </div>
+                      {tocsy.metrics && Object.keys(tocsy.metrics).length > 0 && (
+                        <div style={{ marginBottom: 6, minHeight: 20 }}>
+                          {tocsy.metrics.coverage_ransy && <Pill label="RANSY" value={tocsy.metrics.coverage_ransy} />}
+                          {tocsy.metrics.coverage_sub && <Pill label="Sub" value={tocsy.metrics.coverage_sub} />}
+                        </div>
+                      )}
+                      {renderControls2D("TOCSY")}
+                      <Scatter2D
+                        key={[refreshKeyByType["TOCSY"] ?? 0, hasDataTOCSY ? "loaded" : "", JSON.stringify(zoomTOCSY || null)].join("|")}
+                        theoryPts={showTheory ? tocsy.theory : []}
+                        expPts={showExp ? tocsy.expPts : []}
+                        expInt={showExp ? tocsy.expI : []}
+                        showTheory={showTheory}
+                        showExp={showExp}
+                        height={PLOT_HEIGHT}
+                        contourData={rawTOCSY}
+                        zoomRange={zoomTOCSY}
+                        contourColor={customColors?.TOCSY?.hex || "#00A878"}
+                        canInteract={canInteractTOCSY}
+                        zoomEnabled={zoomRectEnabled}
+                        onZoom2D={(zoomWindow) => setZoomRangeByType(prev => ({
+                          ...prev,
+                          TOCSY: {
+                            f1: { min: zoomWindow.f1.min, max: zoomWindow.f1.max },
+                            f2: { min: zoomWindow.f2.min, max: zoomWindow.f2.max },
+                          },
+                        }))}
+                        onReset={() => {
+                          if (rawTOCSY) {
+                            const options = bgOptions?.["TOCSY"] || {};
+                            const f1Min = Number.isFinite(options.f1_ppm_min) ? options.f1_ppm_min : rawTOCSY.f1_range?.[0];
+                            const f1Max = Number.isFinite(options.f1_ppm_max) ? options.f1_ppm_max : rawTOCSY.f1_range?.[1];
+                            const f2Min = Number.isFinite(options.f2_ppm_min) ? options.f2_ppm_min : rawTOCSY.f2_range?.[0];
+                            const f2Max = Number.isFinite(options.f2_ppm_max) ? options.f2_ppm_max : rawTOCSY.f2_range?.[1];
+                            setZoomRangeByType(prev => ({ ...prev, TOCSY: { f1: { min: f1Min, max: f1Max }, f2: { min: f2Min, max: f2Max } } }));
+                          }
+                        }}
+                        busy={!!busyByType?.["TOCSY"]}
+                      />
+                    </div>
+                  ),
+                });
+              }
+
               if (hsqc) {
                 const rawHSQC = rawDataByType?.["HSQC"];
                 const zoomHSQC = zoomRangeByType?.["HSQC"];
@@ -3240,71 +3375,11 @@ export default function Viewer({
                 });
               }
 
-              const n = blocks.length;
-              if (n === 0) {
-                if (!hasAnyData) {
-                  const emptyBox = (title) => (
-                    <div
-                      style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 8,
-                        padding: 8,
-                        overflow: "hidden",
-                        background: "#fff",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontWeight: 700,
-                          marginBottom: 6,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          fontSize: 12,
-                        }}
-                      >
-                        <span>{title}</span>
-                      </div>
-                      <div
-                        style={{
-                          height: PLOT_HEIGHT,
-                          border: "1px dashed #e5e7eb",
-                          borderRadius: 8,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#64748b",
-                          fontSize: 12,
-                          background: "#fff",
-                        }}
-                      >
-                        No spectrum. Run the annotation
-                      </div>
-                    </div>
-                  );
-
-                  return (
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gridTemplateRows: "1fr 1fr",
-                        gap: 12,
-                        marginBottom: 12,
-                        alignItems: "start",
-                        gridAutoRows: "min-content",
-                      }}
-                    >
-                      <div>{emptyBox(TYPE_LABELS["1H"])}</div>
-                      <div>{emptyBox(TYPE_LABELS["13C"])}</div>
-                      <div>{emptyBox("COSY")}</div>
-                      <div>{emptyBox("HSQC")}</div>
-                    </div>
-                  );
-                }
-
-                return <div>No spectrum available</div>;
+              if (displayedSpectrum !== "all") {
+                blocks = blocks.filter(block => block.key === `b-${displayedSpectrum}`);
               }
+              const n = blocks.length;
+              if (n === 0) return <div>No spectrum available</div>;
               if (n === 1) return <div style={{ marginBottom: 12 }}>{blocks[0].el}</div>;
               if (n === 2)
                 return (
@@ -3359,7 +3434,7 @@ export default function Viewer({
         </div>
       )}
 
-      {/* Sélecteur de couleurs (ouvert via bouton) */}
+      {/* Color picker */}
       <ColorPicker
         isOpen={colorPickerOpen}
         onClose={() => setColorPickerOpen(false)}
@@ -3367,7 +3442,7 @@ export default function Viewer({
         onColorChange={setCustomColor}
       />
 
-      {/* Modale - toutes les molécules */}
+      {/* Molecule grid modal. */}
       <ShowAllMoleculesModal
         isOpen={showAllOpen}
         onClose={() => setShowAllOpen(false)}
@@ -3383,7 +3458,7 @@ export default function Viewer({
         customColors={customColors}
       />
 
-      {/* Modale - spectre 1H simulé détaillé */}
+      {/* Detailed simulated 1H spectrum modal */}
       <SpectrumDetailModal
         isOpen={spectrumDetailOpen}
         onClose={() => setSpectrumDetailOpen(false)}
@@ -3393,7 +3468,7 @@ export default function Viewer({
         expShifts={oneH?.expX || []}
         pdataDir1H={pdataDirs?.["1H"] || null}
         matchTolerancePpm={0.05}
-        // Données pré-chargées (évite de refaire les appels API à l'ouverture)
+        // Reuse loaded data when opening the modal.
         multiplicityJson={preloadedMultiplicityData}
         preloadedSpectrumData={preloadedSpectrumData}
         isPreloading={preloadingMultiplicity || preloadingSpectrum}
@@ -3425,5 +3500,3 @@ if (typeof window !== 'undefined' && !window.__NMR_ERROR_FILTER_INSTALLED__) {
   
   debugLog('[OK] WebGL error filter installed');
 }
-
-

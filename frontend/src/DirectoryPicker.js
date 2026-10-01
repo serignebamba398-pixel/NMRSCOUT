@@ -6,7 +6,7 @@ export default function DirectoryPicker({ value, onSelect }) {
   const [folders, setFolders] = useState([]);
 
   useEffect(() => {
-    // Au montage, on charge la liste des sous-dossiers de outputs/
+    // Load output directories when the picker mounts.
     axios.get(`${process.env.REACT_APP_API_URL}/api/list`)
       .then(res => setFolders(res.data.folders))
       .catch(() => setFolders([]));

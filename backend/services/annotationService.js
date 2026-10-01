@@ -28,7 +28,7 @@ function getToleranceStringForFilename(annotationType, params) {
   if (annotationType === '1H' || annotationType === '13C') {
     const tol = params.tol_correspondence || params.tol_correspondance || 0;
     return `tol_${tol}`.replace(/\./g, '_');
-  } else if (annotationType === 'COSY' || annotationType === 'HSQC') {
+  } else if (annotationType === 'COSY' || annotationType === 'TOCSY' || annotationType === 'HSQC') {
     const tolF1 = params.tol_correspondence_f1 || params.tol_correspondance_F1 || 0;
     const tolF2 = params.tol_correspondence_f2 || params.tol_correspondance_F2 || 0;
     return `tol_f1_${tolF1}_f2_${tolF2}`.replace(/\./g, '_');
@@ -74,6 +74,7 @@ async function handleAnnotation(req, res, method) {
     ensureDir(workDir);
 
     const optimizedParams = { ...DEFAULT_LIGHT_PARAMS, ...parameters };
+    optimizedParams.annotation_type = annotationType;
 
     try {
       const totalSizeMB = (fs.statSync(tableauPath).size + fs.statSync(matrixPath).size) / 1024 / 1024;
@@ -178,10 +179,10 @@ async function handleAnnotation(req, res, method) {
     };
     addTask(taskId, taskInfo);
 
-    // ✅ SLEEP PREVENTION: Empêcher la mise en veille pendant l'annotation
+    // Keep the system awake during annotation.
     startPreventSleep(taskId);
 
-    // ✅ PERSISTENCE: Sauvegarder checkpoint initial
+    // Save the initial task checkpoint.
     if (ENABLE_TASK_PERSISTENCE) {
       saveCheckpoint(taskId, {
         type: 'annotation',
@@ -211,7 +212,7 @@ async function handleAnnotation(req, res, method) {
           // Update lastPercent when the script emits progress
           if (parsed.type === 'progress' && typeof parsed.percent === 'number') {
             lastPercent = parsed.percent;
-            // ✅ PERSISTENCE: Mise à jour du checkpoint à chaque progression
+            // Update the checkpoint as progress is reported.
             if (ENABLE_TASK_PERSISTENCE && parsed.percent % 10 === 0) {
               saveCheckpoint(taskId, {
                 type: 'annotation',
@@ -283,7 +284,7 @@ async function handleAnnotation(req, res, method) {
       if (task?.safetyTimeout) clearTimeout(task.safetyTimeout);
       clearInterval(hb);
       
-      // ✅ SLEEP PREVENTION: Réactiver la veille
+      // Release the sleep-prevention request.
       stopPreventSleep(taskId);
       
       const durationMin = Math.round((Date.now() - startTime) / 60000 * 10) / 10;
@@ -306,7 +307,7 @@ async function handleAnnotation(req, res, method) {
         return;
       }
       if (code !== 0) {
-        // ✅ PERSISTENCE: Marquer comme échouée
+        // Mark the task as failed.
         if (ENABLE_TASK_PERSISTENCE) {
           markTaskFailed(taskId, `R script exited with code ${code}`);
         }
@@ -331,7 +332,7 @@ async function handleAnnotation(req, res, method) {
         const outputPath = path.join(workDir, outputFile);
         const sz = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
         
-        // ✅ PERSISTENCE: Marquer comme complétée
+        // Mark the task as completed.
         if (ENABLE_TASK_PERSISTENCE) {
           markTaskCompleted(taskId, { outputFile, downloadUrl: `/outputs/${taskId}/${outputFile}` });
         }
@@ -351,7 +352,7 @@ async function handleAnnotation(req, res, method) {
           .readdirSync(workDir)
           .filter(f => f.endsWith('.csv') && !['tableau.csv', 'matrix.csv'].includes(f));
         
-        // ✅ PERSISTENCE: Marquer comme échouée (pas de fichier output)
+        // Mark the task as failed when no output file was produced.
         if (ENABLE_TASK_PERSISTENCE) {
           markTaskFailed(taskId, 'No output file found');
         }
@@ -368,7 +369,7 @@ async function handleAnnotation(req, res, method) {
     });
 
     child.on('error', err => {
-      // ✅ PERSISTENCE: Marquer comme échouée
+      // Mark the task as failed.
       if (ENABLE_TASK_PERSISTENCE) {
         markTaskFailed(taskId, `R spawn error: ${err.message}`);
       }
@@ -391,7 +392,7 @@ async function handleAnnotation(req, res, method) {
         killProcessGracefully(child, taskId);
         deleteTask(taskId);
       } else if (ENABLE_TASK_PERSISTENCE) {
-        // ✅ PERSISTENCE: La tâche continue en arrière-plan
+        // Keep the task running after the client disconnects.
         logWithMemory(`[${taskId}] Client disconnected - annotation continues in background`, 'INFO');
       }
     });
@@ -441,6 +442,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
       '1H': findCsv(files, '1H'),
       '13C': findCsv(files, '13C'),
       COSY: findCsv(files, 'COSY'),
+      TOCSY: findCsv(files, 'TOCSY'),
       HSQC: findCsv(files, 'HSQC'),
     };
 
@@ -472,7 +474,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
     const tempAnnotDir = path.join(annotationsDir, `temp_${annotationType}_${timestamp}`);
     ensureDir(tempAnnotDir);
 
-    const optimizedParams = { ...DEFAULT_LIGHT_PARAMS, ...parameters };
+    const optimizedParams = { ...DEFAULT_LIGHT_PARAMS, ...parameters, annotation_type: annotationType };
 
     try {
       fs.copyFileSync(predictionCsvPath, path.join(tempAnnotDir, `prediction_${annotationType}.csv`));
@@ -548,7 +550,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
     };
     addTask(taskId, taskInfo);
 
-    // ✅ SLEEP PREVENTION: Empêcher la mise en veille
+    // Keep the system awake while the task runs.
     startPreventSleep(taskId);
 
     child.stdout.on('data', buf => {
@@ -659,7 +661,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
       if (task?.safetyTimeout) clearTimeout(task.safetyTimeout);
       clearInterval(hb);
       
-      // ✅ SLEEP PREVENTION: Réactiver la veille
+      // Release the sleep-prevention request.
       stopPreventSleep(taskId);
       
       const durationMin = Math.round((Date.now() - startTime) / 60000 * 10) / 10;
@@ -856,7 +858,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
         killProcessGracefully(child, taskId);
         deleteTask(taskId);
       } else if (ENABLE_TASK_PERSISTENCE) {
-        // ✅ PERSISTENCE: La tâche continue en arrière-plan
+        // Keep the task running after the client disconnects.
         logWithMemory(`[${taskId}] Client disconnected - annotation continues in background`, 'INFO');
       }
     });

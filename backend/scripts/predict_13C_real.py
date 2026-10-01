@@ -1,26 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""
-predict_13C_real.py (server version, refactored)
-------------------------------------------------
-Extracts 13C signals from SDF, with options:
-    - non-quaternary carbons (default)
-    - all carbons
-
-Server compatibility:
-    - --sdf_path      : path to a .sdf file or a folder of .sdf files
-    - --output_dir    : output folder
-    - --task_id       : task identifier (CSV naming)
-    - --recursive     : recursive traversal if --sdf_path is a folder
-    - --carbon_mode   : {nonquaternary, all}
-
-Output:
-    <output_dir>/prediction_13C_<task_id>.csv
-
-Columns (0-based indices, RDKit-consistent):
-    Filename | C_index | Nb_H | H_indices | Delta_ppm | ECFP4
-"""
 
 import os
 import sys
@@ -102,10 +82,7 @@ def ensure_dir_exists(d: str):
 
 # -------------------------- 13C core functions --------------------------------
 def get_protonated_carbons(mol) -> List[int]:
-    """
-    Returns indices of carbons bearing at least one H (non-quaternary).
-    0-based indexing consistent with RDKit and shift vectors.
-    """
+    
     prot = []
     for a in mol.GetAtoms():
         if a.GetSymbol() != 'C':
@@ -135,12 +112,7 @@ def carbon_h_neighbors(mol, c_idx: int) -> List[int]:
 
 
 def dataframe_for_sdf(sdf_path: str, carbon_mode: str = "nonquaternary") -> pd.DataFrame:
-    """
-        Builds a DataFrame (0-based):
-      Filename | C_index | Nb_H | H_indices | Delta_ppm | ECFP4
-        - Delta_ppm: taken at the carbon atom index in the detected shift vector.
-        - H_indices: "i,j,k" (0-based) string for simple CSV compatibility.
-    """
+    
     try:
         progress(10, f"Reading {os.path.basename(sdf_path)}...")  # [NEW]
         mol = read_molecule_keepH(sdf_path)

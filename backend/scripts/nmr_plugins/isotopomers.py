@@ -1,16 +1,11 @@
 # nmr_plugins/isotopomers.py
-# Plugin pour couplages isotopomères (¹³C, ¹⁵N, ²H)
+# Isotopomer coupling plugin (¹³C, ¹⁵N, ²H)
 
-"""
-Plugin pour la gestion des couplages impliquant des isotopomères.
+"""Handle couplings involving isotopomers.
 
-Couvre:
-- ¹³C satellites (0.55% abondance naturelle)
-- ¹⁵N enrichi (RMN biomoléculaire)
-- ²H (deutérium) - effets isotopiques
-- ³¹P-¹H (nucléotides, phospholipides)
-- ¹⁹F-¹H (médicaments fluorés)
-"""
+Covers ¹³C satellites (0.55% natural abundance per satellite), enriched ¹⁵N
+for biomolecular NMR, deuterium isotope effects, ³¹P-¹H in nucleotides and
+phospholipids, and ¹⁹F-¹H in fluorinated drugs."""
 
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
@@ -23,10 +18,10 @@ except ImportError:
 
 
 # =============================================================================
-# TABLES DE COUPLAGES ISOTOPOMÈRES
+# Isotopomer coupling tables
 # =============================================================================
 
-# ¹³C-¹H couplages directs
+# Direct ¹³C-¹H couplings
 C13_H_DIRECT_COUPLINGS: Dict[str, float] = {
     '1J_C13_H_sp3': 125.0,      # CH₃, CH₂, CH aliphatiques
     '1J_C13_H_sp2_alkene': 160.0,  # =CH vinyliques
@@ -36,16 +31,16 @@ C13_H_DIRECT_COUPLINGS: Dict[str, float] = {
     '1J_C13_H_formate': 200.0,     # HCOO-
 }
 
-# ¹³C-¹H couplages indirects (à travers liaisons)
+# Indirect ¹³C-¹H couplings through bonds
 C13_H_INDIRECT_COUPLINGS: Dict[str, float] = {
     '2J_C13_C_H_gem': 5.0,         # ¹³C-C-H (geminal)
     '3J_C13_C_C_H_vicinal': 4.0,   # ¹³C-C-C-H (vicinal)
-    '4J_C13_long_range': 1.0,      # ⁴J longue portée
+    '4J_C13_long_range': 1.0,      # Long-range ⁴J
     '2J_C13_O_H': 3.0,             # ¹³C-O-H (alcools)
     '2J_C13_N_H': 2.0,             # ¹³C-N-H (amines)
 }
 
-# ¹⁵N-¹H couplages (RMN biomoléculaire)
+# ¹⁵N-¹H couplings in biomolecular NMR
 N15_H_COUPLINGS: Dict[str, float] = {
     '1J_N15_H_amide': 90.0,        # CONH
     '1J_N15_H_amine_primary': 70.0,   # NH₂ aliphatique
@@ -58,26 +53,26 @@ N15_H_COUPLINGS: Dict[str, float] = {
     '3J_N15_C_C_H': 7.0,           # ¹⁵N-C-C-H
 }
 
-# ²H (deutérium) - effets isotopiques
+# Deuterium isotope effects
 DEUTERIUM_EFFECTS: Dict[str, float] = {
     '1J_C_D': 20.0,                # ¹J(C-D) = ¹J(C-H)/6.5
     '2J_H_D_gem': 1.5,             # H-C-D geminal
     '3J_H_D_vicinal': 0.8,         # H-C-C-D vicinal
-    'alpha_isotope_shift': 0.15,   # Δδ par D en α (ppm)
-    'beta_isotope_shift': 0.02,    # Δδ par D en β (ppm)
-    'gamma_isotope_shift': 0.005,  # Δδ par D en γ (ppm)
+    'alpha_isotope_shift': 0.15,   # Δδ per alpha D (ppm)
+    'beta_isotope_shift': 0.02,    # Δδ per beta D (ppm)
+    'gamma_isotope_shift': 0.005,  # Δδ per gamma D (ppm)
 }
 
-# ³¹P-¹H couplages (nucléotides, phospholipides)
+# ³¹P-¹H couplings in nucleotides and phospholipids
 P31_H_COUPLINGS: Dict[str, float] = {
     '2J_P_C_H': 15.0,              # ³¹P-C-H direct
     '3J_P_O_C_H': 8.0,             # ³¹P-O-C-H (phosphoesters)
     '3J_P_C_C_H': 12.0,            # ³¹P-C-C-H
-    '4J_P_O_C_C_H': 2.0,           # ⁴J longue portée
+    '4J_P_O_C_C_H': 2.0,           # Long-range ⁴J
     '3J_P_N_C_H': 6.0,             # Phosphoramides
 }
 
-# ¹⁹F-¹H couplages (médicaments fluorés)
+# ¹⁹F-¹H couplings in fluorinated drugs
 F19_H_COUPLINGS: Dict[str, float] = {
     '2J_F_C_H_gem': 45.0,          # F-C-H geminal
     '3J_F_C_C_H_vicinal': 25.0,    # F-C-C-H vicinal
@@ -87,22 +82,22 @@ F19_H_COUPLINGS: Dict[str, float] = {
     '3J_F_vinyl_trans': 35.0,      # F-C=C-H trans
 }
 
-# Patterns satellites ¹³C (pour identification)
+# ¹³C satellite patterns for identification
 C13_SATELLITE_PATTERNS: Dict[str, Dict[str, Any]] = {
     'methyl_CH3': {
-        'intensity_ratio': 0.0055,     # 0.55% de chaque côté
+        'intensity_ratio': 0.0055,     # 0.55% on each side
         'separation_hz': 125.0,        # ¹J(¹³C-H) = 125 Hz
-        'multiplicity': 'doublet',     # ¹³C couplé à 3H → d
+        'multiplicity': 'doublet',     # ¹³C coupled to 3H: doublet
     },
     'methylene_CH2': {
         'intensity_ratio': 0.0055,
         'separation_hz': 125.0,
-        'multiplicity': 'doublet',     # ¹³C couplé à 2H → d
+        'multiplicity': 'doublet',     # ¹³C coupled to 2H: doublet
     },
     'methine_CH': {
         'intensity_ratio': 0.0055,
         'separation_hz': 125.0,
-        'multiplicity': 'doublet',     # ¹³C couplé à 1H → d
+        'multiplicity': 'doublet',     # ¹³C coupled to 1H: doublet
     },
     'aromatic_CH': {
         'intensity_ratio': 0.0055,
@@ -118,23 +113,14 @@ C13_SATELLITE_PATTERNS: Dict[str, Dict[str, Any]] = {
 
 
 # =============================================================================
-# FONCTIONS DE DÉTECTION
+# Detection functions
 # =============================================================================
 
 def detect_isotopomer_type(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
-    """
-    Détecte si un atome est un isotopomère enrichi.
-    
-    Args:
-        mol: Molécule RDKit
-        atom_idx: Index de l'atome à tester
-        
-    Returns:
-        Type d'isotopomère ou None
-    """
+    """Detect an enriched isotope at atom_idx in an RDKit molecule. Return the isotope type or None."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
-    # Vérifier isotope explicite
+    # Check the explicitly assigned isotope.
     isotope = atom.GetIsotope()
     symbol = atom.GetSymbol()
     
@@ -144,13 +130,13 @@ def detect_isotopomer_type(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
         elif symbol == 'N' and isotope == 15:
             return 'N15'
         elif symbol == 'H' and isotope == 2:
-            return 'D'  # Deutérium
+            return 'D'  # Deuterium
         elif symbol == 'P' and isotope == 31:
             return 'P31'
         elif symbol == 'F' and isotope == 19:
             return 'F19'
     
-    # Détecter par symbole (isotopes naturels abondants)
+    # Detect naturally abundant isotopes by element symbol.
     elif symbol == 'P':  # ³¹P naturel
         return 'P31'
     elif symbol == 'F':  # ¹⁹F naturel
@@ -160,21 +146,16 @@ def detect_isotopomer_type(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
 
 
 def detect_c13_satellite_context(mol: Chem.Mol, c_idx: int) -> Optional[str]:
-    """
-    Détermine le type de carbone pour les satellites ¹³C.
-    
-    Returns:
-        'methyl', 'methylene', 'methine', 'aromatic', 'alkene', 'quaternary'
-    """
+    """Classify carbon for ¹³C satellites. Return 'methyl', 'methylene', 'methine', 'aromatic', 'alkene', or 'quaternary'."""
     carbon = mol.GetAtomWithIdx(c_idx)
     
     if carbon.GetSymbol() != 'C':
         return None
     
-    # Compter les hydrogènes
+    # Count hydrogens.
     h_count = carbon.GetTotalNumHs()
     
-    # Déterminer le type d'hybridation
+    # Determine hybridization.
     if carbon.GetIsAromatic():
         if h_count == 1:
             return 'aromatic_CH'
@@ -205,13 +186,8 @@ def detect_c13_satellite_context(mol: Chem.Mol, c_idx: int) -> Optional[str]:
 
 
 def get_phosphorus_coupling_context(mol: Chem.Mol, p_idx: int, h_idx: int) -> Optional[str]:
-    """
-    Détermine le type de couplage P-H selon l'environnement.
-    
-    Returns:
-        Type de liaison: 'P_C_H', 'P_O_C_H', 'P_N_C_H', etc.
-    """
-    # Trouver le chemin P...H
+    """Classify the P-H coupling environment, returning a bond-path type such as 'P_C_H', 'P_O_C_H', or 'P_N_C_H'."""
+    # Find the P...H path.
     path = Chem.GetShortestPath(mol, p_idx, h_idx)
     if not path or len(path) > 5:  # Max ⁴J
         return None
@@ -243,24 +219,18 @@ def get_phosphorus_coupling_context(mol: Chem.Mol, p_idx: int, h_idx: int) -> Op
 
 
 # =============================================================================
-# FONCTION PRINCIPALE DE COUPLAGE
+# Main coupling function
 # =============================================================================
 
 def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
-    """
-    Calcule les couplages isotopomères.
-    
-    Args:
-        mol: Molécule RDKit
-        h1_idx, h2_idx: Indices des atomes (H ou isotopes)
-        
-    Returns:
-        J en Hz ou None si pas de couplage isotopomère détecté
-    """
+    """Calculate isotopomer couplings in an RDKit molecule.
+
+    h1_idx and h2_idx identify hydrogen or isotope atoms.
+    Return J in Hz, or None if no isotopomer coupling is detected."""
     atom1 = mol.GetAtomWithIdx(h1_idx)
     atom2 = mol.GetAtomWithIdx(h2_idx)
     
-    # Vérifier si au moins un des atomes est un isotope d'intérêt
+    # Require at least one isotope of interest.
     isotope1 = detect_isotopomer_type(mol, h1_idx)
     isotope2 = detect_isotopomer_type(mol, h2_idx)
     
@@ -274,7 +244,7 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
     
     distance = len(path) - 1
     
-    # === COUPLAGES ¹³C-¹H ===
+    # ¹³C-¹H couplings
     if isotope1 == 'C13' and atom2.GetSymbol() == 'H':
         if distance == 1:  # ¹J direct
             context = detect_c13_satellite_context(mol, h1_idx)
@@ -288,10 +258,10 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
         elif distance == 3:  # ³J
             return C13_H_INDIRECT_COUPLINGS['3J_C13_C_C_H_vicinal']
     
-    # === COUPLAGES ¹⁵N-¹H ===
+    # ¹⁵N-¹H couplings
     elif isotope1 == 'N15' and atom2.GetSymbol() == 'H':
         if distance == 1:  # ¹J direct N-H
-            # Déterminer le type d'azote
+            # Determine the nitrogen environment.
             nitrogen = mol.GetAtomWithIdx(h1_idx)
             
             # Amide ?
@@ -303,7 +273,7 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
                             if bond and bond.GetBondTypeAsDouble() == 2:
                                 return N15_H_COUPLINGS['1J_N15_H_amide']
             
-            # Défaut: amine
+            # Default to amine.
             h_count = nitrogen.GetTotalNumHs()
             if h_count >= 2:
                 return N15_H_COUPLINGS['1J_N15_H_amine_primary']
@@ -315,18 +285,18 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
         elif distance == 3:  # ³J
             return N15_H_COUPLINGS['3J_N15_C_C_H']
     
-    # === COUPLAGES ³¹P-¹H ===
+    # ³¹P-¹H couplings
     elif isotope1 == 'P31' and atom2.GetSymbol() == 'H':
         context = get_phosphorus_coupling_context(mol, h1_idx, h2_idx)
         if context and context in P31_H_COUPLINGS:
             return P31_H_COUPLINGS[context]
     
-    # === COUPLAGES ¹⁹F-¹H ===
+    # ¹⁹F-¹H couplings
     elif isotope1 == 'F19' and atom2.GetSymbol() == 'H':
         if distance == 2:  # ²J geminal
             return F19_H_COUPLINGS['2J_F_C_H_gem']
         elif distance == 3:  # ³J vicinal
-            # Vérifier si vinylique
+            # Check for a vinylic environment.
             path_atoms = [mol.GetAtomWithIdx(i) for i in path]
             has_double_bond = any(
                 mol.GetBondBetweenAtoms(path[i], path[i+1]).GetBondTypeAsDouble() == 2
@@ -339,7 +309,7 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
         elif distance == 4:  # ⁴J
             return F19_H_COUPLINGS['4J_F_aromatic']
     
-    # === EFFETS DEUTÉRIUM ===
+    # Deuterium effects
     elif isotope1 == 'D' and atom2.GetSymbol() == 'H':
         if distance == 2:  # Geminal H-C-D
             return DEUTERIUM_EFFECTS['2J_H_D_gem']
@@ -354,16 +324,8 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
 # =============================================================================
 
 def get_c13_satellite_info(separation_hz: float) -> Dict[str, Any]:
-    """
-    Retourne les informations sur les satellites ¹³C observés.
-    
-    Args:
-        separation_hz: Séparation observée en Hz
-        
-    Returns:
-        Dict avec type de carbone et multiplicité prédite
-    """
-    # Déterminer le type basé sur la séparation
+    """Identify observed ¹³C satellites from separation_hz. Return a dictionary containing the carbon type and predicted multiplicity."""
+    # Determine the type from the separation.
     if 120 <= separation_hz <= 130:
         return {
             'carbon_type': 'sp3',
@@ -395,12 +357,7 @@ def get_c13_satellite_info(separation_hz: float) -> Dict[str, Any]:
 
 
 def estimate_deuterium_shift_effect(mol: Chem.Mol, d_idx: int, h_idx: int) -> float:
-    """
-    Estime l'effet isotopique sur le déplacement chimique dû au deutérium.
-    
-    Returns:
-        Décalage en ppm (négatif = blindage)
-    """
+    """Estimate the deuterium isotope shift in ppm; negative values indicate shielding."""
     path = Chem.GetShortestPath(mol, d_idx, h_idx)
     if not path:
         return 0.0
@@ -422,13 +379,13 @@ def estimate_deuterium_shift_effect(mol: Chem.Mol, d_idx: int, h_idx: int) -> fl
 # =============================================================================
 
 def _test_isotopomers():
-    """Tests du plugin isotopomers."""
+    """Test the isotopomers plugin."""
     print("=" * 60)
     print("TEST DU PLUGIN ISOTOPOMÈRES")
     print("=" * 60)
     
     test_cases = [
-        # (nom, smiles avec isotopes, J_attendu, tolerance)
+        # (name, isotope-labeled SMILES, expected_J, tolerance)
         ("¹³C-Méthanol", "[13CH3]O", 125.0, 5.0),
         ("¹⁵N-Méthylamine", "[15NH2]C", 70.0, 5.0),
         ("Deutéro-éthanol", "[2H]CCO", 1.5, 0.5),
@@ -443,12 +400,12 @@ def _test_isotopomers():
         
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            print("  ❌ SMILES invalide")
+            print("  FAIL: Invalid SMILES")
             continue
         
         mol = Chem.AddHs(mol)
         
-        # Trouver atomes d'intérêt
+        # Find atoms of interest.
         isotope_atoms = []
         h_atoms = []
         
@@ -464,16 +421,16 @@ def _test_isotopomers():
             if J is not None:
                 diff = abs(J - expected_J)
                 if diff <= tolerance:
-                    print(f"  ✅ J = {J:.1f} Hz (attendu: {expected_J} ± {tolerance})")
+                    print(f"  PASS: J = {J:.1f} Hz (expected: {expected_J} ± {tolerance})")
                     passed += 1
                 else:
-                    print(f"  ❌ J = {J:.1f} Hz (écart: {diff:.1f})")
+                    print(f"  FAIL: J = {J:.1f} Hz (difference: {diff:.1f})")
             else:
-                print("  ⚠️ Pas de couplage détecté")
+                print("  WARN: No coupling detected")
         else:
-            print("  ⚠️ Pas d'atomes isotopiques trouvés")
+            print("  WARN: No isotope-labeled atoms found")
     
-    print(f"\n📊 Résultat: {passed}/{len(test_cases)} tests réussis")
+    print(f"\nResult: {passed}/{len(test_cases)} tests passed")
     return passed, len(test_cases)
 
 

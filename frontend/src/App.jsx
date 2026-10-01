@@ -255,10 +255,10 @@ const AppContent = () => {
 
   return (
     <div className="app sirius-layout">
-      {/* Overlay de progression globale */}
+      {/* Global progress overlay */}
       <GlobalProgressOverlay />
 
-      {/* Toolbar en haut */}
+      {/* Top toolbar */}
       <Toolbar
         onNewProject={handleNewProject}
         onOpenProject={handleOpenProject}
@@ -401,7 +401,7 @@ const AppContent = () => {
 };
 
 /**
- * Composant racine de l'application
+ * Application root component
  */
 const App = () => (
   <AppStateProvider>

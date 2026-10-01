@@ -1,6 +1,6 @@
 // src/components/viewer/Scatter2D.js
-// Composant de visualisation de spectre 2D (Canvas)
-// Tracé direct des contours - zoom instantané
+// Canvas renderer for 2D spectra.
+// Render contours directly so zooming does not require a backend request.
 
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { useMeasureWidth } from "../../hooks/useMeasureWidth";
@@ -10,11 +10,11 @@ const COLOR_THEORY = "#2563eb";
 const BG = "#f8fafc";
 
 /**
- * Composant Canvas pour afficher un spectre 2D (COSY, HSQC)
- * Utilise les données de contours pour un zoom instantané
+ * Canvas renderer for 2D spectra (COSY and HSQC).
+ * Use contour data to redraw the visible region on zoom.
  * 
- * @param {Object} contourData - Données de contours {contours: [{level, paths}], f1_range, f2_range}
- * @param {Object} zoomRange - Range optionnel {f1: {min, max}, f2: {min, max}}
+ * @param {Object} contourData - Contour data: {contours: [{level, paths}], f1_range, f2_range}.
+ * @param {Object} zoomRange - Optional viewport: {f1: {min, max}, f2: {min, max}}.
  */
 function Scatter2D({
   theoryPts = [],
@@ -153,7 +153,7 @@ function Scatter2D({
       ctx.restore();
     }
 
-    // Axes uniquement (pas de grille de fond)
+    // Draw axes without background grid lines.
     const nGridX = 5;
     const nGridY = 5;
     ctx.strokeStyle = AXIS;
@@ -164,7 +164,7 @@ function Scatter2D({
     ctx.lineTo(PAD_LEFT + gridW, PAD_TOP);
     ctx.stroke();
 
-    // Clipping pour les points théoriques et expérimentaux
+    // Clip predicted and experimental points to the plot area.
     ctx.save();
     ctx.beginPath();
     ctx.rect(PAD_LEFT, PAD_TOP, gridW, gridH);
@@ -197,7 +197,7 @@ function Scatter2D({
       }
     }
 
-    ctx.restore();  // Fin du clipping pour les points
+    ctx.restore();  // Restore the unclipped drawing context.
 
     ctx.fillStyle = AXIS;
     ctx.font = "10px ui-sans-serif, system-ui, -apple-system";

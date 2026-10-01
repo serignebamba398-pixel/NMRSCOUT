@@ -1,5 +1,5 @@
 // src/components/viewer/index.js
-// Export de tous les composants viewer
+// Viewer component exports.
 
 export { default as Pill } from "./Pill";
 export { default as ColorPicker } from "./ColorPicker";

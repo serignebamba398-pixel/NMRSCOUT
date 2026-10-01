@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useEffect } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { LockOverlay, ProgressBar } from '../common';
@@ -71,7 +72,7 @@ export const IntegratedAnnotationInterface = ({ inModal = false, onClose }) => {
   const renderCsvStatus = () => {
     if (!selectedTask) return null;
     const csvMap = selectedTaskData?.csvFiles || {};
-    const order = ["1H", "13C", "COSY", "HSQC"];
+    const order = ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable);
     return (
       <div className="csv-status">
         {order.map((t) => {
@@ -187,7 +188,7 @@ export const IntegratedAnnotationInterface = ({ inModal = false, onClose }) => {
       <div className="card">
         <h3>Choose methods to launch</h3>
         <div className="parameters-grid">
-          {["1H", "13C", "COSY", "HSQC"].map((t) => {
+          {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((t) => {
             const hasCsv = hasCsvForMethod(t);
             const hasMatrix = !!uploadedMatrixNames[t];
             const checked = selectedMethods.includes(t);

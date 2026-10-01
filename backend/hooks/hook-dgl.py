@@ -1,8 +1,4 @@
-"""
-Hook for DGL (Deep Graph Library)
-Collecte binaires et hidden imports pour PyInstaller
-Based on issue PyInstaller #6916
-"""
+"""PyInstaller hook for DGL (Deep Graph Library). Collect binaries and hidden imports; based on PyInstaller issue #6916."""
 from PyInstaller.utils.hooks import collect_all, collect_dynamic_libs, copy_metadata
 import os
 import glob

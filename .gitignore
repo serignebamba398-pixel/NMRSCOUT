@@ -99,6 +99,7 @@ backend/temp_output/
 $null
 
 # ===== Large files (in Docker image + GitHub Release assets) =====
+.local-backups/
 *.pkl
 *.sdf
 *.sd

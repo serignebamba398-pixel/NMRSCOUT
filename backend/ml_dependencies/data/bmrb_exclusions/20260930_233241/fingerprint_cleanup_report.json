@@ -1,0 +1,41 @@
+{
+  "excluded_entries": 191,
+  "entries_with_no_replayed_shifts": 2,
+  "removed_values_by_index_and_radius": {
+    "indexes": {
+      "6": 6677,
+      "5": 6677,
+      "4": 6677,
+      "3": 6677,
+      "2": 6677
+    },
+    "indexes_composite": {
+      "6": 6677,
+      "5": 6677,
+      "4": 6677,
+      "3": 6677,
+      "2": 6677
+    }
+  },
+  "removed_exact_atom_values": 6476,
+  "exact_removal_policy": "Remove only atom values matching excluded entries; provenance is not stored, so identical values from other sources cannot be distinguished.",
+  "before_sha256": "c315ea58a62fe991cc7887def35e447149701e9734881ac5248e0d7060f7ea26",
+  "stats_after": {
+    "fps_by_radius": {
+      "6": 292370,
+      "5": 285223,
+      "4": 270338,
+      "3": 208150,
+      "2": 100652
+    },
+    "composite_by_radius": {
+      "6": 320930,
+      "5": 315196,
+      "4": 300109,
+      "3": 244468,
+      "2": 169576
+    }
+  },
+  "after_sha256": "e6c8515172816dfdcd76b24f3c88056b667deaeac53dad0bd304da403f81dc9a",
+  "validation": "PASS: multiplicities, backup, serialized reload, exact exclusions"
+}

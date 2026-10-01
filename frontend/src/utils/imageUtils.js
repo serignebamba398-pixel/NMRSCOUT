@@ -10,14 +10,14 @@ import { API_BASE_URL } from "../api";
  */
 export function buildImgSrc(url, meta) {
   try {
-    // En Electron, utiliser API_BASE_URL comme base au lieu de window.location.href (file://)
+    // In Electron, resolve URLs against API_BASE_URL; window.location.href may use file://.
     const baseUrl =
       typeof API_BASE_URL === "string" && API_BASE_URL.startsWith("http")
         ? API_BASE_URL
         : window.location.href;
     const u = new URL(url, baseUrl);
 
-    // Tag prioritaire pour le cache-busting
+    // Preferred cache invalidation token.
     const tag =
       meta?.etag ?? meta?.version ?? meta?.last_modified ?? meta?.nonce;
     if (!tag) return url;

@@ -1,16 +1,10 @@
 # nmr_plugins/polymers.py
-# Plugin pour polymères et monomères
+# Polymer and monomer plugin
 
-"""
-Plugin pour la gestion des polymères et monomères.
+"""Handle polymers and monomers.
 
-Couvre:
-- Monomères vinyliques
-- Unités de répétition polymère
-- Copolymères
-- Polymères fonctionnalisés
-- Effets de tacticité
-"""
+Covers vinyl monomers, polymer repeating units, copolymers,
+functionalized polymers, and tacticity effects."""
 
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
@@ -22,25 +16,25 @@ except ImportError:
     raise ImportError("RDKit requis pour le plugin polymers")
 
 
-# Tables de couplages polymères
+# Polymer coupling tables
 POLYMER_COUPLINGS: Dict[str, float] = {
-    # Monomères vinyliques
+    # Vinyl monomers
     'vinyl_trans': 17.0,        # Trans vinylique
     'vinyl_cis': 11.0,          # Cis vinylique
     'vinyl_geminal': 1.5,       # Geminal vinylique
     
-    # Chaînes polymère
-    'polymer_backbone': 7.0,     # Squelette polymère
-    'side_chain': 6.5,          # Chaîne latérale
+    # Polymer chains
+    'polymer_backbone': 7.0,     # Polymer backbone
+    'side_chain': 6.5,          # Side chain
     
-    # Tacticité
+    # Tacticity
     'isotactic_CH2': 13.5,      # Isotactique
     'syndiotactic_CH2': 12.8,   # Syndiotactique  
     'atactic_CH2': 13.0,        # Atactique (moyenne)
     
-    # Polymères fonctionnalisés
-    'ester_side_chain': 4.0,    # Chaîne ester
-    'amide_side_chain': 6.0,    # Chaîne amide
+    # Functionalized polymers
+    'ester_side_chain': 4.0,    # Ester chain
+    'amide_side_chain': 6.0,    # Amide chain
 }
 
 # Patterns SMARTS
@@ -54,7 +48,7 @@ POLYMER_PATTERNS: Dict[str, str] = {
 
 
 def detect_vinyl_monomer(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
-    """Détecte les monomères vinyliques."""
+    """Detect vinyl monomers."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
     if atom.GetSymbol() != 'C':
@@ -65,12 +59,12 @@ def detect_vinyl_monomer(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any
         if neighbor.GetSymbol() == 'C':
             bond = mol.GetBondBetweenAtoms(atom_idx, neighbor.GetIdx())
             if bond and bond.GetBondTypeAsDouble() == 2.0:
-                # C'est une double liaison C=C
+                # C=C double bond
                 
-                # Déterminer le type de monomère
+                # Determine the monomer type.
                 monomer_type = 'simple_alkene'
                 
-                # Styrène ?
+                # Check for styrene.
                 for nn in atom.GetNeighbors():
                     if nn.GetIsAromatic():
                         monomer_type = 'styrene'
@@ -95,14 +89,14 @@ def detect_vinyl_monomer(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any
 
 
 def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
-    """Calcule les couplages dans les polymères."""
+    """Calculate polymer couplings."""
     atom1 = mol.GetAtomWithIdx(h1_idx)
     atom2 = mol.GetAtomWithIdx(h2_idx)
     
     if atom1.GetSymbol() != 'H' or atom2.GetSymbol() != 'H':
         return None
     
-    # Chercher les atomes porteurs
+    # Find the atoms bearing the hydrogens.
     parent1_idx = None
     parent2_idx = None
     
@@ -126,7 +120,7 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
         
         distance = len(path) - 1
     except Exception as e:
-        # Protection contre les erreurs RDKit invariant
+        # Handle RDKit invariant errors.
         if "Invariant Violation" in str(e):
             return None  # Ignorer silencieusement
         else:
@@ -134,18 +128,18 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
                 print(f"Erreur RDKit dans polymers: {e}")
             return None
     
-    # Détecter monomère vinylique
+    # Detect a vinyl monomer.
     vinyl1 = detect_vinyl_monomer(mol, parent1_idx)
     vinyl2 = detect_vinyl_monomer(mol, parent2_idx)
     
     if vinyl1 or vinyl2:
-        if distance == 1:  # Sur la même double liaison
-            # Déterminer géométrie cis/trans (approximation)
-            return POLYMER_COUPLINGS['vinyl_trans']  # Par défaut trans
+        if distance == 1:  # On the same double bond
+            # Approximate cis/trans geometry.
+            return POLYMER_COUPLINGS['vinyl_trans']  # Default to trans.
         elif distance == 0:  # Geminal
             return POLYMER_COUPLINGS['vinyl_geminal']
     
-    # Couplage générique polymère
+    # Generic polymer coupling
     if distance == 2:  # Vicinal
         return POLYMER_COUPLINGS['polymer_backbone']
     
@@ -153,7 +147,7 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
 
 
 def _test_polymers():
-    """Tests du plugin polymers."""
+    """Test the polymers plugin."""
     print("=" * 60)
     print("TEST DU PLUGIN POLYMÈRES")
     print("=" * 60)
@@ -174,14 +168,14 @@ def _test_polymers():
             if len(h_atoms) >= 2:
                 J = get_coupling(mol, h_atoms[0], h_atoms[1])
                 if J and abs(J - expected) <= 3.0:
-                    print(f"✅ {name}: {J:.1f} Hz")
+                    print(f"PASS: {name}: {J:.1f} Hz")
                     passed += 1
                 else:
-                    print(f"❌ {name}: {J} Hz (attendu: {expected})")
+                    print(f"FAIL: {name}: {J} Hz (expected: {expected})")
             else:
-                print(f"⚠️ {name}: Pas assez d'H")
+                print(f"WARN: {name}: Not enough H atoms")
         else:
-            print(f"❌ {name}: SMILES invalide")
+            print(f"FAIL: {name}: Invalid SMILES")
     
     return passed, len(test_cases)
 

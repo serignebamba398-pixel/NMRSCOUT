@@ -51,6 +51,7 @@ module.exports = {
     '1H': { png: 'oneH_bg.png', json: 'oneH_bg.json' },
     '13C': { png: 'c13_bg.png', json: 'c13_bg.json' },
     COSY: { png: 'cosy_bg.png', json: 'cosy_bg.json' },
+    TOCSY: { png: 'tocsy_bg.png', json: 'tocsy_bg.json' },
     HSQC: { png: 'hsqc_bg.png', json: 'hsqc_bg.json' },
   },
 };

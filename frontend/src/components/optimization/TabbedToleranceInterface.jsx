@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { LockOverlay, ProgressBar } from '../common';
@@ -38,7 +39,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
     toleranceOptimSelectedType,
   } = annotationState;
 
-  // Onglet actif: 'source' ou '1H', '13C', 'COSY', 'HSQC', 'results'
+  // Onglet actif: 'source' ou '1H', '13C', 'COSY', 'TOCSY', 'HSQC', 'results'
   const [activeTab, setActiveTab] = useState('source');
   const [matrixUploads, setMatrixUploads] = useState([]);
   const [loadingMatrixUploads, setLoadingMatrixUploads] = useState(false);
@@ -60,7 +61,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
 
   const dimmed = uiLock.lockedBy === "PRED" || uiLock.lockedBy === "ANNO";
 
-  // Clés de tolérance à masquer des paramètres
+  // Tolerance fields hidden from the parameter controls.
   const toleranceKeysByType = {
     "1H": ["tol_correspondence", "tol_correspondance", "tol_match"],
     "13C": ["tol_correspondence", "tol_correspondance", "tol_match"],
@@ -71,6 +72,12 @@ export const TabbedToleranceInterface = ({ onClose }) => {
       "tol_correspondance_F2", "tol_match_F2",
       "tol_correspondance_f1", "tol_match_f1",
       "tol_correspondance_f2", "tol_match_f2",
+    ],
+    TOCSY: [
+      "tol_correspondence_f1", "tol_correspondance_f1", "tol_match_f1",
+      "tol_correspondence_f2", "tol_correspondance_f2", "tol_match_f2",
+      "tol_correspondance_F1", "tol_match_F1",
+      "tol_correspondance_F2", "tol_match_F2",
     ],
     HSQC: [
       "tol_correspondence_f1", "tol_correspondance_f1", "tol_match_f1",
@@ -180,7 +187,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
     return hasCsvForMethod(selectedType) && !!annotationState.uploadedMatrixNames[selectedType];
   };
 
-  // Analyser résultat CSV annotation
+  // Parse annotation results from CSV.
   const analyzeAnnotationResult = async (csvUrl, toleranceParams, totalExperimentalSignals) => {
     try {
       const normalized = normalizeStaticUrl(csvUrl);
@@ -217,7 +224,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
 
         if (row.RANSY_signals && String(row.RANSY_signals).trim() !== "") {
           const rawSignals = String(row.RANSY_signals).trim();
-          // Detect 2D format (COSY/HSQC uses "||" to separate signal pairs)
+          // Detect 2D format (COSY/TOCSY/HSQC uses "||" to separate signal pairs)
           const is2D = rawSignals.includes("||");
           const expSignals = is2D
             ? rawSignals.split("||").map((s) => s.trim()).filter((s) => s !== "")
@@ -326,6 +333,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
   };
 
   const runToleranceTests = async () => {
+    if (!isMethodAvailable(selectedType)) return;
     // Reset cancel flag
     cancelledRef.current = false;
     
@@ -375,7 +383,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
       addLog(`Matrix "${matrixName}" → ${totalExperimentalSignals} experimental signals detected.`, "info");
     }
 
-    // Générer grille de tolérances
+    // Generate tolerance combinations.
     const testCombinations = [];
 
     if (type === "1H" || type === "13C") {
@@ -391,7 +399,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
           tol_match: roundedTol,
         });
       }
-    } else if (type === "COSY" || type === "HSQC") {
+    } else if (type === "COSY" || type === "TOCSY" || type === "HSQC") {
       for (
         let tolF1 = ranges.tol_correspondence_f1.min;
         tolF1 <= ranges.tol_correspondence_f1.max + 1e-9;
@@ -613,7 +621,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
 
         {annotationState.selectedTask && (
           <div className="csv-status-grid">
-            {["1H", "13C", "COSY", "HSQC"].map((t) => {
+            {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((t) => {
               const csv = selectedTaskData?.csvFiles?.[t];
               const valid = csv && isValidCsvForType(csv, t);
               return (
@@ -631,7 +639,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
       <div className="param-section">
         <div className="section-title">Method to Optimize</div>
         <div className="method-grid">
-          {["1H", "13C", "COSY", "HSQC"].map((t) => {
+          {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((t) => {
             const available = hasCsvForMethod(t);
             return (
               <label key={t} className={`method-option ${!available ? 'disabled' : ''}`}>
@@ -786,12 +794,12 @@ export const TabbedToleranceInterface = ({ onClose }) => {
     );
   };
 
-  // Rendu de l'onglet Résultats
+  // Results tab.
   const renderResultsTab = () => (
     <div className="tab-content">
       {toleranceResults && toleranceResults.length > 0 ? (
         <div className="results-container">
-          {toleranceResults.map((resultSet) => (
+          {toleranceResults.filter(result => isMethodAvailable(result.type)).map((resultSet) => (
             <div key={resultSet.id} className="result-set">
               <ToleranceSummaryTable resultSet={resultSet} />
               <div className="charts-container">
@@ -866,6 +874,13 @@ export const TabbedToleranceInterface = ({ onClose }) => {
         >
           COSY
         </button>
+        {isMethodAvailable('TOCSY') && <button
+          className={`tab-btn ${activeTab === 'TOCSY' ? 'active' : ''}`}
+          onClick={() => setActiveTab('TOCSY')}
+          disabled={running}
+        >
+          TOCSY
+        </button>}
         <button
           className={`tab-btn ${activeTab === 'HSQC' ? 'active' : ''}`}
           onClick={() => setActiveTab('HSQC')}
@@ -888,6 +903,7 @@ export const TabbedToleranceInterface = ({ onClose }) => {
         {activeTab === '1H' && renderTypeTab('1H')}
         {activeTab === '13C' && renderTypeTab('13C')}
         {activeTab === 'COSY' && renderTypeTab('COSY')}
+        {isMethodAvailable('TOCSY') && activeTab === 'TOCSY' && renderTypeTab('TOCSY')}
         {activeTab === 'HSQC' && renderTypeTab('HSQC')}
         {activeTab === 'results' && renderResultsTab()}
       </div>

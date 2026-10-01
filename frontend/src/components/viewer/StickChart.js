@@ -1,6 +1,6 @@
 // src/components/viewer/StickChart.js
-// Composant de visualisation de spectre 1D (Canvas)
-// Tracé direct des données brutes (ppm, intensity) - zoom instantané
+// Canvas renderer for 1D spectra.
+// Draw raw spectrum data so zooming does not require a backend request.
 
 import React, { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { useMeasureWidth } from "../../hooks/useMeasureWidth";
@@ -13,11 +13,11 @@ import {
 } from "../../constants/colors";
 
 /**
- * Composant Canvas pour afficher un spectre 1D (stick chart)
- * Utilise les données brutes pour un zoom instantané
+ * Render a 1D spectrum and predicted peaks on a canvas.
+ * Use raw data to redraw the visible region on zoom.
  * 
- * @param {Object} spectrumData - Données brutes du spectre {ppm: number[], intensity: number[]}
- * @param {Object} ppmRange - Range PPM optionnel {min, max} pour le zoom
+ * @param {Object} spectrumData - Raw spectrum data: {ppm: number[], intensity: number[]}.
+ * @param {Object} ppmRange - Optional zoom range in ppm: {min, max}.
  */
 function StickChart({
   theory = [],
@@ -27,8 +27,8 @@ function StickChart({
   height = PLOT_HEIGHT,
   showTheory = true,
   showExp = true,
-  spectrumData = null,      // Données brutes {ppm: [], intensity: []}
-  ppmRange = null,          // Range pour le zoom {min, max}
+  spectrumData = null,      // Raw spectrum data: {ppm: [], intensity: []}.
+  ppmRange = null,          // Zoom range: {min, max}.
   spectrumColor = "#1e40af",
   canInteract = false,
   zoomEnabled = true,
@@ -36,26 +36,26 @@ function StickChart({
   onReset,
   busy = false,
   extraButtons = null,
-  intensityScale = 1.0,     // Facteur d'échelle de l'intensité
-  onIntensityChange = null, // Callback pour changer l'intensité (delta) => void
+  intensityScale = 1.0,     // Intensity scale factor.
+  onIntensityChange = null, // Intensity adjustment callback: (delta) => void.
 }) {
   const [wrapRef, width] = useMeasureWidth(700);
   const canvasRef = useRef(null);
   const [drag, setDrag] = useState(null);
 
-  // Calcul du range PPM à afficher
+  // Determine the displayed ppm range.
   const range = useMemo(() => {
-    // Priorité 1: range passé en prop (zoom)
+    // Use the explicit zoom range first.
     if (ppmRange && ppmRange.min != null && ppmRange.max != null) {
       return { minX: Math.min(ppmRange.min, ppmRange.max), maxX: Math.max(ppmRange.min, ppmRange.max) };
     }
-    // Priorité 2: range des données du spectre
+    // Otherwise, use the raw spectrum bounds.
     if (spectrumData?.ppm?.length > 0) {
       const minPpm = Math.min(...spectrumData.ppm);
       const maxPpm = Math.max(...spectrumData.ppm);
       return { minX: minPpm, maxX: maxPpm };
     }
-    // Priorité 3: range des points théoriques/expérimentaux
+    // Fall back to the predicted and experimental peak bounds.
     const all = [
       ...(showTheory ? theory : []),
       ...(showExp ? expPpm : []),
@@ -84,7 +84,7 @@ function StickChart({
     return expPpm.map((x, i) => ({ x, a: a[i] ?? 0.6 }));
   }, [expPpm, expInt]);
 
-  // Rendu du canvas
+  // Render the canvas.
   useEffect(() => {
     const cvs = canvasRef.current;
     if (!cvs) return;
@@ -104,19 +104,19 @@ function StickChart({
     ctx.fillStyle = BG;
     ctx.fillRect(0, 0, W, H);
 
-    // Fonction de mapping ppm -> pixel (axes inversés pour NMR: gauche = max, droite = min)
+    // Map ppm to pixels; NMR axes run from higher ppm on the left to lower ppm on the right.
     const denom = range.maxX - range.minX || 1;
     const ppmToX = (ppm) => {
       const t = (ppm - range.minX) / denom;
       return PAD + (reverse ? (1 - t) : t) * gridW;
     };
 
-    // Tracé du spectre de fond à partir des données brutes
+    // Draw the background spectrum from raw data.
     if (spectrumData?.ppm?.length > 0 && spectrumData?.intensity?.length > 0) {
       const ppmArr = spectrumData.ppm;
       const intArr = spectrumData.intensity;
 
-      // Filtrer les points visibles dans le range actuel
+      // Keep points inside the visible range.
       const visibleData = [];
       let maxInt = 0;
       for (let i = 0; i < ppmArr.length; i++) {
@@ -128,13 +128,13 @@ function StickChart({
       }
       if (maxInt === 0) maxInt = 1;
 
-      // Fonction de mapping intensité -> Y (avec scale)
+      // Map scaled intensity to canvas y coordinates.
       const intToY = (int) => {
         const scaled = int * intensityScale;
         return PAD + gridH - (scaled / maxInt) * gridH * 0.85;
       };
 
-      // Tracer la courbe du spectre
+      // Draw the spectrum curve.
       if (visibleData.length > 1) {
         ctx.strokeStyle = spectrumColor;
         ctx.lineWidth = 1;
@@ -154,7 +154,7 @@ function StickChart({
       }
     }
 
-    // Axe horizontal en bas
+    // Bottom horizontal axis
     ctx.strokeStyle = AXIS;
     ctx.beginPath();
     ctx.moveTo(PAD, PAD + gridH);
@@ -187,7 +187,7 @@ function StickChart({
       }
     }
 
-    // Labels des ticks PPM
+    // PPM tick labels.
     ctx.fillStyle = AXIS;
     ctx.font = "12px ui-sans-serif, system-ui, -apple-system";
     const ticks = 6;
@@ -198,7 +198,7 @@ function StickChart({
       ctx.fillText(ppm.toFixed(2), x - 14, H - 8);
     }
 
-    // Rectangle de zoom
+    // Zoom selection rectangle
     if (drag && Number.isFinite(drag.x0) && Number.isFinite(drag.x1)) {
       const x0 = Math.min(drag.x0, drag.x1);
       const x1 = Math.max(drag.x0, drag.x1);
@@ -275,7 +275,7 @@ function StickChart({
 
       if (!canDragNow || x1 - x0 < 4) return;
 
-      // Calcul du nouveau range PPM à partir de la sélection
+      // Convert the selection to a ppm range.
       if (typeof onZoom === "function" && range) {
         const t0 = (x0 - PAD) / gridW;
         const t1 = (x1 - PAD) / gridW;
@@ -300,7 +300,7 @@ function StickChart({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Handler molette pour ajuster l'intensité - useEffect car passive: false requis
+  // Register a non-passive wheel listener so intensity adjustments can prevent page scrolling.
   useEffect(() => {
     const cvs = canvasRef.current;
     if (!cvs || typeof onIntensityChange !== "function") return;

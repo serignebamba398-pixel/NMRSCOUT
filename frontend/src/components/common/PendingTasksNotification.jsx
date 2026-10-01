@@ -5,8 +5,8 @@ import { API_BASE_URL } from '../../api';
 /**
  * PendingTasksNotification
  * 
- * Affiche une notification si des tâches sont en attente après
- * une déconnexion (fermeture de l'ordinateur, refresh du navigateur, etc.)
+ * Show pending tasks after a disconnected session
+ * (for example, after closing the computer or reloading the page).
  */
 export const PendingTasksNotification = () => {
   const [pendingTasks, setPendingTasks] = useState([]);
@@ -14,7 +14,7 @@ export const PendingTasksNotification = () => {
   const [loading, setLoading] = useState(true);
   const { addLog } = useAppState();
 
-  // Vérifier les tâches en attente au chargement
+  // Check for pending tasks on mount.
   const checkPendingTasks = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/tasks/pending`);
@@ -34,10 +34,10 @@ export const PendingTasksNotification = () => {
   }, [addLog]);
 
   useEffect(() => {
-    // Vérifier au chargement initial
+    // Check pending tasks on mount.
     checkPendingTasks();
     
-    // Vérifier périodiquement (toutes les 30 secondes)
+    // Poll for pending tasks every 30 seconds.
     const interval = setInterval(() => {
       checkPendingTasks();
     }, 30000);
@@ -45,7 +45,7 @@ export const PendingTasksNotification = () => {
     return () => clearInterval(interval);
   }, [checkPendingTasks]);
 
-  // Ignorer une tâche (ne pas la reprendre)
+  // Dismiss a task without resuming it.
   const handleDismissTask = async (taskId) => {
     try {
       await fetch(`${API_BASE_URL}/tasks/${taskId}/dismiss`, {
@@ -62,7 +62,7 @@ export const PendingTasksNotification = () => {
     }
   };
 
-  // Ignorer toutes les tâches
+  // Dismiss all pending tasks.
   const handleDismissAll = async () => {
     for (const task of pendingTasks) {
       try {
@@ -78,7 +78,7 @@ export const PendingTasksNotification = () => {
     addLog('Toutes les tâches en attente ont été ignorées', 'info');
   };
 
-  // Consulter les résultats d'une tâche
+  // Open task results.
   const handleViewTask = async (task) => {
     try {
       const response = await fetch(`${API_BASE_URL}/tasks/${task.taskId}/checkpoint`);
@@ -86,7 +86,7 @@ export const PendingTasksNotification = () => {
         const data = await response.json();
         if (data.checkpoint?.status === 'completed' && data.checkpoint?.outputs) {
           addLog(`Tâche ${task.taskId.slice(0, 8)} terminée - fichiers disponibles`, 'success');
-          // TODO: Charger les fichiers dans le viewer
+          // TODO: Load the result files into the viewer.
         } else {
           addLog(`Tâche ${task.taskId.slice(0, 8)}: progression ${data.checkpoint?.progress?.percent || 0}%`, 'info');
         }
@@ -103,7 +103,7 @@ export const PendingTasksNotification = () => {
   return (
     <div className="pending-tasks-notification">
       <div className="notification-header">
-        <span className="notification-icon">⏳</span>
+        <span className="notification-icon">...</span>
         <span className="notification-title">
           {pendingTasks.length === 1 
             ? '1 tâche en attente' 
@@ -128,7 +128,7 @@ export const PendingTasksNotification = () => {
             <li key={task.taskId} className="pending-task-item">
               <div className="task-info">
                 <span className="task-type">
-                  {task.type === 'prediction' ? '🧪' : task.type === 'annotation' ? '📋' : '⚙️'}
+                  {task.type === 'prediction' ? 'NMR' : task.type === 'annotation' ? 'ID' : '±'}
                   {task.type}
                 </span>
                 <span className="task-progress">
@@ -146,7 +146,7 @@ export const PendingTasksNotification = () => {
                   onClick={() => handleViewTask(task)}
                   title="Voir le statut/résultats"
                 >
-                  👁️ Voir
+                  Voir
                 </button>
                 <button 
                   className="btn-small btn-secondary"

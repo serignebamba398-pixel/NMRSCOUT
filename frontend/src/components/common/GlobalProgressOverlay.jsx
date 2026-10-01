@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import './GlobalProgressOverlay.css';
@@ -161,8 +162,8 @@ export const GlobalProgressOverlay = () => {
     // Always show all selected methods, even if progress is 0 or undefined
     // Fallback to checking progressByMethod keys if selectedMethods is empty
     const activeMethods = selectedMethods.length > 0 
-      ? selectedMethods.filter(m => ['1H', '13C', 'COSY', 'HSQC'].includes(m))
-      : ['1H', '13C', 'COSY', 'HSQC'].filter(m => Object.prototype.hasOwnProperty.call(progressByMethod, m));
+      ? selectedMethods.filter(m => ['1H', '13C', 'COSY', 'TOCSY', 'HSQC'].filter(isMethodAvailable).includes(m))
+      : ['1H', '13C', 'COSY', 'TOCSY', 'HSQC'].filter(isMethodAvailable).filter(m => Object.prototype.hasOwnProperty.call(progressByMethod, m));
 
     // Calculate overall progress
     const totalProgress = activeMethods.length > 0 

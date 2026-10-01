@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import Viewer from '../../Viewer';
@@ -17,13 +18,13 @@ export const MainView = ({ onMoleculeSelect }) => {
   const [coverageMin, setCoverageMin] = useState('');
   const [coverageMax, setCoverageMax] = useState('');
   const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [selectedMethodsForCoverage, setSelectedMethodsForCoverage] = useState(["1H", "13C", "COSY", "HSQC"]);
+  const [selectedMethodsForCoverage, setSelectedMethodsForCoverage] = useState(["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable));
 
   const normalizedCsvs = useMemo(() => {
     const csvs = viewerData?.csvs;
     if (!csvs || typeof csvs !== 'object') return {};
     return Object.fromEntries(
-      Object.entries(csvs).map(([k, v]) => [k, normalizeStaticUrl(v)])
+      Object.entries(csvs).filter(([type]) => isMethodAvailable(type)).map(([k, v]) => [k, normalizeStaticUrl(v)])
     );
   }, [viewerData?.csvs]);
 
@@ -33,7 +34,7 @@ export const MainView = ({ onMoleculeSelect }) => {
   );
 
   const hasCsvs = useMemo(() => {
-    return !!viewerData?.csvs && Object.keys(viewerData.csvs).length > 0;
+    return !!viewerData?.csvs && Object.keys(viewerData.csvs).some(isMethodAvailable);
   }, [viewerData]);
 
   const detectDelimiter = useCallback((headerLine) => {
@@ -82,14 +83,14 @@ export const MainView = ({ onMoleculeSelect }) => {
 
   const stripMethodPrefix = useCallback((name) => {
     if (!name) return name;
-    return String(name).replace(/^(?:1H|13C|COSY|HSQC)[\s_\-:]+/i, '');
+    return String(name).replace(/^(?:1H|13C|COSY|TOCSY|HSQC)[\s_\-:]+/i, '');
   }, []);
 
-  // Recalcul de avgRansy selon les méthodes sélectionnées
+  // Recompute avgRansy for the selected methods.
   const molecules = useMemo(() => {
     const methodsToUse = selectedMethodsForCoverage.length > 0
       ? selectedMethodsForCoverage
-      : ["1H", "13C", "COSY", "HSQC"];
+      : ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable);
 
     const list = moleculesRaw.map(mol => {
       let sumRansy = 0, countRansy = 0;
@@ -182,11 +183,11 @@ export const MainView = ({ onMoleculeSelect }) => {
 
             const delimiter = detectDelimiter(lines[0]);
 
-            // Nettoyer les headers (retirer guillemets)
+            // Remove quotes from column headers.
             const headers = splitDelimitedLine(lines[0], delimiter).map(h => h.replace(/^["']|["']$/g, '').trim());
             console.log(`[MainView] ${type} headers:`, headers);
             
-            // Chercher Source ou Filename (insensible à la casse)
+            // Match Source or Filename case-insensitively.
             let sourceIdx = headers.findIndex(h => h.toLowerCase() === 'source');
             if (sourceIdx < 0) {
               sourceIdx = headers.findIndex(h => h.toLowerCase() === 'filename');
@@ -194,16 +195,16 @@ export const MainView = ({ onMoleculeSelect }) => {
             console.log(`[MainView] ${type} sourceIdx:`, sourceIdx);
             
             const lowerHeaders = headers.map(h => h.toLowerCase());
-            // Pour 1H et 13C: utiliser intersection_coverage en priorité
-            // Pour COSY et HSQC: utiliser coverage_ransy
+            // Use intersection_coverage for 1H and 13C.
+            // Use coverage_ransy for COSY and HSQC.
             const is1D = type === '1H' || type === '13C';
             let ransyIdx = -1;
 
             if (is1D) {
-              // TOUJOURS intersection_coverage pour 1H/13C (pas de fallback)
+              // 1H and 13C require intersection_coverage; do not substitute another metric.
               ransyIdx = lowerHeaders.indexOf('intersection_coverage');
             } else {
-              // Pour COSY/HSQC: coverage_ransy
+              // Use coverage_ransy for COSY and HSQC.
               const ransyCandidates = [
                 'coverage_ransy',
                 'coverage_ransy_mean',
@@ -237,7 +238,7 @@ export const MainView = ({ onMoleculeSelect }) => {
 
             for (let i = 1; i < lines.length; i++) {
               const values = splitDelimitedLine(lines[i], delimiter);
-              // Nettoyer les quotes des valeurs
+              // Remove quotes from values.
               const cleanValues = values.map(v => v?.replace(/^["']|["']$/g, '').trim());
               const source = sourceIdx >= 0 ? cleanValues[sourceIdx] : null;
               
@@ -248,7 +249,7 @@ export const MainView = ({ onMoleculeSelect }) => {
               
               if (!source) continue;
 
-              // Nettoyer le nom: retirer _predicted, .sdf, etc.
+              // Remove prediction suffixes and file extensions from the display name.
               const cleanSource = stripMethodPrefix(source
                 .replace(/_predicted$/i, '')
                 .replace(/\.sdf$/i, '')
@@ -286,13 +287,13 @@ export const MainView = ({ onMoleculeSelect }) => {
           }
         }
 
-        // Stocker les données brutes (ransy et sub par type) sans calcul de poids
+        // Store raw RANSY and Sub metrics by spectrum type before applying weights.
         const rawList = Array.from(allMolecules.values());
         setMoleculesRaw(rawList);
 
-        // Automatically select first molecule by default (après tri initial)
+        // Select the first molecule after the initial sort.
         if (rawList.length > 0) {
-          // Tri initial par moyenne simple sur toutes méthodes disponibles
+          // Initially sort by the mean score across available methods.
           const sorted = [...rawList].sort((a, b) => {
             const avgA = Object.values(a.ransy).reduce((s, v) => s + v, 0) / (Object.keys(a.ransy).length || 1);
             const avgB = Object.values(b.ransy).reduce((s, v) => s + v, 0) / (Object.keys(b.ransy).length || 1);
@@ -383,7 +384,7 @@ export const MainView = ({ onMoleculeSelect }) => {
           </div>
         </div>
         
-        {/* Bouton filtrage méthodes pour le tri */}
+        {/* Method filter for molecule ranking. */}
         <div style={{ display: "flex", alignItems: "center", padding: "4px 8px 2px", gap: 6 }}>
           <span style={{ fontSize: 10, color: "#64748b", flex: 1 }}>
             {filteredMolecules.length} / {molecules.length}
@@ -458,7 +459,7 @@ export const MainView = ({ onMoleculeSelect }) => {
         )}
       </div>
 
-      {/* Modal — filtrage méthodes pour le tri par coverage */}
+      {/* Method selection for coverage ranking. */}
       {filterModalOpen && (
         <div
           style={{
@@ -481,7 +482,7 @@ export const MainView = ({ onMoleculeSelect }) => {
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 16 }}>
               Sélectionner les méthodes à inclure dans le calcul
             </div>
-            {["1H", "13C", "COSY", "HSQC"].map(method => {
+            {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map(method => {
               const hasData = moleculesRaw.some(m => m.ransy[method] != null);
               const checked = selectedMethodsForCoverage.includes(method);
               return (
@@ -514,7 +515,7 @@ export const MainView = ({ onMoleculeSelect }) => {
             })}
             <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button
-                onClick={() => setSelectedMethodsForCoverage(["1H", "13C", "COSY", "HSQC"])}
+                onClick={() => setSelectedMethodsForCoverage(["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable))}
                 style={{
                   padding: "5px 14px", borderRadius: 6, fontSize: 12,
                   border: "1px solid #cbd5e1", background: "#f8fafc",

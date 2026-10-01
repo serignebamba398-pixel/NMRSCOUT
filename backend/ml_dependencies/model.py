@@ -11,7 +11,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from util import MC_dropout
 from sklearn.metrics import mean_absolute_error
 
-device = torch.device('cpu')  # Forcer l'utilisation du CPU
+device = torch.device('cpu')  
 
 
 class NMRModel(nn.Module):

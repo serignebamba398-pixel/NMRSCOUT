@@ -3,30 +3,7 @@
 # Extensions to achieve 100% coverage
 # =============================================================================
 
-"""
-Extension module for coupling tables to achieve complete coverage.
-
-OBJECTIVE: Reach 100% for each molecular class
-
-Classes to complete:
-- Aromatics: 98% -> 100% (fused systems)
-- Aliphatics: 95% -> 100% (strained rings)
-- Heterocycles: 90% -> 100% (7+ members, bicyclics)
-- Sugars: 90% -> 100% (oligosaccharides, modified)
-- Peptides: 85% -> 100% (side chains, cyclics)
-- Alkenes: 85% -> 100% (allenes, dienes)
-- Aldehydes: 80% -> 100% (conjugated, heterocyclic)
-- Terpenes: 75% -> 100% (sesqui-, di-, triterpenes)
-- Nucleosides: 75% -> 100% (nucleotides, modified)
-- Phospholipids: 70% -> 100% (sphingo-, glycero-)
-- Steroids: 60% -> 100% (junctions, side chains)
-
-References:
-- Pretsch E. et al., Structure Determination of Organic Compounds (2009)
-- Silverstein R.M. et al., Spectrometric Identification (2014)
-- Günther H., NMR Spectroscopy 3rd Ed (2013)
-- Abraham R.J. & Mobli M., Modelling 1H NMR Spectra (2008)
-"""
+"""Coupling extension utilities."""
 
 from typing import Dict, List, Tuple, Optional, Any
 import numpy as np
@@ -54,7 +31,7 @@ try:
 except ImportError:
     DIASTEREOTOPIC_LOGIC_AVAILABLE = False
     def should_differentiate_diastereotopic_J(mol, ch2_idx, partner_idx, system_type=None):
-        """Fallback: always differentiate for 6-membered rings."""
+        """Fallback diastereotopic differentiation rule."""
         atom = mol.GetAtomWithIdx(ch2_idx)
         partner = mol.GetAtomWithIdx(partner_idx)
         if atom.IsInRing() and partner.IsInRing():
@@ -66,12 +43,12 @@ except ImportError:
 
 
 # =============================================================================
-# SECTION 1: CONDENSED AROMATICS (98% -> 100%)
+# SECTION 1: CONDENSED AROMATICS
 # =============================================================================
 
 # Couplings for polycyclic aromatic systems
 POLYCYCLIC_AROMATIC_COUPLINGS: Dict[str, Dict[str, float]] = {
-    # Naphthalene (Cassidei, Org. Magn. Reson. 1981)
+    # Naphthalene
     'naphthalene': {
         '3J_1_2': 8.3,      # H1-H2 ORTHO (same ring, adjacent carbons)
         '3J_2_3': 6.9,      # H2-H3 ortho (longer C-C bond)
@@ -130,9 +107,9 @@ POLYCYCLIC_AROMATIC_COUPLINGS: Dict[str, Dict[str, float]] = {
 # =============================================================================
 # AROMATIC FLUORINE (Ar-F) COUPLINGS - PERI AND LONG-RANGE
 # =============================================================================
-# References:
-# - Emsley J.W., Phillips L., Prog. NMR Spectrosc. 7, 1 (1971)
-# - Ernst L., Wray V., J. Magn. Reson. 25, 123 (1977)
+
+# - Emsley J.W., Phillips L., Prog. NMR Spectrosc. 7, 1
+# - Ernst L., Wray V., J. Magn. Reson. 25, 123
 # =============================================================================
 
 AROMATIC_FLUORINE_COUPLINGS: Dict[str, Dict[str, float]] = {
@@ -200,7 +177,7 @@ AROMATIC_FLUORINE_COUPLINGS: Dict[str, Dict[str, float]] = {
         '6J_H_CF3_para': 0.0,         # H para to CF3 (not observed)
     },
     
-    # Vinyl fluorides (Banwell & Sheppard experimental values)
+    # Vinyl fluorides
     'vinyl_F': {
         '2J_gem_HF': 84.0,            # H-C=C-F geminal (80-85 Hz) - OK
         '3J_cis_HF': 20.0,            # Cis H-C=C-F (~20 Hz) - OK
@@ -215,21 +192,7 @@ def get_aromatic_F_coupling(
     f_idx: int,
     mol3d: Chem.Mol = None
 ) -> Optional[float]:
-    """
-    Calculate H-F coupling in aromatic fluorides including peri couplings.
-    
-    Peri couplings (5J) can be surprisingly large (5-7 Hz) in naphthalene-like
-    systems due to the through-space interaction.
-    
-    Args:
-        mol: RDKit molecule
-        h_idx: Index of H atom
-        f_idx: Index of F atom
-        mol3d: 3D conformer (optional)
-    
-    Returns:
-        J(H-F) in Hz
-    """
+    """Return an aromatic H-F coupling estimate."""
     try:
         h_atom = mol.GetAtomWithIdx(h_idx)
         f_atom = mol.GetAtomWithIdx(f_idx)
@@ -343,11 +306,11 @@ BASIC_AROMATIC_COUPLINGS: Dict[str, Dict[str, float]] = {
         'OCH3': -0.3,             # Methoxy
         'OH': -0.4,               # Hydroxy
         'NH2': -0.5,              # Amino
-        'F': -0.15,               # Fluorine - CORRECTED: was +0.3 (wrong sign!)
+        'F': -0.15,               # Fluorine
         'Cl': +0.2,               # Chlorine
         'Br': +0.2,               # Bromine
         'I': +0.1,                # Iodine
-        'NO2': +0.35,             # Nitro - CORRECTED: was +0.5
+        'NO2': +0.35,             # Nitro
         'CN': +0.4,               # Cyano
         'CHO': +0.3,              # Aldehyde
         'COCH3': +0.2,            # Acetyl
@@ -391,11 +354,7 @@ def get_polycyclic_aromatic_coupling(
     h1_idx: int,
     h2_idx: int
 ) -> Optional[float]:
-    """
-    Calculate coupling for polycyclic aromatic systems.
-    
-    Detects: naphthalene, anthracene, phenanthrene, indene, etc.
-    """
+    """Return a polycyclic aromatic coupling estimate."""
     # Identify the type of polycyclic system
     ring_info = mol.GetRingInfo()
     atom_rings = ring_info.AtomRings()
@@ -445,7 +404,7 @@ def get_polycyclic_aromatic_coupling(
             if adjacent_rings:
                 break
     
-    # Calculer la distance topologique
+    # Calculate topological distance
     path = Chem.GetShortestPath(mol, c1_idx, c2_idx)
     distance = len(path) - 1 if path else 99
     
@@ -487,12 +446,12 @@ def get_polycyclic_aromatic_coupling(
 
 
 # =============================================================================
-# SECTION 2: STRAINED RINGS (95% -> 100%)
+# SECTION 2: STRAINED RINGS
 # =============================================================================
 
 STRAINED_RING_COUPLINGS: Dict[str, Dict[str, float]] = {
     # Cyclopropane - unusual bond angles (strained 3-membered ring)
-    # Kwan, Reich: 3J_cis > 3J_trans in cyclopropane (opposite to normal Karplus)
+    # Kwan, Reich: 3J_cis > 3J_trans in cyclopropane
     'cyclopropane': {
         '3J_cis': 9.0,      # Dihedral ~0° (eclipsed) -> large J. Parent: 9.0 Hz (Kwan)
         '3J_trans': 5.6,    # Dihedral ~130° -> medium J. Parent: 5.6 Hz (Kwan)
@@ -584,7 +543,7 @@ STRAINED_RING_COUPLINGS: Dict[str, Dict[str, float]] = {
 # [n]Annulenes - Conjugated macrocyclic systems
 ANNULENE_COUPLINGS: Dict[int, Dict[str, float]] = {
     8: {  # [8]annulene (COT, tub form, non-aromatic, alternating bonds)
-        '3J_across_double': 10.8,    # Across C=C (Buchanan & McCarville 1973)
+        '3J_across_double': 10.8,    # Across C=C
         '3J_across_single': 7.6,     # Across C-C
         '3J_vicinal': 9.2,           # Average for compatibility
         '4J_allylic': 2.8,
@@ -658,12 +617,7 @@ EXOTIC_SMARTS_PATTERNS: Dict[str, str] = {
 
 
 def detect_exotic_carbocycle(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
-    """
-    Detect if an atom belongs to an exotic carbocycle.
-    
-    Returns:
-        Exotic system type or None
-    """
+    """Detect supported exotic carbocycle types."""
     atom = mol.GetAtomWithIdx(atom_idx)
     if atom.GetSymbol() not in ['C', 'c']:
         return None
@@ -730,18 +684,7 @@ def get_exotic_carbocycle_coupling(
     c2_idx: int,
     distance: int
 ) -> Optional[float]:
-    """
-    Calculate coupling for exotic carbocycles.
-    
-    Args:
-        mol: RDKit molecule
-        c1_idx: Index of first carbon
-        c2_idx: Index of second carbon
-        distance: Topological distance
-        
-    Returns:
-        Coupling constant J in Hz or None
-    """
+    """Return a coupling estimate for exotic carbocycles."""
     system1 = detect_exotic_carbocycle(mol, c1_idx)
     system2 = detect_exotic_carbocycle(mol, c2_idx)
     
@@ -781,7 +724,7 @@ def get_exotic_carbocycle_coupling(
         elif distance == 3:
             return ANTIAROMATIC_COUPLINGS['pentalene_across_bridge']
     
-    # Cubane et cages
+    # Cubane and cages
     elif 'cubane' in system:
         if distance == 2:
             return EXOTIC_CAGE_COUPLINGS['cubane_edge']
@@ -796,7 +739,7 @@ def get_exotic_carbocycle_coupling(
 
 
 def detect_strained_ring(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
-    """Detect if an atom belongs to a strained ring."""
+    """Detect supported strained-ring types."""
     atom = mol.GetAtomWithIdx(atom_idx)
     ring_info = mol.GetRingInfo()
     
@@ -903,14 +846,7 @@ def _determine_cis_trans_small_ring(
     h1_idx: int,
     h2_idx: int
 ) -> str:
-    """
-    Determine if two protons on a small ring (3-4 membered) are cis or trans.
-    
-    Uses explicit stereochemistry or 3D geometric analysis if available.
-    
-    Returns:
-        'cis', 'trans', or 'unknown'
-    """
+    """Determine cis/trans geometry for a small ring."""
     # Method 1: Look for explicit stereochemistry on bonds
     bond = mol.GetBondBetweenAtoms(c1_idx, c2_idx)
     if bond is not None:
@@ -990,7 +926,7 @@ def get_strained_ring_coupling(
     h1_idx: int,
     h2_idx: int
 ) -> Optional[float]:
-    """Calculate coupling for strained rings with improved cis/trans detection."""
+    """Return a coupling estimate for strained rings."""
     h1 = mol.GetAtomWithIdx(h1_idx)
     h2 = mol.GetAtomWithIdx(h2_idx)
     c1 = list(h1.GetNeighbors())[0]
@@ -1048,7 +984,7 @@ def get_strained_ring_coupling(
 
 
 # =============================================================================
-# SECTION 3: OLIGOSACCHARIDES (90% -> 100%)
+# SECTION 3: OLIGOSACCHARIDES
 # =============================================================================
 # GLYCOSIDIC_COUPLINGS and MODIFIED_SUGAR_COUPLINGS are imported from
 # sugars_complete.py to avoid duplication. See top of file for import.
@@ -1056,7 +992,7 @@ def get_strained_ring_coupling(
 
 
 # =============================================================================
-# SECTION 4: COMPLETE PEPTIDES (85% -> 100%)
+# SECTION 4: COMPLETE PEPTIDES
 # =============================================================================
 
 # Aromatic sidechain couplings
@@ -1103,7 +1039,7 @@ D_AMINO_ACID_EFFECTS: Dict[str, float] = {
 
 
 # =============================================================================
-# SECTION 5: SPECIAL ALKENES (85% -> 100%)
+# SECTION 5: SPECIAL ALKENES
 # =============================================================================
 
 SPECIAL_ALKENE_COUPLINGS: Dict[str, Dict[str, float]] = {
@@ -1149,7 +1085,7 @@ SPECIAL_ALKENE_COUPLINGS: Dict[str, Dict[str, float]] = {
 
 
 # =============================================================================
-# SECTION 6: COMPLETE TERPENES (75% -> 100%)
+# SECTION 6: COMPLETE TERPENES
 # =============================================================================
 
 TERPENE_SKELETON_COUPLINGS: Dict[str, Dict[str, float]] = {
@@ -1250,7 +1186,7 @@ GEMINAL_2J_COMPLETE: Dict[str, float] = {
 
 
 # =============================================================================
-# SECTION 7: COMPLETE STEROIDS (60% -> 100%)
+# SECTION 7: COMPLETE STEROIDS
 # =============================================================================
 
 STEROID_RING_COUPLINGS: Dict[str, Dict[str, float]] = {
@@ -1272,14 +1208,14 @@ STEROID_RING_COUPLINGS: Dict[str, Dict[str, float]] = {
         '3J_H5_H6eq': 4.5,
     },
     
-    # Jonction B/C
+    # B/C junction
     'BC_trans': {
         '3J_H8_H9': 11.0,
         '3J_H7ax_H8': 12.0,
         '3J_H7eq_H8': 4.0,
     },
     
-    # Jonction C/D
+    # C/D junction
     'CD_trans': {
         '3J_H14_H15ax': 11.0,
         '3J_H14_H15eq': 4.5,
@@ -1323,7 +1259,7 @@ STEROID_SIDECHAIN_COUPLINGS: Dict[str, Dict[str, float]] = {
     
     # Androstane (C19)
     'androstane': {
-        '3J_angular_CH3': 0.0,  # Pas de couplage significatif
+        '3J_angular_CH3': 0.0,  # No significant coupling
     },
     
     # Bile acids
@@ -1390,7 +1326,7 @@ STEROID_COUPLINGS_DIFFERENTIATED: Dict[str, Dict[str, Dict[str, float]]] = {
     # D ring (5-membered) - NO differentiation (envelope conformation)
     'D_ring': {
         'vicinal': {
-            'uniform': 6.0,      # 5-ring → should_diff = FALSE
+            'uniform': 6.0,      # 5-ring  to  should_diff = FALSE
             'J_large': 8.5,
             'J_small': 3.0,
         },
@@ -1487,7 +1423,7 @@ MACROCYCLE_COUPLINGS_DIFFERENTIATED: Dict[str, Dict[str, Dict[str, float]]] = {
 
 
 # =============================================================================
-# SECTION 8: COMPLETE PHOSPHOLIPIDS (70% -> 100%)
+# SECTION 8: COMPLETE PHOSPHOLIPIDS
 # =============================================================================
 
 PHOSPHOLIPID_COUPLINGS: Dict[str, Dict[str, float]] = {
@@ -1554,7 +1490,7 @@ PHOSPHOLIPID_COUPLINGS: Dict[str, Dict[str, float]] = {
 
 
 # =============================================================================
-# SECTION 9: COMPLETE NUCLEOTIDES (75% -> 100%)
+# SECTION 9: COMPLETE NUCLEOTIDES
 # =============================================================================
 
 NUCLEOTIDE_COUPLINGS: Dict[str, Dict[str, float]] = {
@@ -1590,7 +1526,7 @@ NUCLEOTIDE_COUPLINGS: Dict[str, Dict[str, float]] = {
         '4J_through_phosphate': 1.0,
     },
     
-    # Conformations sucre
+    # Sugar conformations
     'C2_endo': {
         '3J_H1\'_H2\'': 6.5,
         '3J_H2\'_H3\'': 6.0,
@@ -1609,18 +1545,13 @@ NUCLEOTIDE_COUPLINGS: Dict[str, Dict[str, float]] = {
 # =============================================================================
 
 class KarplusCalculator:
-    """
-    Calculate 3J couplings using the generalized Karplus equation.
-    
-    Haasnoot-de Leeuw-Altona equation (1980):
-    3J = A·cos²(φ) + B·cos(φ) + C + Σ(substituent effects)
-    """
+    """Utilities for Karplus-based coupling estimates."""
     
     # Base parameters (original Karplus equation)
     KARPLUS_PARAMS = {
         'standard': {'A': 7.76, 'B': -1.10, 'C': 1.40},
         'ethane': {'A': 7.76, 'B': -1.10, 'C': 1.40},
-        'HCCH': {'A': 7.76, 'B': -1.10, 'C': 1.40},       # sp³-sp³ - CORRECTED: use standard values
+        'HCCH': {'A': 7.76, 'B': -1.10, 'C': 1.40},       # sp³-sp³
         'HCCO': {'A': 8.8, 'B': -2.5, 'C': 0.3},          # With oxygen
         'HCCN': {'A': 9.4, 'B': -1.6, 'C': 1.8},          # With nitrogen
         'HCCS': {'A': 10.2, 'B': -0.8, 'C': 0.2},         # With sulfur
@@ -1644,17 +1575,7 @@ class KarplusCalculator:
     def calculate_3J(cls, dihedral_deg: float, 
                      substituents: Optional[List[str]] = None,
                      pathway_type: str = 'HCCH') -> float:
-        """
-        Calculate ³J for a given dihedral angle.
-        
-        Args:
-            dihedral_deg: Dihedral angle in degrees
-            substituents: List of substituents on H-C-C-H pathway
-            pathway_type: Pathway type (HCCH, HCCO, HCCN, etc.)
-        
-        Returns:
-            ³J in Hz
-        """
+        """Calculate a vicinal coupling estimate."""
         import math
         phi = math.radians(dihedral_deg)
         
@@ -1674,16 +1595,7 @@ class KarplusCalculator:
     
     @classmethod
     def estimate_dihedral_from_ring(cls, ring_size: int, is_equatorial: bool = True) -> float:
-        """
-        Estimate average dihedral angle based on ring size.
-        
-        Args:
-            ring_size: Ring size
-            is_equatorial: True if H is equatorial
-        
-        Returns:
-            Estimated dihedral angle in degrees
-        """
+        """Estimate a dihedral angle from ring size."""
         if ring_size == 6:  # Cyclohexane
             if is_equatorial:
                 return 60.0   # eq-eq or eq-ax average
@@ -1698,16 +1610,7 @@ class KarplusCalculator:
 
 
 def get_geminal_coupling_extended(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
-    """
-    Calculate geminal 2J couplings with environment detection.
-    
-    Args:
-        mol: RDKit molecule
-        h1_idx, h2_idx: Geminal proton indices
-    
-    Returns:
-        2J in Hz or None
-    """
+    """Return a geminal coupling estimate."""
     # Check if they are on the same carbon
     h1 = mol.GetAtomWithIdx(h1_idx)
     h2 = mol.GetAtomWithIdx(h2_idx)
@@ -1760,16 +1663,7 @@ def get_geminal_coupling_extended(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Op
 
 
 def get_basic_aromatic_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
-    """
-    Calculate basic aromatic couplings (benzene, biphenyl).
-    
-    Args:
-        mol: RDKit molecule
-        h1_idx, h2_idx: Proton indices
-    
-    Returns:
-        J in Hz or None
-    """
+    """Return a basic aromatic coupling estimate."""
     h1 = mol.GetAtomWithIdx(h1_idx)
     h2 = mol.GetAtomWithIdx(h2_idx)
     
@@ -1789,7 +1683,7 @@ def get_basic_aromatic_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Opti
     
     distance = len(path) - 1
     
-    # Appliquer couplages selon distance
+    # Apply coupling by distance
     if distance == 1:  # ortho
         J_base = BASIC_AROMATIC_COUPLINGS['benzene']['3J_ortho']
     elif distance == 2:  # meta
@@ -1799,7 +1693,7 @@ def get_basic_aromatic_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Opti
     else:
         return None
     
-    # Appliquer effets de substituants
+    # Apply substituent effects
     substituent_effects = BASIC_AROMATIC_COUPLINGS['substituent_effects']
     
     for c_atom in [c1, c2]:
@@ -1817,7 +1711,7 @@ def get_basic_aromatic_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Opti
 # =============================================================================
 
 def detect_pharmaceutical_heterocycle(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
-    """Detect common pharmaceutical heterocycles."""
+    """Detect supported pharmaceutical heterocycles."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
     # Check if in a heterocycle
@@ -1871,7 +1765,7 @@ def detect_pharmaceutical_heterocycle(mol: Chem.Mol, atom_idx: int) -> Optional[
 
 
 def detect_organometallic(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
-    """Detect simple organometallic motifs."""
+    """Detect supported organometallic motifs."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
     # Ferrocene (Fe with aromatic rings)
@@ -1890,7 +1784,7 @@ def detect_organometallic(mol: Chem.Mol, atom_idx: int) -> Optional[str]:
 
 
 def detect_polymer_repeat(mol: Chem.Mol) -> Optional[str]:
-    """Detect repeated polymer motifs."""
+    """Detect supported polymer repeat motifs."""
     # PEG pattern: O-CH2-CH2
     peg_pattern = Chem.MolFromSmarts('[O][CH2][CH2]')
     if peg_pattern and mol.HasSubstructMatch(peg_pattern):
@@ -1914,7 +1808,7 @@ def detect_polymer_repeat(mol: Chem.Mol) -> Optional[str]:
 
 
 def detect_pharmaceutical_salt(mol: Chem.Mol) -> Optional[str]:
-    """Detect common pharmaceutical salts."""
+    """Detect supported pharmaceutical salt motifs."""
     # Search for Cl-, Br-, mesylate, etc.
     for atom in mol.GetAtoms():
         if atom.GetSymbol() == 'Cl' and atom.GetFormalCharge() == -1:
@@ -1931,24 +1825,15 @@ def detect_pharmaceutical_salt(mol: Chem.Mol) -> Optional[str]:
 
 
 # =============================================================================
-# FONCTIONS DE DÉTECTION POUR LES NOUVELLES TABLES
+# DETECTION FUNCTIONS FOR ADDITIONAL TABLES
 # =============================================================================
 
 def _detect_phospholipid_type(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional[str]:
-    """
-    Détecte le type de phospholipide basé sur les motifs structuraux.
-    
-    Args:
-        mol: Molécule RDKit
-        c1_idx, c2_idx: Indices des carbones
-    
-    Returns:
-        Type de phospholipide ou None
-    """
+    """Detect supported phospholipid motifs."""
     c1 = mol.GetAtomWithIdx(c1_idx)
     c2 = mol.GetAtomWithIdx(c2_idx)
     
-    # Détecter glycérol: C avec O-P voisin
+    # Detect glycerol-like O-P connectivity
     for atom in [c1, c2]:
         for neighbor in atom.GetNeighbors():
             if neighbor.GetSymbol() == 'O':
@@ -1956,16 +1841,16 @@ def _detect_phospholipid_type(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Option
                     if nn.GetSymbol() == 'P':
                         return 'glycerol'
     
-    # Détecter chaîne acyle: longue chaîne C-C
+    # Detect an acyl-chain motif
     if not c1.IsInRing() and not c2.IsInRing():
-        # Compter les carbones dans la chaîne
+        # Check the carbon chain
         path = Chem.GetShortestPath(mol, c1_idx, c2_idx)
         if path and len(path) >= 4:
             all_carbon = all(mol.GetAtomWithIdx(i).GetSymbol() == 'C' for i in path)
             if all_carbon:
                 return 'acyl_chain'
     
-    # Détecter sphingosine: chaîne avec double liaison et NH
+    # Detect a sphingosine-like motif
     has_double = False
     has_nitrogen = False
     for atom in [c1, c2]:
@@ -1982,20 +1867,11 @@ def _detect_phospholipid_type(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Option
 
 
 def _detect_nucleotide_type(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional[str]:
-    """
-    Détecte le type de nucléotide (ribose, base azotée).
-    
-    Args:
-        mol: Molécule RDKit
-        c1_idx, c2_idx: Indices des carbones
-    
-    Returns:
-        Type de nucléotide ou None
-    """
+    """Detect supported nucleotide motifs."""
     c1 = mol.GetAtomWithIdx(c1_idx)
     c2 = mol.GetAtomWithIdx(c2_idx)
     
-    # Détecter furanose (cycle 5 avec O)
+    # Detect a five-membered O-containing ring
     ring_info = mol.GetRingInfo()
     for ring in ring_info.AtomRings():
         if len(ring) == 5 and (c1_idx in ring or c2_idx in ring):
@@ -2004,7 +1880,7 @@ def _detect_nucleotide_type(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional
             if has_O:
                 return 'N_glycosidic'
     
-    # Détecter base azotée (cycle aromatique avec N)
+    # Detect an N-containing aromatic base
     if c1.GetIsAromatic() and c2.GetIsAromatic():
         for ring in ring_info.AtomRings():
             if c1_idx in ring and c2_idx in ring:
@@ -2017,30 +1893,21 @@ def _detect_nucleotide_type(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional
 
 
 def _detect_curved_aromatic(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional[str]:
-    """
-    Détecte les aromatiques courbés (corannulène, fullerènes).
-    
-    Args:
-        mol: Molécule RDKit
-        c1_idx, c2_idx: Indices des carbones aromatiques
-    
-    Returns:
-        Type de couplage courbé ou None
-    """
+    """Detect supported curved aromatic systems."""
     ring_info = mol.GetRingInfo()
     
-    # Compter les cycles fusionnés (caractéristique des aromatiques courbés)
+    # Count fused rings
     n_5_rings = sum(1 for r in ring_info.AtomRings() if len(r) == 5)
     n_6_rings = sum(1 for r in ring_info.AtomRings() if len(r) == 6)
     
-    # Corannulène: 1 cycle central 5-membres + 5 cycles 6-membres
+    # Detect a corannulene-like ring pattern
     if n_5_rings >= 1 and n_6_rings >= 5:
-        # Vérifier si c1 et c2 sont adjacents
+        # Check whether c1 and c2 are adjacent
         bond = mol.GetBondBetweenAtoms(c1_idx, c2_idx)
         if bond:
             return 'corannulene_rim'
     
-    # Fullerène C60: 12 pentagones + 20 hexagones
+    # Detect a C60-like ring pattern
     if n_5_rings >= 10 and n_6_rings >= 15:
         bond = mol.GetBondBetweenAtoms(c1_idx, c2_idx)
         if bond:
@@ -2050,20 +1917,11 @@ def _detect_curved_aromatic(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional
 
 
 def _detect_glycosidic_linkage(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional[str]:
-    """
-    Détecte les liaisons glycosidiques (sucres).
-    
-    Args:
-        mol: Molécule RDKit
-        c1_idx, c2_idx: Indices des carbones
-    
-    Returns:
-        Type de liaison glycosidique ou None
-    """
+    """Detect supported glycosidic linkage types."""
     c1 = mol.GetAtomWithIdx(c1_idx)
     c2 = mol.GetAtomWithIdx(c2_idx)
     
-    # Détecter pyranose (cycle 6 avec O)
+    # Detect a six-membered O-containing ring
     ring_info = mol.GetRingInfo()
     for ring in ring_info.AtomRings():
         if len(ring) == 6 and (c1_idx in ring or c2_idx in ring):
@@ -2072,10 +1930,10 @@ def _detect_glycosidic_linkage(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optio
             n_OH = sum(1 for a in ring_atoms if a.GetSymbol() == 'C' and 
                       any(n.GetSymbol() == 'O' for n in a.GetNeighbors()))
             if has_O and n_OH >= 2:
-                # C'est probablement un sucre
+                # Sugar-like ring
                 return 'pyranose'
     
-    # Détecter furanose (cycle 5 avec O)
+    # Detect a five-membered O-containing ring
     for ring in ring_info.AtomRings():
         if len(ring) == 5 and (c1_idx in ring or c2_idx in ring):
             ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
@@ -2087,7 +1945,7 @@ def _detect_glycosidic_linkage(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optio
 
 
 # =============================================================================
-# NEW: ESTIMATION FUNCTIONS WITH DIASTEREOTOPIC DIFFERENTIATION
+# ESTIMATION FUNCTIONS WITH DIASTEREOTOPIC DIFFERENTIATION
 # Following the pattern of estimate_saturated_heterocycle_couplings
 # =============================================================================
 
@@ -2098,19 +1956,7 @@ def estimate_steroid_couplings_differentiated(
     heavy_to_H: Dict[int, List[int]],
     proton_to_heavy: Dict[int, int],
 ) -> Optional[Dict[str, Any]]:
-    """
-    Estimate couplings for steroids with diastereotopic differentiation.
-
-    Args:
-        mol: RDKit molecule with explicit H
-        heavy_idx: Index of the heavy atom (C) bearing the protons
-        h_list: List of H indices on this carbon
-        heavy_to_H: Mapping heavy atom idx -> list of H indices
-        proton_to_heavy: Mapping H idx -> heavy atom idx
-
-    Returns:
-        Dict with J values for each proton, or None if not a steroid
-    """
+    """Estimate differentiated steroid couplings."""
     atom = mol.GetAtomWithIdx(heavy_idx)
     if atom.GetSymbol() != 'C' or not atom.IsInRing():
         return None
@@ -2195,19 +2041,7 @@ def estimate_terpene_couplings_differentiated(
     heavy_to_H: Dict[int, List[int]],
     proton_to_heavy: Dict[int, int],
 ) -> Optional[Dict[str, Any]]:
-    """
-    Estimate couplings for terpenes with diastereotopic differentiation.
-
-    Args:
-        mol: RDKit molecule with explicit H
-        heavy_idx: Index of the heavy atom (C) bearing the protons
-        h_list: List of H indices on this carbon
-        heavy_to_H: Mapping heavy atom idx -> list of H indices
-        proton_to_heavy: Mapping H idx -> heavy atom idx
-
-    Returns:
-        Dict with J values for each proton, or None if not a terpene
-    """
+    """Estimate differentiated terpene couplings."""
     atom = mol.GetAtomWithIdx(heavy_idx)
     if atom.GetSymbol() != 'C' or not atom.IsInRing():
         return None
@@ -2327,20 +2161,7 @@ def estimate_macrocycle_couplings_differentiated(
     proton_to_heavy: Dict[int, int],
     ring_size: int = 12,
 ) -> Optional[Dict[str, Any]]:
-    """
-    Estimate couplings for macrocycles with diastereotopic differentiation.
-
-    Args:
-        mol: RDKit molecule with explicit H
-        heavy_idx: Index of the heavy atom (C) bearing the protons
-        h_list: List of H indices on this carbon
-        heavy_to_H: Mapping heavy atom idx -> list of H indices
-        proton_to_heavy: Mapping H idx -> heavy atom idx
-        ring_size: Size of the macrocycle
-
-    Returns:
-        Dict with J values for each proton, or None if not a macrocycle
-    """
+    """Estimate differentiated macrocycle couplings."""
     atom = mol.GetAtomWithIdx(heavy_idx)
     if atom.GetSymbol() != 'C' or not atom.IsInRing():
         return None
@@ -2444,27 +2265,8 @@ def get_extended_coupling(
     h2_idx: int,
     distance: Optional[int] = None
 ) -> Optional[float]:
-    """
-    Main function to get coupling from extensions.
-
-    Now integrated with new pharmaceutical, organometallic,
-    and polymer classes.
-    
-    Tries in order:
-    1. Polycyclic aromatic systems
-    2. Strained rings
-    3. New classes (pharma, organometallics, polymers)
-    4. Geminal couplings (last resort only)
-    
-    Args:
-        mol: RDKit molecule with H
-        h1_idx, h2_idx: Proton indices
-        distance: Topological distance (auto-calculated if None)
-    
-    Returns:
-        J in Hz or None if not found
-    """
-    # ✅ NEW: Input validation to prevent out-of-bounds errors
+    """Return a coupling estimate from extension rules."""
+    # Input validation to prevent out-of-bounds errors
     if mol is None or not isinstance(mol, Chem.Mol):
         return None
     
@@ -2480,7 +2282,7 @@ def get_extended_coupling(
     h1 = mol.GetAtomWithIdx(h1_idx)
     h2 = mol.GetAtomWithIdx(h2_idx)
     
-    # ✅ Verify these are actually hydrogens
+    # Verify these are actually hydrogens
     if h1.GetSymbol() != 'H' or h2.GetSymbol() != 'H':
         return None
     
@@ -2498,12 +2300,12 @@ def get_extended_coupling(
             path = Chem.GetShortestPath(mol, c1.GetIdx(), c2.GetIdx())
             distance = len(path) - 1 if path else 99
 
-    # 1. Essayer aromatiques polycycliques
+    # 1. Try polycyclic aromatics
     J = get_polycyclic_aromatic_coupling(mol, h1_idx, h2_idx)
     if J is not None:
         return J
 
-    # 2. Essayer aromatiques basiques
+    # 2. Try basic aromatics
     J = get_basic_aromatic_coupling(mol, h1_idx, h2_idx)
     if J is not None:
         return J
@@ -2518,42 +2320,42 @@ def get_extended_coupling(
     if J is not None:
         return J
 
-    # ✅ NOUVEAU: Stéroïdes (jonctions de cycles fusionnés)
-    # Détecter si les protons sont dans un système stéroïde (4+ cycles 5/6-membres)
+    # Steroid ring junctions
+    # Detect a steroid-like fused-ring system
     ring_info_steroid = mol.GetRingInfo()
     n_fused_5_6 = sum(1 for r in ring_info_steroid.AtomRings() if len(r) in (5, 6))
     if n_fused_5_6 >= 4 and c1.IsInRing() and c2.IsInRing():
-        # Système stéroïde détecté - utiliser STEROID_RING_COUPLINGS
-        # Déterminer la jonction (AB, BC, CD)
+        # Use steroid coupling data
+        # Determine the ring junction
         for ring in ring_info_steroid.AtomRings():
             ring_size = len(ring)
             if c1.GetIdx() in ring and c2.GetIdx() in ring:
-                # Protons dans le même cycle
+                # Protons in the same ring
                 if ring_size == 6:
-                    # Cycle A, B ou C (6-membres)
+                    # Six-membered ring
                     if distance == 1:  # 3J vicinal
-                        # Vérifier axial/équatorial via connectivité
+                        # Check axial/equatorial connectivity
                         n_ring_neighbors_c1 = sum(1 for n in c1.GetNeighbors() if n.GetIdx() in ring)
                         if n_ring_neighbors_c1 >= 2:
                             # Approximation: J ax-ax ≈ 11-12 Hz, ax-eq ≈ 4 Hz
                             return STEROID_RING_COUPLINGS.get('AB_trans', {}).get('3J_H5_H6ax', 11.5)
                 elif ring_size == 5:
-                    # Cycle D (5-membres)
+                    # Five-membered D ring
                     if distance == 1:
                         return STEROID_RING_COUPLINGS.get('D_ring', {}).get('3J_H15_H16ax', 8.5)
                 break
     
-    # ✅ NOUVEAU: Terpènes (menthane, pinane, etc.)
-    # Détecter gem-diméthyl sur cycle (caractéristique terpénique)
+    # Terpene systems
+    # Detect a ring gem-dimethyl motif
     if c1.IsInRing() and c2.IsInRing():
         has_gem_dimethyl = False
         for atom in mol.GetAtoms():
             if atom.GetSymbol() == 'C' and not atom.IsInRing():
-                # C hors cycle avec un seul voisin lourd
+                # Exocyclic carbon with one heavy-atom neighbor
                 heavy_neighbors = [n for n in atom.GetNeighbors() if n.GetSymbol() != 'H']
                 if len(heavy_neighbors) == 1 and atom.GetTotalNumHs() == 3:
                     parent = heavy_neighbors[0]
-                    # Parent a un autre CH3?
+                    # Check for an additional methyl group
                     ch3_count = sum(1 for n in parent.GetNeighbors() 
                                   if n.GetSymbol() == 'C' and not n.IsInRing() 
                                   and n.GetTotalNumHs() == 3)
@@ -2562,12 +2364,12 @@ def get_extended_coupling(
                         break
         
         if has_gem_dimethyl:
-            # Cycle terpénique détecté
+            # Terpene-like ring detected
             for ring in ring_info_steroid.AtomRings():
                 if c1.GetIdx() in ring and c2.GetIdx() in ring:
                     ring_size = len(ring)
                     if ring_size == 6 and distance == 1:
-                        # Menthane-like (cyclohexane terpénique)
+                        # Menthane-like ring
                         return TERPENE_SKELETON_COUPLINGS.get('menthane', {}).get('3J_ax_ax', 11.0)
                     elif ring_size in (4, 5) and distance == 1:
                         # Pinane-like (bicyclique)
@@ -2616,8 +2418,8 @@ def get_extended_coupling(
             elif polymer_type == 'nylon':
                 return couplings.get('3J_N_CH2', 6.5)
 
-    # ✅ NOUVEAU: Phospholipides (membranes, lécithines)
-    # Détecter les motifs glycérol-phosphate ou sphingosine
+    # Phospholipid systems
+    # Detect glycerol-phosphate or sphingosine motifs
     phospholipid_type = _detect_phospholipid_type(mol, c1.GetIdx(), c2.GetIdx())
     if phospholipid_type and phospholipid_type in PHOSPHOLIPID_COUPLINGS:
         couplings = PHOSPHOLIPID_COUPLINGS[phospholipid_type]
@@ -2625,10 +2427,10 @@ def get_extended_coupling(
             for key, value in couplings.items():
                 if '3J' in key:
                     return value
-            return 7.0  # Fallback chaîne acyle
+            return 7.0  # Acyl-chain fallback
 
-    # ✅ NOUVEAU: Nucléotides (ADN/ARN)
-    # Détecter les motifs ribose/désoxyribose avec base azotée
+    # Nucleotide systems
+    # Detect ribose/deoxyribose base motifs
     nucleotide_type = _detect_nucleotide_type(mol, c1.GetIdx(), c2.GetIdx())
     if nucleotide_type and nucleotide_type in NUCLEOTIDE_COUPLINGS:
         couplings = NUCLEOTIDE_COUPLINGS[nucleotide_type]
@@ -2637,15 +2439,15 @@ def get_extended_coupling(
                 if '3J' in key:
                     return value
 
-    # ✅ NOUVEAU: Aromatiques courbés (fullerènes, corannulène)
-    # Détecter les systèmes aromatiques courbés par le nombre de cycles fusionnés
+    # Curved aromatic systems
+    # Detect curved aromatic systems from fused-ring counts
     if c1.GetIsAromatic() and c2.GetIsAromatic():
         curved_type = _detect_curved_aromatic(mol, c1.GetIdx(), c2.GetIdx())
         if curved_type and curved_type in CURVED_AROMATIC_COUPLINGS:
             return CURVED_AROMATIC_COUPLINGS[curved_type]
 
-    # ✅ NOUVEAU: Glycosidiques (sucres, oligosaccharides)
-    # Utiliser la table importée depuis sugars_complete.py
+    # Glycosidic systems
+    # Use the imported sugar coupling table
     if GLYCOSIDIC_COUPLINGS:
         glycosidic_type = _detect_glycosidic_linkage(mol, c1.GetIdx(), c2.GetIdx())
         if glycosidic_type and glycosidic_type in GLYCOSIDIC_COUPLINGS:
@@ -2655,9 +2457,9 @@ def get_extended_coupling(
                     if '3J' in key:
                         return value
 
-    # 7. Fallback Karplus pour aliphatiques
-    if distance == 1:  # ³J vicinal entre carbones adjacents
-        # Estimer angle selon environnement
+    # 7. Karplus fallback for aliphatic systems
+    if distance == 1:  # Vicinal coupling between adjacent carbons
+        # Estimate the angle from the local environment
         ring_info = mol.GetRingInfo()
         ring_size = None
         for ring in ring_info.AtomRings():
@@ -2668,7 +2470,7 @@ def get_extended_coupling(
         if ring_size:
             angle = KarplusCalculator.estimate_dihedral_from_ring(ring_size)
         else:
-            angle = 60.0  # Rotation libre
+            angle = 60.0  # Free rotation
         
         return KarplusCalculator.calculate_3J(angle)
     
@@ -2713,7 +2515,7 @@ PHARMACEUTICAL_HETEROCYCLES: Dict[str, Dict[str, float]] = {
         '4J_H5_H7': 1.5,
     },
     
-    # Indazole (inhibiteurs de kinase)
+    # Indazole (kinase inhibitors)
     'indazole': {
         '3J_H3_H4': 8.0,
         '3J_H4_H5': 7.5,
@@ -2808,7 +2610,7 @@ PHARMACEUTICAL_SALT_EFFECTS: Dict[str, Dict[str, float]] = {
 # =============================================================================
 
 def _test_extensions():
-    """Tests des extensions de couplage avec validations."""
+    """Run extension validation tests."""
     print("=" * 60)
     print("TEST DES EXTENSIONS DE COUPLAGE (COMPLET)")
     print("=" * 60)

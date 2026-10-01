@@ -11,6 +11,7 @@ const { logWithMemory } = require('../utils/logger');
 const { sseInit, sseSend } = require('../middleware/sse');
 const { addTask, deleteTask, getTask, killProcessGracefully } = require('./processManager');
 const { runExtractorsOnSDF } = require('./extractorService');
+const { normalizeHomonuclearOptions } = require('../utils/homonuclearPrediction');
 const projectService = require('./projectService');
 const { saveCheckpoint, markTaskCompleted, markTaskFailed, markTaskInterrupted, TaskStatus } = require('./taskPersistence');
 const { startPreventSleep, stopPreventSleep } = require('../utils/sleepPrevention');
@@ -21,6 +22,16 @@ function normalizePredictOptions(raw = {}) {
   o.extractors = { ...(o.extractors || {}) };
   o.extractors.c13 = { ...(o.extractors.c13 || {}) };
   o.extractors.hsqc = { ...(o.extractors.hsqc || {}) };
+  o.extractors.cosy = { ...(o.extractors.cosy || {}) };
+  o.extractors.tocsy = { ...(o.extractors.tocsy || {}) };
+
+  for (const experiment of ['cosy', 'tocsy']) {
+    o.extractors[experiment] = normalizeHomonuclearOptions(experiment.toUpperCase(), {
+      ...(experiment === 'cosy' ? { min_bonds: o.min_bonds, max_bonds: o.max_bonds } : {}),
+      ...(o[experiment] || {}),
+      ...o.extractors[experiment],
+    });
+  }
 
   const c13NestedCarbonMode = o?.c13?.carbonMode ?? o?.c13?.carbon_mode ?? o?.c13?.carbonmode;
 
@@ -111,6 +122,8 @@ function extractSmilesFromSdf(sdfPath, pythonExe, env) {
 function handlePrediction(req, res) {
   const startTime = Date.now();
   try {
+    // Reject invalid parameters before opening SSE or starting expensive prediction.
+    const options = normalizePredictOptions({ ...(req.body?.options || {}), run_extractors: true });
     const hb = sseInit(res, req.headers.origin);
 
     // Check if resuming from existing folder - extract early to reuse taskId
@@ -120,14 +133,14 @@ function handlePrediction(req, res) {
     let isResuming = false;
 
     if (resumeFromDir && fs.existsSync(resumeFromDir)) {
-      // Réutiliser le même dossier et taskId existants
+      // Reuse the task ID and output directory.
       workDir = resumeFromDir;
-      // Extraire le taskId du chemin (dernier composant du dossier)
+      // Extract taskId from the final directory component.
       taskId = path.basename(resumeFromDir);
       isResuming = true;
       console.log(`[Prediction] RESUME mode: reusing taskId=${taskId}, workDir=${workDir}`);
     } else {
-      // Nouveau taskId et dossier
+      // Create a task ID and output directory.
       taskId = uuidv4();
       workDir = path.join(getActiveOutputsDir(), taskId);
       ensureDir(workDir);
@@ -154,8 +167,6 @@ function handlePrediction(req, res) {
       else mode = 'SMILES';
     }
 
-    const optionsIn = req.body?.options || {};
-    const options = normalizePredictOptions({ ...optionsIn, run_extractors: true });
     const model1H = options.model_1h_path || process.env.MODEL_1H_PATH;
     const model13C = options.model_13c_path || process.env.MODEL_13C_PATH;
     if (!model1H || !model13C) {
@@ -534,7 +545,7 @@ function handlePrediction(req, res) {
       const solvent = options.solvent || 'CDCl3';
       const temperatureK = Number(options.temperature_k) || 298;
       
-      // Validation basique du pH (plage chimique valide)
+      // Validate pH against the supported chemical range.
       let pH = Number(options.ph) || 7.4;
       if (isNaN(pH) || pH < 0.0 || pH > 14.0) {
         sseSend(res, { type: 'log', message: `[WARNING] pH ${pH} invalide, fallback vers 7.4` });
@@ -553,9 +564,9 @@ function handlePrediction(req, res) {
         args.push('--sim_enable_dynamics');
       }
 
-      // Reprise incrémentale: réutiliser les molécules déjà prédites avec les mêmes paramètres
+      // Reuse predictions generated with the same parameters when resuming.
       if (isResuming) {
-        // Passer le même dossier comme source pour charger les prédictions existantes
+        // Load existing predictions from the task directory.
         args.push('--resume-from-dir', workDir);
       }
 
@@ -616,10 +627,10 @@ function handlePrediction(req, res) {
       };
       addTask(taskId, taskInfo);
 
-      // ✅ SLEEP PREVENTION: Empêcher la mise en veille pendant la prédiction
+      // Keep the system awake during prediction.
       startPreventSleep(taskId);
 
-      // ✅ PERSISTENCE: Sauvegarder checkpoint initial
+      // Save the initial task checkpoint.
       if (ENABLE_TASK_PERSISTENCE) {
         saveCheckpoint(taskId, {
           type: 'prediction',
@@ -712,7 +723,7 @@ function handlePrediction(req, res) {
               `[BACKEND-AFTER] doneMolecules=${doneMolecules}/${totalMolecules}, percent=${percent.toFixed(2)}%, frac=${frac.toFixed(4)}`
             );
 
-            // ✅ PERSISTENCE: Sauvegarder checkpoint après chaque molécule
+            // Save a checkpoint after each molecule.
             if (ENABLE_TASK_PERSISTENCE) {
               saveCheckpoint(taskId, {
                 type: 'prediction',
@@ -765,7 +776,7 @@ function handlePrediction(req, res) {
         if (task?.safetyTimeout) clearTimeout(task.safetyTimeout);
         clearInterval(hb);
         
-        // ✅ SLEEP PREVENTION: Réactiver la veille
+        // Release the sleep-prevention request.
         stopPreventSleep(taskId);
         
         const durationMin = Math.round((Date.now() - startTime) / 60000 * 10) / 10;
@@ -775,7 +786,7 @@ function handlePrediction(req, res) {
         );
 
         if (task?.canceled) {
-          // ✅ PERSISTENCE: Marquer comme annulée
+          // Mark the task as cancelled.
           if (ENABLE_TASK_PERSISTENCE) {
             markTaskFailed(taskId, 'Cancelled by user');
           }
@@ -791,7 +802,7 @@ function handlePrediction(req, res) {
         }
 
         if (signal) {
-          // ✅ PERSISTENCE: Marquer comme échouée (signal)
+          // Mark the task as failed after termination by signal.
           if (ENABLE_TASK_PERSISTENCE) {
             markTaskFailed(taskId, `Signal ${signal}`);
           }
@@ -800,7 +811,7 @@ function handlePrediction(req, res) {
           return;
         }
         if (code !== 0) {
-          // ✅ PERSISTENCE: Marquer comme échouée (exit code)
+          // Mark the task as failed after a nonzero exit code.
           if (ENABLE_TASK_PERSISTENCE) {
             markTaskFailed(taskId, `Python exited with code ${code}`);
           }
@@ -848,10 +859,10 @@ function handlePrediction(req, res) {
         sseSend(res, { type: 'log', message: `[DEBUG] Will run extractors: ${wantExtract && (sdfForExtractors || mode === 'CSV')}` });
         
         if (wantExtract && (sdfForExtractors || mode === 'CSV')) {
-          sseSend(res, { type: 'log', message: 'Post-processing: generating CSV 1H/13C/COSY/HSQC...' });
+          sseSend(res, { type: 'log', message: 'Post-processing: generating CSV 1H/13C/COSY/TOCSY/HSQC...' });
 
           // Progress for extractor phase (95% to 100%)
-          const extractorMethods = selectedMethods.filter(m => ['1H', '13C', 'COSY', 'HSQC'].includes(m));
+          const extractorMethods = selectedMethods.filter(m => ['1H', '13C', 'COSY', 'TOCSY', 'HSQC'].includes(m));
           const extractorCount = extractorMethods.length || 4;
           const percentPerExtractor = EXTRACTOR_WEIGHT / extractorCount;
           let extractorProgress = SDF_WEIGHT;
@@ -861,7 +872,7 @@ function handlePrediction(req, res) {
             type: 'progress',
             phase: 'extractors',
             percent: SDF_WEIGHT,
-            message: 'Generating CSV files (1H, 13C, COSY, HSQC)...',
+            message: 'Generating CSV files (1H, 13C, COSY, TOCSY, HSQC)...',
           });
 
           try {
@@ -922,7 +933,7 @@ function handlePrediction(req, res) {
           console.log('[BACKEND-FINAL] Forced 100%');
         }
 
-        // ✅ PERSISTENCE: Marquer comme complétée
+        // Mark the task as completed.
         if (ENABLE_TASK_PERSISTENCE) {
           markTaskCompleted(taskId, payload.outputs);
         }
@@ -932,7 +943,7 @@ function handlePrediction(req, res) {
       });
 
       child.on('error', err => {
-        // ✅ PERSISTENCE: Marquer comme échouée (spawn error)
+        // Mark the task as failed when the process cannot start.
         if (ENABLE_TASK_PERSISTENCE) {
           markTaskFailed(taskId, `Python spawn error: ${err.message}`);
         }
@@ -952,12 +963,12 @@ function handlePrediction(req, res) {
       req.on('close', () => {
         clearInterval(hb);
         if (KILL_ON_CLIENT_CLOSE) {
-          // Comportement ancien: tuer le processus quand la connexion se ferme
+          // Legacy behavior: terminate the process when the connection closes.
           killProcessGracefully(child, taskId);
           deleteTask(taskId);
         } else if (ENABLE_TASK_PERSISTENCE) {
-          // ✅ PERSISTENCE: La tâche continue en arrière-plan
-          // Le checkpoint est déjà sauvegardé, la tâche continue jusqu'à la fin
+          // Keep the task running after the client disconnects.
+          // The saved checkpoint allows the task to continue independently of the client.
           logWithMemory(`[${taskId}] Client disconnected - task continues in background`, 'INFO');
         }
       });
@@ -969,7 +980,7 @@ function handlePrediction(req, res) {
       sseSend(res, { type: 'completed', success: false, error: e.message });
       res.end();
     } else {
-      res.status(500).json({ error: e.message });
+      res.status(e.statusCode || 500).json({ error: e.message });
     }
   }
 }

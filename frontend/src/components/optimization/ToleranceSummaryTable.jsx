@@ -10,7 +10,7 @@ export const ToleranceSummaryTable = ({ resultSet }) => {
     return <p>No results to display</p>;
   }
 
-  // Trouver le meilleur résultat selon les signaux matchés
+  // Select the result with the most matched signals.
   const bestResult = results.reduce((best, current) => {
     if (current.error) return best;
     if (!best) return current;
@@ -22,7 +22,7 @@ export const ToleranceSummaryTable = ({ resultSet }) => {
     
     if (type === "1H" || type === "13C") {
       return `tol: ${params.tol_correspondence?.toFixed(3) || params.tol_match?.toFixed(3) || "N/A"}`;
-    } else if (type === "COSY" || type === "HSQC") {
+    } else if (type === "COSY" || type === "TOCSY" || type === "HSQC") {
       const f1 = params.tol_correspondence_f1?.toFixed(3) || params.tol_match_f1?.toFixed(3) || "N/A";
       const f2 = params.tol_correspondence_f2?.toFixed(3) || params.tol_match_f2?.toFixed(3) || "N/A";
       return `F1: ${f1}, F2: ${f2}`;

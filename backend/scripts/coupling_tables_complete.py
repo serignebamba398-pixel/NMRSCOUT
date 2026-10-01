@@ -3,26 +3,7 @@
 # Complete coupling tables for 100% coverage
 # =============================================================================
 
-"""
-Module of empirical tables for NMR J couplings.
-
-Coverage:
-- Alkynes (C≡C-H)
-- Aldehydes (CHO)
-- Amides and peptides (CONH)
-- Phosphines (P-H)
-- Boranes (B-H)
-- Silanes (Si-H)
-- Organometallics
-- Steroids
-- Terpenes
-- Macrocycles
-- Carbohydrates (already covered, reference)
-- Nucleosides/Nucleotides
-
-Author: [Your name]
-Date: 2024
-"""
+"""Coupling tables and dispatch utilities."""
 
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
@@ -87,7 +68,7 @@ _ALKYNE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
     
     # 3J across triple bond (R-C≡C-H type)
     # Note: Triple bonds are linear, no cis/trans isomerism exists
-    # Literature: 3J(H-C≡C-H) ≈ 9-10 Hz (single value)
+
     '3J_across_triple': {
         'HC≡CH': 9.6,            # Acetylene (experimental reference)
         'R-C≡C-H': 9.0,          # Substituted terminal alkynes
@@ -95,7 +76,7 @@ _ALKYNE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
     },
 }
 
-# Allènes (cumulènes)
+# Allenes (cumulenes)
 _ALLENE_COUPLING_TABLE: Dict[str, float] = {
     '4J_allenic': 7.0,           # Characteristic H2C=C=CH2
     '5J_allenic': 3.0,           # Extended coupling
@@ -109,17 +90,7 @@ def get_alkyne_coupling(
     h2_idx: int,
     bond_path: List[int]
 ) -> Optional[float]:
-    """
-    Calculate coupling for alkyne systems.
-    
-    Args:
-        mol: RDKit molecule
-        h1_idx, h2_idx: Proton indices
-        bond_path: Bond path between protons
-    
-    Returns:
-        J in Hz or None
-    """
+    """Return an alkyne coupling value when applicable."""
     # Detect if triple bond in path
     has_triple = False
     for i in range(len(bond_path) - 1):
@@ -134,11 +105,11 @@ def get_alkyne_coupling(
     n_bonds = len(bond_path) - 1
     
     if n_bonds == 2:
-        # ²J à travers C≡C
+        # 2J through C≡C
         return _ALKYNE_COUPLING_TABLE['2J_terminal'].get('C≡C-H', 2.5)
     
     elif n_bonds == 4:
-        # ⁴J propargilique
+        # 4J propargylic coupling
         # Check if allenic
         is_allenic = _is_allenic_system(mol, bond_path)
         if is_allenic:
@@ -152,7 +123,7 @@ def get_alkyne_coupling(
 
 
 def _is_allenic_system(mol: Chem.Mol, bond_path: List[int]) -> bool:
-    """Detect an allenic system (C=C=C)."""
+    """Detect an allenic system."""
     for i in range(len(bond_path) - 2):
         a1, a2, a3 = bond_path[i], bond_path[i+1], bond_path[i+2]
         
@@ -177,7 +148,7 @@ def _is_allenic_system(mol: Chem.Mol, bond_path: List[int]) -> bool:
 
 _ALDEHYDE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
     # 3J aldehyde-alphaH (per JACS 1963 reference data)
-    # Literature: acetaldehyde ~2.8 Hz
+
     '3J_CHO_alphaH': {
         'default': 2.8,              # Acetaldehyde reference: 2.8 Hz
         'branched': 2.0,             # CHO-CH< (pivaldehyde-like)
@@ -200,7 +171,7 @@ _ALDEHYDE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
     
     # Alpha,beta-unsaturated aldehydes
     # Note: 15.5 Hz is the vinyl H-C=C-H coupling, NOT CHO->vinyl coupling
-    # Literature: 3J(CHO, =CH) ≈ 7-8 Hz (Pardi et al.)
+
     'unsaturated_aldehyde': {
         '3J_CHO_vinyl_s_trans': 7.8,  # CHO-CH=CH, s-trans conformer (major)
         '3J_CHO_vinyl_s_cis': 4.5,    # CHO-CH=CH, s-cis conformer
@@ -216,20 +187,7 @@ def get_aldehyde_coupling(
     distance: int,
     high_resolution: bool = False
 ) -> Optional[float]:
-    """
-    Calculate coupling involving an aldehyde proton.
-    
-    Note: For aromatic aldehydes, 4J and 5J couplings with
-    ring H are very weak (<1 Hz) and generally unresolved.
-    The CHO typically appears as a singlet (possibly broadened).
-    
-    IMPORTANT: Excludes formamides (N-CHO) because CHO has no true alpha-H.
-    The path H(CHO)-C=O-N-C(CH3)-H is a 4J through N, not a 3J.
-    
-    IMPORTANT: For aliphatic aldehydes, we verify that other H
-    is indeed an alpha-H (on the carbon directly bonded to CHO), not a beta-H
-    (on the next carbon). Only alpha-H gives an observable 3J.
-    """
+    """Return an aldehyde coupling value when applicable."""
     # Identify the aldehyde proton and the CHO carbon
     aldehyde_h = None
     aldehyde_c = None
@@ -252,7 +210,7 @@ def get_aldehyde_coupling(
     if aldehyde_h is None or aldehyde_c is None:
         return None
     
-    # NEW: Exclude formamides (N-CHO)
+    # Exclude formamides (N-CHO)
     # A formamide has an N attached to carbonyl: N-C(=O)-H
     # The CHO of a formamide does not couple with N-CH3 (4J through N)
     if _is_formamide(mol, aldehyde_c.GetIdx()):
@@ -276,7 +234,7 @@ def get_aldehyde_coupling(
         return None
     
     # =========================================================================
-    # NEW: Verify that other_h is indeed an alpha-H (on the carbon
+    # Verify that other_h is indeed an alpha-H (on the carbon
     # directly bonded to carbonyl CHO), not a beta-H or further
     # =========================================================================
     # Find the alpha carbon (directly bonded to carbonyl CHO)
@@ -301,7 +259,7 @@ def get_aldehyde_coupling(
     if other_h_parent is None:
         return None
     
-    # CRITICAL: Only the CHO <-> alpha-H coupling is allowed
+    # Only the CHO <-> alpha-H coupling is allowed
     # If other_h is not on alpha_carbon, it's a beta-H or further -> ignore
     if other_h_parent.GetIdx() != alpha_carbon.GetIdx():
         # other_h is on a different carbon than the alpha-carbon
@@ -328,17 +286,7 @@ def get_aldehyde_coupling(
 
 # Simplified table for fallback if peptide_couplings.py is not available
 def _is_formamide(mol: Chem.Mol, c_idx: int) -> bool:
-    """
-    Check if a carbon is in a formamide (N-C(=O)H).
-    Includes N,N-disubstituted formamides like DMF.
-
-    Args:
-        mol: RDKit molecule
-        c_idx: Carbon index to test
-
-    Returns:
-        True if it's a formamide CHO
-    """
+    """Check whether a carbon belongs to a formamide group."""
     c = mol.GetAtomWithIdx(c_idx)
 
     # The carbon must have at least one H (CHO group)
@@ -362,10 +310,7 @@ def _is_formamide(mol: Chem.Mol, c_idx: int) -> bool:
 
 
 def _is_true_peptide_bond(mol: Chem.Mol, atom_N: Chem.Atom) -> bool:
-    """
-    Check if N is in a peptide bond N-C(=O)-C
-    (and not just a tertiary amide like DMF)
-    """
+    """Check whether a nitrogen belongs to a peptide bond."""
     if atom_N.GetSymbol() != 'N':
         return False
     
@@ -386,7 +331,7 @@ def _is_true_peptide_bond(mol: Chem.Mol, atom_N: Chem.Atom) -> bool:
     # Check that this C=O also has a C-alpha (attached to a C with H)
     for neighbor in carbonyl_C.GetNeighbors():
         if neighbor.GetSymbol() == 'C' and neighbor.GetIdx() != atom_N.GetIdx():
-            # Ce C doit avoir au moins un H (Cα)
+            # This carbon must have at least one H
             if neighbor.GetTotalNumHs() >= 1:
                 return True
     
@@ -420,22 +365,7 @@ def get_peptide_coupling(
     dihedral_angle: Optional[float] = None,
     secondary_structure: str = 'random_coil'
 ) -> Optional[float]:
-    """
-    Calculate coupling in a peptide.
-
-    REFACTORED: Module peptide restrictif - s'active UNIQUEMENT pour les vrais
-    résidus peptidiques acycliques. Les cycles (DKP, lactames, proline) et les
-    vinyles doivent être traités par leurs modules spécifiques.
-
-    Conditions d'activation (TOUTES doivent être vraies):
-    1. Distance exactement 3 liaisons (³J)
-    2. Aucun des deux carbones n'est dans un cycle
-    3. C'est un vrai Cα peptidique (sp3 portant NH et C=O)
-    4. Pas de carbone sp2 (vinyl/aromatique)
-
-    Returns:
-        J in Hz or None if not applicable
-    """
+    """Return a peptide coupling value when applicable."""
     h1 = mol.GetAtomWithIdx(h1_idx)
     h2 = mol.GetAtomWithIdx(h2_idx)
 
@@ -450,30 +380,30 @@ def get_peptide_coupling(
     heavy2 = heavy2_list[0]
 
     # =========================================================================
-    # CONDITION 1: Distance exactement 3 liaisons (³J H-C-C-H ou H-N-C-H)
-    # Le module peptide ne gère PAS les ⁴J ou ⁵J
+    # CONDITION 1: Exactly three bonds (3J H-C-C-H or H-N-C-H)
+    # The peptide module does not handle 4J or 5J couplings
     # =========================================================================
     try:
         path = Chem.GetShortestPath(mol, h1_idx, h2_idx)
         n_bonds = len(path) - 1
         if n_bonds != 3:
-            return None  # Pas un ³J → autre module
+            return None  # Not a 3J coupling; use another module
     except Exception:
         return None
 
     # =========================================================================
-    # CONDITION 2: Pas dans un cycle (DKP, lactames, proline → saturated_heterocycle)
-    # Les cycles ont des J fixes par tables, pas des rotamères
+    # CONDITION 2: Exclude cyclic systems
+    # Cyclic systems use dedicated coupling tables
     # =========================================================================
     if heavy1.GetSymbol() == 'C' and heavy2.GetSymbol() == 'C':
         if heavy1.IsInRing() and heavy2.IsInRing():
-            return None  # Les deux dans un cycle → module saturated_heterocycle
+            return None  # Both atoms are in a ring; use the saturated heterocycle module
 
     # =========================================================================
-    # CONDITION 3: Pas de carbone sp2 (vinyl, aromatique → vinylic ou aromatic)
+    # CONDITION 3: Exclude sp2 and aromatic carbons
     # =========================================================================
     def _is_sp2_or_vinyl(atom) -> bool:
-        """Check if atom is sp2 or attached to C=C."""
+        """Check whether an atom is sp2 or vinylic."""
         if atom.GetSymbol() != 'C':
             return False
         if atom.GetIsAromatic():
@@ -489,18 +419,18 @@ def get_peptide_coupling(
         return False
 
     if _is_sp2_or_vinyl(heavy1) or _is_sp2_or_vinyl(heavy2):
-        return None  # Vinyl → module vinylic
+        return None  # Vinylic system; use the vinylic module
 
     # =========================================================================
-    # CONDITION 4: C'est un VRAI résidu peptidique acyclique
-    # Un Cα peptidique est sp3, attaché à un N-amide ET à un C=O
+    # CONDITION 4: Require an acyclic peptide residue
+    # A peptide alpha carbon must be sp3 and connected to amide N and C=O
     # =========================================================================
     def _is_real_alpha_carbon(atom) -> bool:
-        """Check if atom is a true peptidic alpha carbon."""
+        """Check whether an atom is a peptide alpha carbon."""
         if atom.GetSymbol() != 'C':
             return False
         if atom.IsInRing():
-            return False  # Cα cyclique → pas un peptide linéaire
+            return False  # Cyclic alpha carbon; not a linear peptide
 
         has_amide_N = False
         has_carbonyl = False
@@ -528,18 +458,18 @@ def get_peptide_coupling(
 
         return has_amide_N and has_carbonyl
 
-    # At least one of the carbons must be a real Cα
+    # At least one of the carbons must be a real C-alpha
     is_h1_on_alpha = _is_real_alpha_carbon(heavy1) if heavy1.GetSymbol() == 'C' else False
     is_h2_on_alpha = _is_real_alpha_carbon(heavy2) if heavy2.GetSymbol() == 'C' else False
 
-    # For NH-Cα coupling, check if one is N (amide) and other is Cα
+    # For NH-C-alpha coupling, check if one is N (amide) and other is C-alpha
     is_hn_ca_coupling = False
     if heavy1.GetSymbol() == 'N' and is_h2_on_alpha:
         is_hn_ca_coupling = True
     elif heavy2.GetSymbol() == 'N' and is_h1_on_alpha:
         is_hn_ca_coupling = True
 
-    # For Cα-Cβ coupling, one must be Cα and other must be adjacent to Cα
+    # For C-alpha-Cβ coupling, one must be C-alpha and other must be adjacent to C-alpha
     is_ca_cb_coupling = is_h1_on_alpha or is_h2_on_alpha
 
     if not (is_hn_ca_coupling or is_ca_cb_coupling):
@@ -551,9 +481,7 @@ def get_peptide_coupling(
     # =========================================================================
 
     def _is_peptide_proton(h_atom) -> bool:
-        """
-        Check if a proton is on the peptide backbone.
-        """
+        """Check whether a proton belongs to the peptide backbone."""
         neighbors = list(h_atom.GetNeighbors())
         if not neighbors:
             return False
@@ -631,7 +559,7 @@ def get_peptide_coupling(
                     # It's a formamide CHO - no peptide coupling applicable
                     return None
     
-    # NEW: Verify it's a true peptide bond (not DMF/formamide)
+    # Verify it's a true peptide bond (not DMF/formamide)
     h1_neighbor = list(h1.GetNeighbors())[0] if list(h1.GetNeighbors()) else None
     h2_neighbor = list(h2.GetNeighbors())[0] if list(h2.GetNeighbors()) else None
     
@@ -642,9 +570,9 @@ def get_peptide_coupling(
         has_peptide_bond = _is_true_peptide_bond(mol, h2_neighbor)
     
     if not has_peptide_bond:
-        return None  # Pas une vraie liaison peptidique
+        return None  # Not a true peptide bond
     
-    # Utiliser le module peptide robuste si disponible
+    # Use the robust peptide module when available
     if _PEPTIDE_MODULE_AVAILABLE:
         try:
             return get_peptide_coupling_robust(
@@ -697,9 +625,9 @@ def get_peptide_coupling(
     if is_NH and is_CaH:
         # NH-C-alpha-H coupling - use Karplus if angle available
         if dihedral_angle is not None:
-            # Pardi, Billeter & Wüthrich (J. Mol. Biol. 1984, 180, 741):
-            # 3J(NH,Hα) = 6.4·cos²(φ-60°) - 1.4·cos(φ-60°) + 1.9
-            # Note: Bystrov (1976) uses different coefficients (A=9.4, B=-1.1, C=0.4)
+
+
+
             phi_rad = np.radians(dihedral_angle - 60)
             J = 6.4 * np.cos(phi_rad)**2 - 1.4 * np.cos(phi_rad) + 1.9
             return max(0, J)
@@ -721,10 +649,10 @@ _PHOSPHINE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
     # ¹J(P-H) direct
     '1J_PH': {
         'PH3': 188.0,                # Phosphine
-        'RPH2': 195.0,               # Phosphine primaire
-        'R2PH': 205.0,               # Phosphine secondaire
+        'RPH2': 195.0,               # Primary phosphine
+        'R2PH': 205.0,               # Secondary phosphine
         'HPO3_2-': 680.0,            # Phosphonate
-        'H3PO4': 700.0,              # Acide phosphorique
+        'H3PO4': 700.0,              # Phosphoric acid
         'phosphite': 690.0,
         'default': 200.0,
     },
@@ -738,17 +666,17 @@ _PHOSPHINE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
         'default': 5.0,
     },
     
-    # ³J(P-C-C-H) - dépend de Karplus
+    # 3J(P-C-C-H) - Karplus-dependent
     '3J_PCCH': {
-        'trans': 20.0,               # Dièdre ~180°
-        'gauche': 5.0,               # Dièdre ~60°
+        'trans': 20.0,               # Dihedral ~180°
+        'gauche': 5.0,               # Dihedral ~60°
         'average': 10.0,
         'phospholipid': 7.0,
         'nucleotide': 6.5,
         'default': 8.0,
     },
     
-    # ⁴J longue portée
+    # 4J long-range coupling
     '4J_PCCCH': {
         'W_arrangement': 3.0,
         'default': 1.0,
@@ -762,10 +690,10 @@ def get_phosphine_coupling(
     p_idx: int,
     distance: int
 ) -> Optional[float]:
-    """Calcule le couplage H-P."""
+    """Return an H-P coupling value."""
     p_atom = mol.GetAtomWithIdx(p_idx)
     
-    # Déterminer le type de phosphore
+    # Determine the phosphorus type
     n_bonds = p_atom.GetDegree()
     has_double_O = False
     
@@ -838,7 +766,7 @@ def get_borane_coupling(
     b_idx: int,
     distance: int
 ) -> Optional[float]:
-    """Calcule le couplage H-B."""
+    """Return an H-B coupling value."""
     if distance == 1:
         return _BORANE_COUPLING_TABLE['1J_BH'].get('default', 110.0)
     elif distance == 2:
@@ -905,7 +833,7 @@ def get_silane_coupling(
     si_idx: int,
     distance: int
 ) -> Optional[float]:
-    """Calcule le couplage H-Si."""
+    """Return an H-Si coupling value."""
     si_atom = mol.GetAtomWithIdx(si_idx)
     n_bonds = si_atom.GetDegree()
     
@@ -994,7 +922,7 @@ def get_organometallic_coupling(
     h2_idx: int,
     metal_symbol: Optional[str] = None
 ) -> Optional[float]:
-    """Calculate coupling in organometallic complexes."""
+    """Return an organometallic coupling value."""
     
     # Auto-detect metal if not specified
     if metal_symbol is None:
@@ -1135,17 +1063,14 @@ _STEROID_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
 
 
 def _detect_steroid_junction(mol: Chem.Mol, c1_idx: int, c2_idx: int) -> Optional[str]:
-    """
-    Automatically detect steroid junction type between two carbons.
-    Returns 'AB_junction', 'BC_junction', 'CD_junction' or None.
-    """
+    """Detect the steroid ring junction for two carbons."""
     c1 = mol.GetAtomWithIdx(c1_idx)
     c2 = mol.GetAtomWithIdx(c2_idx)
     
     if not (c1.IsInRing() and c2.IsInRing()):
         return None
 
-    # Aromatic carbons are not steroid junctions - they have different coupling values
+    # Exclude aromatic carbons from steroid junction handling
     if c1.GetIsAromatic() or c2.GetIsAromatic():
         return None
 
@@ -1176,16 +1101,7 @@ def get_steroid_coupling(
     ring_system: Optional[str] = None,
     coupling_type: Optional[str] = None
 ) -> Optional[float]:
-    """
-    Calculate steroid-specific couplings.
-    
-    IMPORTANT: This function only returns values for protons
-    confirmed to be in the steroid fused ring system.
-    
-    Args:
-        ring_system: 'AB_junction', 'BC_junction', 'CD_junction', etc.
-        coupling_type: Specific key in table
-    """
+    """Return a steroid coupling value when applicable."""
     # Verify that both protons are attached to carbons in RINGS
     h1 = mol.GetAtomWithIdx(h1_idx)
     h2 = mol.GetAtomWithIdx(h2_idx)
@@ -1239,19 +1155,19 @@ _TERPENE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
     'cyclohexene': {
         '3J_vinyl': 10.0,            # =CH-CH
         '3J_allylic_ax': 5.0,        # =CH-CH₂ axial
-        '3J_allylic_eq': 2.5,        # =CH-CH₂ équatorial
+        '3J_allylic_eq': 2.5,        # =CH-CH₂ equatorial
         '4J_homoallylic': 1.5,
     },
     
     'pinane': {
-        # Système bicyclique [3.1.1]
+        # Bicyclic [3.1.1] system
         '3J_bridge_endo': 9.0,
         '3J_bridge_exo': 6.0,
         '4J_W_gem_dimethyl': 0.5,
     },
     
     'menthane': {
-        # Cyclohexane substitué
+        # Substituted cyclohexane
         '3J_ax_ax': 11.0,
         '3J_ax_eq': 4.0,
         '3J_eq_eq': 3.5,
@@ -1269,9 +1185,9 @@ _TERPENE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
         '3J_H1_H2eq': 4.5,
     },
     
-    # Isoprène unit
+    # Isoprene unit
     'isoprene_unit': {
-        '3J_CH3_vinyl': 1.3,         # CH₃ avec =CH
+        '3J_CH3_vinyl': 1.3,         # CH3 coupled to =CH
         '3J_vinyl_vinyl_cis': 10.0,
         '3J_vinyl_vinyl_trans': 16.0,
         '4J_CH3_methylene': 1.0,
@@ -1291,14 +1207,7 @@ def get_terpene_coupling(
     h2_idx: int,
     skeleton_type: str
 ) -> Optional[float]:
-    """
-    Calculate couplings in terpenes.
-    
-    IMPORTANT: This function only returns values for protons
-    confirmed to be in a terpenic ring (cyclohexane/cyclopentane).
-    For simple alkyl chains, returns None to let the main simulator
-    calculate normal couplings.
-    """
+    """Return a terpene coupling value when applicable."""
     # Verify that both protons are attached to carbons in a RING
     # to avoid applying terpene couplings to alkyl chains
     h1 = mol.GetAtomWithIdx(h1_idx)
@@ -1419,16 +1328,7 @@ def get_macrocycle_coupling(
     ring_size: int,
     macrocycle_type: str = 'default'
 ) -> Optional[float]:
-    """
-    Calculate couplings in macrocycles.
-    
-    IMPORTANT: This function only returns values for protons
-    confirmed to be in the macrocycle.
-    
-    Args:
-        ring_size: Size of macrocycle (>8)
-        macrocycle_type: Type of macrocycle
-    """
+    """Return a macrocycle coupling value when applicable."""
     # Verify that both protons are attached to carbons in the MACROCYCLE
     h1 = mol.GetAtomWithIdx(h1_idx)
     h2 = mol.GetAtomWithIdx(h2_idx)
@@ -1442,7 +1342,7 @@ def get_macrocycle_coupling(
     c1 = c1_neighbors[0]
     c2 = c2_neighbors[0]
 
-    # Aromatic carbons use aromatic coupling tables, not macrocycle tables
+    # Exclude aromatic carbons from macrocycle handling
     if c1.GetIsAromatic() or c2.GetIsAromatic():
         return None
 
@@ -1463,7 +1363,7 @@ def get_macrocycle_coupling(
         return None
     
     # Adjustment based on ring size
-    # Larger rings = more flexible = more averaging = smaller J values
+    # Adjust coupling by ring flexibility
     flexibility_factor = 1.0
     
     if ring_size <= 10:
@@ -1552,16 +1452,16 @@ _NUCLEOTIDE_COUPLING_TABLE: Dict[str, Dict[str, float]] = {
 # =============================================================================
 # EXTENDED GLYCOSIDIC COUPLINGS (4J and 5J long-range through glycosidic bond)
 # =============================================================================
-# References:
-# - Tvaroska I., Carbohydr. Res. 206, 55 (1990)
-# - Bock K., Pedersen C., Adv. Carbohydr. Chem. Biochem. 41, 27 (1983)
+
+
+
 # =============================================================================
 
 _GLYCOSIDIC_LONG_RANGE_TABLE: Dict[str, Dict[str, float]] = {
     # 4J couplings through glycosidic bond (H-C-O-C-H path)
     '1_2_linkage': {
-        '4J_H1_H2_alpha': 0.8,       # α-(1→2) linkage
-        '4J_H1_H2_beta': 0.5,        # β-(1→2) linkage
+        '4J_H1_H2_alpha': 0.8,       # α-(1->2) linkage
+        '4J_H1_H2_beta': 0.5,        # β-(1->2) linkage
         '5J_H1_H3': 0.3,             # 5-bond coupling (rare)
     },
     '1_3_linkage': {
@@ -1588,9 +1488,9 @@ _GLYCOSIDIC_LONG_RANGE_TABLE: Dict[str, Dict[str, float]] = {
 # =============================================================================
 # NUCLEOSIDE CHI ANGLE (glycosidic torsion base-sugar)
 # =============================================================================
-# References:
-# - Davies D.B., Prog. NMR Spectrosc. 12, 135 (1978)
-# - Wijmenga S.S., van Buuren B.N.M., Prog. NMR Spectrosc. 32, 287 (1998)
+
+
+
 # =============================================================================
 
 _CHI_ANGLE_COUPLINGS: Dict[str, Dict[str, Any]] = {
@@ -1642,17 +1542,7 @@ def get_glycosidic_long_range_coupling(
     coupling_key: str,
     is_alpha: bool = True
 ) -> Optional[float]:
-    """
-    Get long-range 4J/5J coupling through glycosidic bond.
-    
-    Args:
-        linkage_type: '1_2', '1_3', '1_4', or '1_6'
-        coupling_key: Specific coupling (e.g., 'H1_H4')
-        is_alpha: True for α-linkage, False for β
-    
-    Returns:
-        Coupling in Hz or None
-    """
+    """Return a long-range glycosidic coupling value."""
     table_key = f"{linkage_type}_linkage"
     if table_key not in _GLYCOSIDIC_LONG_RANGE_TABLE:
         return None
@@ -1684,17 +1574,7 @@ def get_nucleoside_chi_coupling(
     chi_angle_deg: float = None,
     conformation: str = 'anti'
 ) -> Dict[str, float]:
-    """
-    Get couplings in nucleoside based on chi angle (glycosidic torsion).
-    
-    Args:
-        base_type: 'purine' or 'pyrimidine' (or specific base name)
-        chi_angle_deg: Chi angle in degrees (optional)
-        conformation: 'anti' or 'syn' (used if chi_angle not given)
-    
-    Returns:
-        Dictionary of couplings
-    """
+    """Return nucleoside couplings for a chi conformation."""
     # Determine base class
     if base_type.lower() in ['adenine', 'guanine', 'purine', 'a', 'g']:
         params = _CHI_ANGLE_COUPLINGS.get('purine', {})
@@ -1732,15 +1612,8 @@ def get_nucleoside_chi_coupling(
 
 # Pseudorotation equations
 def _calculate_ribose_coupling(P: float, coupling_type: str) -> float:
-    """
-    Calculate ribose coupling according to pseudorotation phase P.
-    
-    P = 0 deg -> C3'-endo (N-type, RNA)
-    P = 180 deg -> C2'-endo (S-type, DNA)
-    
-    Equation: J = A + B*cos(P + phase) + C*cos(2*(P + phase))
-    """
-    # Paramètres empiriques (Altona-Sundaralingam)
+    """Calculate a ribose coupling from the pseudorotation phase."""
+    # Empirical parameters
     params = {
         '3J_H1_H2': {'A': 4.0, 'B': 2.5, 'C': 0.5, 'phase': 0},
         '3J_H2_H3': {'A': 5.2, 'B': 0.0, 'C': 0.5, 'phase': 0},
@@ -1765,7 +1638,7 @@ def get_nucleotide_coupling(
     sugar_type: str = 'ribose',
     pseudorotation_phase: Optional[float] = None
 ) -> Optional[float]:
-    """Calculate couplings in nucleosides/nucleotides."""
+    """Return a nucleoside or nucleotide coupling value."""
     if sugar_type in _NUCLEOTIDE_COUPLING_TABLE:
         table = _NUCLEOTIDE_COUPLING_TABLE[sugar_type]
         
@@ -1785,16 +1658,11 @@ def get_nucleotide_coupling(
 # =============================================================================
 
 class MoleculeClassifier:
-    """Classify molecules to choose the right coupling table."""
+    """Classify molecules for coupling-table dispatch."""
     
     @staticmethod
     def classify(mol: Chem.Mol) -> List[str]:
-        """
-        Return the structure types present in the molecule.
-        
-        Returns:
-            List of types: ['alkyne', 'aldehyde', 'peptide', ...]
-        """
+        """Return the detected structural classes."""
         types = []
         
         # Traverse atoms
@@ -1850,8 +1718,8 @@ class MoleculeClassifier:
             if fused_count >= 4:
                 types.append('steroid')
         
-        # ✅ NEW: Détection améliorée des stéroïdes par stéréocentres
-        # Un stéroïde typique a 4+ cycles fusionnés ET 5+ stéréocentres
+        # Improved steroid detection using stereocenters
+        # Typical steroid pattern: fused rings with multiple stereocenters
         if len(ring_sizes) >= 3:
             n_stereocenters = sum(1 for a in mol.GetAtoms() 
                                  if a.GetChiralTag() != Chem.ChiralType.CHI_UNSPECIFIED)
@@ -1864,41 +1732,41 @@ class MoleculeClassifier:
         if isoprene and mol.HasSubstructMatch(isoprene):
             types.append('terpene')
         
-        # ✅ NEW: Détection terpènes par gem-diméthyl (ex: pinène)
-        gem_dimethyl = Chem.MolFromSmarts('[CH3]C([CH3])([#6])[#6]')  # C(CH3)2 lié à 2 carbones
+        # Terpene detection using gem-dimethyl motifs
+        gem_dimethyl = Chem.MolFromSmarts('[CH3]C([CH3])([#6])[#6]')  # C(CH3)2 connected to two carbons
         if gem_dimethyl and mol.HasSubstructMatch(gem_dimethyl):
             if 'terpene' not in types:
                 types.append('terpene')
         
-        # ✅ NEW: Détection terpènes par cyclohexène substitué
-        cyclohexene_methyl = Chem.MolFromSmarts('[CH3]C1=CCCCC1')  # Limonène-like
+        # Terpene detection using substituted cyclohexene motifs
+        cyclohexene_methyl = Chem.MolFromSmarts('[CH3]C1=CCCCC1')  # Limonene-like
         if cyclohexene_methyl and mol.HasSubstructMatch(cyclohexene_methyl):
             if 'terpene' not in types:
                 types.append('terpene')
         
-        # ✅ NEW: Monoterpènes type menthane (cyclohexane + isopropyle + méthyle)
-        # Menthol pattern: cyclohexane avec CH(CH3)2 et CH3
-        # Note: [!a] excludes aromatic carbons to avoid false positives (e.g., cumene)
-        isopropyl_on_ring = Chem.MolFromSmarts('[CH;R;!a]([CH3])([CH3])')  # isopropyle lié au cycle non-aromatique
+        # Menthane-type monoterpene detection
+        # Menthol pattern: cyclohexane with CH(CH3)2 and CH3
+
+        isopropyl_on_ring = Chem.MolFromSmarts('[CH;R;!a]([CH3])([CH3])')  # isopropyl attached to a non-aromatic ring
         if isopropyl_on_ring and mol.HasSubstructMatch(isopropyl_on_ring):
-            # Vérifier qu'il y a aussi un méthyle sur le cycle
-            methyl_on_ring = Chem.MolFromSmarts('[CH3][C;R1;!a]')  # CH3 lié à un C du cycle non-aromatique
+            # Check for an additional methyl group on the ring
+            methyl_on_ring = Chem.MolFromSmarts('[CH3][C;R1;!a]')  # CH3 attached to a non-aromatic ring carbon
             if methyl_on_ring and mol.HasSubstructMatch(methyl_on_ring):
                 if 'terpene' not in types:
                     types.append('terpene')
 
-        # ✅ NEW: Détection simple - isopropyle attaché à un cyclohexane
-        # Note: [!a] excludes aromatic carbons to avoid false positives (e.g., cumene)
-        isopropyl_cyclohexane = Chem.MolFromSmarts('CC(C)[CH;R1;!a]')  # isopropyle sur cycle non-aromatique
+        # Simple isopropyl-cyclohexane detection
+
+        isopropyl_cyclohexane = Chem.MolFromSmarts('CC(C)[CH;R1;!a]')  # isopropyl on a non-aromatic ring
         if isopropyl_cyclohexane and mol.HasSubstructMatch(isopropyl_cyclohexane):
             if 'terpene' not in types:
                 types.append('terpene')
         
-        # ✅ NEW: Détection bicyclo[3.1.1] (pinane) ou [2.2.1] (norbornane) pour terpènes
+        # Bicyclic terpene detection
         for ring in ring_info.AtomRings():
             ring_size = len(ring)
             if ring_size in (4, 5) and len(ring_sizes) >= 2:
-                # Petit cycle fusionné → possible système terpénique bicyclique
+                # Small fused ring may indicate a bicyclic terpene
                 if any(s == 6 for s in ring_sizes):
                     if 'terpene' not in types:
                         types.append('terpene')
@@ -1909,7 +1777,7 @@ class MoleculeClassifier:
         if nucleobase and mol.HasSubstructMatch(nucleobase):
             types.append('nucleoside')
         
-        # ✅ NEW: Pyrimidine base pour nucléosides
+        # Pyrimidine-base detection for nucleosides
         pyrimidine = Chem.MolFromSmarts('[nR1]1[cR1][cR1][nR1][cR1][cR1]1')
         if pyrimidine and mol.HasSubstructMatch(pyrimidine):
             if 'nucleoside' not in types:
@@ -1925,19 +1793,8 @@ def get_specialized_coupling(
     distance: int,
     bond_path: Optional[List[int]] = None
 ) -> Optional[float]:
-    """
-    Main dispatch function to specialized tables.
-    
-    Args:
-        mol: RDKit molecule
-        h1_idx, h2_idx: Proton indices
-        distance: Topological distance (number of bonds)
-        bond_path: Atom path between h1 and h2
-    
-    Returns:
-        J in Hz or None if not applicable
-    """
-    # ✅ NEW: Input validation to prevent out-of-bounds errors
+    """Dispatch coupling calculation to specialized tables."""
+    # Input validation to prevent out-of-bounds errors
     if mol is None or not isinstance(mol, Chem.Mol):
         return None
     
@@ -1950,11 +1807,11 @@ def get_specialized_coupling(
         return None  # Return None instead of raising to be robust
 
     # =========================================================================
-    # ✅ CRITICAL FIX: Filter out long-range couplings (⁴J and beyond)
+    # Filter out long-range couplings (⁴J and beyond)
     # =========================================================================
-    # Only ²J (geminal) and ³J (vicinal) have significant magnitude (2-15 Hz)
-    # ⁴J (W-coupling) and ⁵J are typically < 2 Hz and context-specific
-    # Returning None here prevents tables from assigning 11-12 Hz to ⁴J/⁵J
+    # Limit this dispatcher to 2J and 3J couplings
+    # Long-range couplings are handled elsewhere
+    # Avoid assigning short-range table values to long-range couplings
     # =========================================================================
     if distance > 3:
         return None  # Long-range couplings handled elsewhere (typically ~0-2 Hz)
@@ -2038,11 +1895,7 @@ def get_specialized_coupling(
 # =============================================================================
 
 def validate_critical_couplings() -> bool:
-    """
-    Validates critical coupling values against literature references.
-    
-    Returns True if all validations pass, False otherwise.
-    """
+    """Validate critical coupling-table values."""
     passed = True
     errors = []
     
@@ -2102,7 +1955,7 @@ def validate_critical_couplings() -> bool:
 
 
 def _test_coupling_tables():
-    """Test coupling tables."""
+    """Run coupling-table tests."""
     print("=" * 60)
     print("COMPLETE COUPLING TABLES TEST")
     print("=" * 60)

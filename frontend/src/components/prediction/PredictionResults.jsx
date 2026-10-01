@@ -1,3 +1,4 @@
+import { isArtifactAvailable, isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useMemo } from 'react';
 import Viewer from '../../Viewer';
 import { normalizeStaticUrl, downloadBlob } from '../../utils';
@@ -13,7 +14,8 @@ export const PredictionResults = ({
   setPredictionState,
   addLog,
 }) => {
-  const sdfArtifacts = artifacts.filter((a) => a.url?.endsWith(".sdf"));
+  const visibleArtifacts = artifacts.filter(isArtifactAvailable);
+  const sdfArtifacts = visibleArtifacts.filter((a) => a.url?.endsWith(".sdf"));
 
   const csvArtifactToNmrType = (t) =>
     t === "CSV_1H"
@@ -22,6 +24,8 @@ export const PredictionResults = ({
       ? "13C"
       : t === "CSV_COSY"
       ? "COSY"
+      : t === "CSV_TOCSY"
+      ? "TOCSY"
       : t === "CSV_HSQC"
       ? "HSQC"
       : null;
@@ -32,7 +36,7 @@ export const PredictionResults = ({
       .filter((a) => a.type.startsWith("CSV_"))
       .forEach((a) => {
         const nmrType = csvArtifactToNmrType(a.type);
-        if (nmrType) csvs[nmrType] = normalizeStaticUrl(a.url);
+        if (nmrType && isMethodAvailable(nmrType)) csvs[nmrType] = normalizeStaticUrl(a.url);
       });
     return csvs;
   }, [artifacts]);
@@ -61,7 +65,7 @@ export const PredictionResults = ({
       <div className="results-section">
         <h4>Generated Artifacts</h4>
         <div className="artifact-list">
-          {artifacts.map((a, i) => (
+          {visibleArtifacts.map((a, i) => (
             <div key={`${a.type}-${i}`} className="artifact-item">
               <div className="artifact-info">
                 <div className="artifact-type">{a.type}</div>

@@ -1,4 +1,5 @@
 # Large local directories
+.local-backups/
 R-Portable/
 
 # Node.js

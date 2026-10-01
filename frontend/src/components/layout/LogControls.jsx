@@ -2,7 +2,7 @@ import React from 'react';
 import { useLogs } from '../../contexts/AppStateContext';
 
 /**
- * Contrôles pour afficher/masquer et vider les logs
+ * Controls for showing, exporting, and clearing logs.
  */
 export const LogControls = () => {
   const { logs, showLogs, setShowLogs, clearLogs, addLog } = useLogs();

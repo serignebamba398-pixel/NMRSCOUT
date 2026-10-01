@@ -1,13 +1,13 @@
 /**
  * beforePack hook for electron-builder
- * Supprime récursivement tous les fichiers avec des noms réservés Windows
- * (nul, con, prn, aux, com1-com9, lpt1-lpt9) avant le packaging.
- * Ces fichiers font crasher electron-builder sur Windows.
+ * Recursively remove files with reserved Windows names
+ * (nul, con, prn, aux, com1-com9, lpt1-lpt9) before packaging.
+ * These names cause electron-builder to fail on Windows.
  */
 const fs = require('fs');
 const path = require('path');
 
-// Noms réservés Windows (insensible à la casse, sans extension)
+// Reserved Windows basenames, matched case-insensitively.
 const WINDOWS_RESERVED = new Set([
   'nul', 'con', 'prn', 'aux',
   'com1','com2','com3','com4','com5','com6','com7','com8','com9',
@@ -15,7 +15,7 @@ const WINDOWS_RESERVED = new Set([
 ]);
 
 function isReservedName(filename) {
-  // Vérifier le nom sans extension (ex: "nul.txt" est aussi réservé)
+  // Check the basename without its extension; "nul.txt" is also reserved.
   const base = path.basename(filename, path.extname(filename)).toLowerCase();
   return WINDOWS_RESERVED.has(base);
 }
@@ -42,7 +42,7 @@ function deleteReservedFiles(dir) {
       count += deleteReservedFiles(fullPath);
     } else if (isReservedName(entry)) {
       try {
-        // Utiliser le préfixe \\?\ pour bypasser les restrictions Windows
+        // Use the \\?\ prefix to access reserved Windows paths.
         const uncPath = '\\\\?\\' + path.resolve(fullPath);
         fs.unlinkSync(uncPath);
         console.log(`[beforePack] Supprimé fichier réservé : ${fullPath}`);
@@ -67,7 +67,7 @@ exports.default = async function(context) {
   const projectDir = context.packager.projectDir;
   console.log('[beforePack] Recherche de fichiers réservés Windows...');
 
-  // Dossiers à scanner
+  // Directories to scan.
   const dirsToScan = [
     path.join(projectDir, 'backend'),
     path.join(projectDir, 'frontend', 'build'),

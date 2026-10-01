@@ -1,3 +1,5 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
+import { TocsyPredictionFields } from './TocsyPredictionFields';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { LockOverlay, ProgressBar, FileUpload } from '../common';
@@ -48,7 +50,7 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
     artifacts,
   } = predictionState;
 
-  // Active tab: 'source' | '1H' | '13C' | 'COSY' | 'HSQC'
+  // Active tab: 'source' | '1H' | '13C' | 'COSY' | 'TOCSY' | 'HSQC'
   const [activeTab, setActiveTab] = useState('source');
 
   const dimmed = uiLock.lockedBy === "ANNO" || uiLock.lockedBy === "OPTIM";
@@ -97,6 +99,16 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
     }));
   }, [setPredictionState]);
 
+  const updateTocsyOption = useCallback((key, value) => {
+    setPredictionState((prev) => ({
+      ...prev,
+      options: {
+        ...prev.options,
+        tocsy: { ...(prev.options.tocsy || {}), [key]: value },
+      },
+    }));
+  }, [setPredictionState]);
+
   const updateExtractorOption = useCallback((extractor, key, value) => {
     setPredictionState((prev) => ({
       ...prev,
@@ -137,6 +149,12 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
   const methodCount = selectedPredMethods.length;
 
   // Source & Methods tab
+  // Experimental parameters (for prediction-time JSON generation)
+  const freqMhz = options?.freq_mhz ?? 700;
+  const solvent = options?.solvent ?? 'CDCl3';
+  const temperatureK = options?.temperature_k ?? 298;
+  const pH = options?.ph ?? 7.4;
+
   const renderSourceTab = () => (
     <div className="tab-content">
       {/* Mode selector */}
@@ -303,9 +321,9 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
         <h4 className="section-title">Prediction Methods</h4>
         <p className="section-hint">Check the methods then configure each tab if needed.</p>
         <div className="methods-list">
-          {["1H", "13C", "COSY", "HSQC"].map((m) => {
+          { ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((m) => {
             const checked = selectedPredMethods.includes(m);
-            const hasParams = m === "13C" || m === "COSY" || m === "HSQC";
+            const hasParams = m === "13C" || m === "COSY" || m === "TOCSY" || m === "HSQC";
             
             return (
               <div key={m} className={`method-row ${checked ? 'selected' : ''}`}>
@@ -353,6 +371,82 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
         </div>
       </div>
 
+      <div className="settings-section">
+        <h4 className="section-title" style={{ fontSize: '13px', marginTop: 16 }}>Experimental Conditions</h4>
+        <p className="hint" style={{ marginBottom: 12 }}>
+          These parameters are used during prediction to generate the multiplicity JSON with accurate shifts and J-couplings.
+        </p>
+
+        <div className="form-grid">
+          <div className="form-field">
+            <label>Spectrometer Frequency (MHz)</label>
+            <input
+              type="number"
+              value={freqMhz}
+              onChange={(e) => updateOption('freq_mhz', parseFloat(e.target.value) || 700)}
+              disabled={running}
+              min={100}
+              max={1200}
+              step={50}
+              style={{ width: 100 }}
+            />
+          </div>
+
+          <div className="form-field">
+            <label>Solvent</label>
+            <select
+              value={solvent}
+              onChange={(e) => updateOption('solvent', e.target.value)}
+              disabled={running}
+            >
+              <option value="CDCl3">CDCl3 (Chloroform-d)</option>
+              <option value="DMSO-d6">DMSO-d6 (Dimethylsulfoxide-d6)</option>
+              <option value="D2O">D2O (Deuterium oxide)</option>
+              <option value="CD3OD">CD3OD (Methanol-d4)</option>
+              <option value="acetone-d6">Acetone-d6</option>
+              <option value="C6D6">C6D6 (Benzene-d6)</option>
+              <option value="pyridine-d5">Pyridine-d5</option>
+              <option value="CD3CN">CD3CN (Acetonitrile-d3)</option>
+              <option value="THF-d8">THF-d8</option>
+            </select>
+            <p className="hint">
+              Exchangeable protons (OH, NH, SH) will be included/excluded based on the solvent.
+              In protic solvents (D2O, CD3OD), they exchange rapidly and are typically not visible.
+            </p>
+          </div>
+        </div>
+
+        <div className="form-grid">
+          <div className="form-field">
+            <label>Temperature (K)</label>
+            <input
+              type="number"
+              value={temperatureK}
+              onChange={(e) => updateOption('temperature_k', parseFloat(e.target.value) || 298)}
+              disabled={running}
+              min={200}
+              max={400}
+              step={1}
+              style={{ width: 80 }}
+            />
+          </div>
+
+          <div className="form-field">
+            <label>pH</label>
+            <input
+              type="number"
+              value={pH}
+              onChange={(e) => updateOption('ph', parseFloat(e.target.value) || 7.4)}
+              disabled={running}
+              min={0}
+              max={14}
+              step={0.1}
+              style={{ width: 80 }}
+            />
+          </div>
+        </div>
+      </div>
+
       {/* Summary */}
       <div className="methods-summary">
         {methodCount === 0 ? (
@@ -366,11 +460,6 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
 
   // 1H Tab
   const render1HTab = () => {
-    // Experimental parameters (for prediction-time JSON generation)
-    const freqMhz = options?.freq_mhz ?? 700;
-    const solvent = options?.solvent ?? 'CDCl3';
-    const temperatureK = options?.temperature_k ?? 298;
-    const pH = options?.ph ?? 7.4;
 
     return (
       <div className="tab-content">
@@ -383,81 +472,7 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
             </span>
           </div>
 
-          <div className="settings-section">
-            <h4 className="section-title" style={{ fontSize: '13px', marginTop: 16 }}>Experimental Conditions</h4>
-            <p className="hint" style={{ marginBottom: 12 }}>
-              These parameters are used during prediction to generate the multiplicity JSON with accurate shifts and J-couplings.
-            </p>
-
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Spectrometer Frequency (MHz)</label>
-                <input
-                  type="number"
-                  value={freqMhz}
-                  onChange={(e) => updateOption('freq_mhz', parseFloat(e.target.value) || 700)}
-                  disabled={running}
-                  min={100}
-                  max={1200}
-                  step={50}
-                  style={{ width: 100 }}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>Solvent</label>
-                <select
-                  value={solvent}
-                  onChange={(e) => updateOption('solvent', e.target.value)}
-                  disabled={running}
-                >
-                  <option value="CDCl3">CDCl3 (Chloroform-d)</option>
-                  <option value="DMSO-d6">DMSO-d6 (Dimethylsulfoxide-d6)</option>
-                  <option value="D2O">D2O (Deuterium oxide)</option>
-                  <option value="CD3OD">CD3OD (Methanol-d4)</option>
-                  <option value="acetone-d6">Acetone-d6</option>
-                  <option value="C6D6">C6D6 (Benzene-d6)</option>
-                  <option value="pyridine-d5">Pyridine-d5</option>
-                  <option value="CD3CN">CD3CN (Acetonitrile-d3)</option>
-                  <option value="THF-d8">THF-d8</option>
-                </select>
-                <p className="hint">
-                  Exchangeable protons (OH, NH, SH) will be included/excluded based on the solvent.
-                  In protic solvents (D2O, CD3OD), they exchange rapidly and are typically not visible.
-                </p>
-              </div>
-            </div>
-
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Temperature (K)</label>
-                <input
-                  type="number"
-                  value={temperatureK}
-                  onChange={(e) => updateOption('temperature_k', parseFloat(e.target.value) || 298)}
-                  disabled={running}
-                  min={200}
-                  max={400}
-                  step={1}
-                  style={{ width: 80 }}
-                />
-              </div>
-
-              <div className="form-field">
-                <label>pH</label>
-                <input
-                  type="number"
-                  value={pH}
-                  onChange={(e) => updateOption('ph', parseFloat(e.target.value) || 7.4)}
-                  disabled={running}
-                  min={0}
-                  max={14}
-                  step={0.1}
-                  style={{ width: 80 }}
-                />
-              </div>
-            </div>
-          </div>
+          <p className="hint">Experimental conditions are configured in Source &amp; Methods.</p>
         </div>
       </div>
     );
@@ -534,8 +549,22 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
         </div>
         <p className="hint">
           The number of bonds determines which H-H correlations are predicted.
-          Typically 2-3 for standard COSY, up to 4-5 for TOCSY.
+          Typically 2-3 for standard COSY.{isMethodAvailable('TOCSY') && ' TOCSY uses its own spin-system settings.'}
         </p>
+      </div>
+    </div>
+  );
+
+  const renderTOCSYTab = () => (
+    <div className="tab-content">
+      <div className="settings-section">
+        <h4 className="section-title">TOCSY Parameters</h4>
+        <div className="method-status-box">
+          <span className={selectedPredMethods.includes("TOCSY") ? "enabled" : "disabled"}>
+            {selectedPredMethods.includes("TOCSY") ? "Method enabled" : "Method disabled"}
+          </span>
+        </div>
+        <TocsyPredictionFields options={options.tocsy} onChange={updateTocsyOption} disabled={running} />
       </div>
     </div>
   );
@@ -600,8 +629,9 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
     { id: '1H', label: '¹H' },
     { id: '13C', label: '¹³C' },
     { id: 'COSY', label: 'COSY' },
+    { id: 'TOCSY', label: 'TOCSY' },
     { id: 'HSQC', label: 'HSQC' },
-  ];
+  ].filter(tab => isMethodAvailable(tab.id));
 
   const elapsedMs = startTime ? (endTime || Date.now()) - startTime : 0;
   const canLaunch = methodCount > 0 && (mode === "SMILES" ? smiles.trim() : csvUploadedName);
@@ -632,6 +662,7 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
         {activeTab === '1H' && render1HTab()}
         {activeTab === '13C' && render13CTab()}
         {activeTab === 'COSY' && renderCOSYTab()}
+        {isMethodAvailable('TOCSY') && activeTab === 'TOCSY' && renderTOCSYTab()}
         {activeTab === 'HSQC' && renderHSQCTab()}
       </div>
 

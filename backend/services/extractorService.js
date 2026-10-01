@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const { EXTRACTORS } = require('../config/paths');
+const { homonuclearArgs } = require('../utils/homonuclearPrediction');
 
 function runExtractorsOnSDF({
   sdfPath,
@@ -13,6 +14,18 @@ function runExtractorsOnSDF({
   extractorOptions = {},
   selectedMethods = ['1H', '13C', 'COSY', 'HSQC'],
 }) {
+  // Validate before entering the async executor so invalid options cannot hang a job.
+  const homonuclear = {};
+  for (const experiment of ['COSY', 'TOCSY']) {
+    if (selectedMethods.includes(experiment)) {
+      homonuclear[experiment] = homonuclearArgs(experiment, {
+        min_bonds: extractorOptions.min_bonds,
+        max_bonds: extractorOptions.max_bonds,
+        include_diagonal: extractorOptions.include_diagonal,
+        ...(extractorOptions[experiment.toLowerCase()] || {}),
+      });
+    }
+  }
   return new Promise(async resolve => {
     const outputs = {};
 
@@ -295,30 +308,51 @@ function runExtractorsOnSDF({
       return args;
     };
 
+    const extraArgsCOSY = experiment => homonuclear[experiment];
+
     const jobs = [];
-    const planExtractor = (label, script, outKey, outFilename, extraArgBuilder = () => []) => {
+    const planExtractor = (label, script, outKey, outFilename, extraArgBuilder = () => [], options = {}) => {
       if (!selectedMethods.includes(label)) {
         sse({ type: 'log', message: `${label} not selected, skipping` });
         return;
       }
 
       const outAbs = path.join(workDir, outFilename);
-      const baseArgSets = buildBaseArgs();
+      const baseArgSets = options.outputCsv
+        ? [container.mode === 'single'
+          ? ['--sdf_path', container.single]
+          : ['--input_folder', container.folder]]
+        : buildBaseArgs();
 
-      const makeOutVariants = base => [
-        [...base, '--output_csv', outAbs, ...extraArgBuilder()],
-        [...base, '--output_dir', workDir, '--task_id', taskId, ...extraArgBuilder()],
-        [
+      const makeOutVariants = base => {
+        if (options.outputCsv) {
+          return [[...base, '--output_csv', outAbs, ...extraArgBuilder()]];
+        }
+        const canonical = [
           ...base,
-          '--input_dir',
-          container.folder || workDir,
           '--output_dir',
           workDir,
           '--task_id',
           taskId,
           ...extraArgBuilder(),
-        ],
-      ];
+        ];
+        const variants = [canonical];
+
+        if (!options.canonicalOnly) {
+          variants.push([
+            ...base,
+            '--input_dir',
+            container.folder || workDir,
+            '--output_dir',
+            workDir,
+            '--task_id',
+            taskId,
+            ...extraArgBuilder(),
+          ]);
+        }
+
+        return variants;
+      };
 
       jobs.push(async () => {
         for (const base of baseArgSets) {
@@ -336,9 +370,24 @@ function runExtractorsOnSDF({
       });
     };
 
-    planExtractor('1H', EXTRACTORS['1H'], 'csv_1H', `prediction_1H_${taskId}.csv`, extraArgs1H);
+    planExtractor('1H', EXTRACTORS['1H'], 'csv_1H', `prediction_1H_${taskId}.csv`, extraArgs1H, { outputCsv: true });
     planExtractor('13C', EXTRACTORS['13C'], 'csv_13C', `prediction_13C_${taskId}.csv`, extraArgs13C);
-    planExtractor('COSY', EXTRACTORS['COSY'], 'csv_COSY', `prediction_COSY_${taskId}.csv`);
+    planExtractor(
+      'COSY',
+      EXTRACTORS['COSY'],
+      'csv_COSY',
+      `prediction_COSY_${taskId}.csv`,
+      () => extraArgsCOSY('COSY'),
+      { canonicalOnly: true },
+    );
+    planExtractor(
+      'TOCSY',
+      EXTRACTORS['COSY'],
+      'csv_TOCSY',
+      `prediction_TOCSY_${taskId}.csv`,
+      () => extraArgsCOSY('TOCSY'),
+      { canonicalOnly: true },
+    );
     planExtractor('HSQC', EXTRACTORS['HSQC'], 'csv_HSQC', `prediction_HSQC_${taskId}.csv`, extraArgsHSQC);
 
     const totalJobs = jobs.length;

@@ -1,17 +1,11 @@
 # nmr_plugins/exotic_carbocycles.py
-# Plugin pour carbocycles exotiques (annulènes, tropylium, corannulène)
+# Unusual carbocycle plugin: annulenes, tropylium, and corannulene
 
-"""
-Plugin pour les carbocycles non-conventionnels.
+"""Handle nonconventional carbocycles.
 
-Couvre:
-- Annulènes ([n]annulènes, n ≥ 10)
-- Tropylium et ions cycloheptatriényle  
-- Pentalènes et heptalènes
-- Corannulène et fullerènes partiels
-- Cycles tendus (cyclobutène, cyclopropène)
-- Systèmes bicycliques pontés
-"""
+Covers annulenes with n ≥ 10; tropylium and cycloheptatrienyl ions;
+pentalenes and heptalenes; corannulene and partial fullerenes;
+strained cyclobutene/cyclopropene rings; and bridged bicyclic systems."""
 
 from typing import Dict, List, Tuple, Optional, Any, Set
 import numpy as np
@@ -28,30 +22,30 @@ except ImportError:
 
 
 # =============================================================================
-# TABLES DE COUPLAGES EXOTIQUES
+# Unusual carbocycle coupling tables
 # =============================================================================
 
-# Annulènes [n]annulènes
+# [n]Annulenes
 ANNULENE_COUPLINGS: Dict[int, Dict[str, float]] = {
-    10: {  # [10]annulène
+    10: {  # [10]Annulene
         '3J_vicinal': 11.0,      # Couplage vicinal
-        '4J_allylic': 2.5,       # À travers π
+        '4J_allylic': 2.5,       # Through the pi system
         '5J_homoallylic': 0.8,   # Long range
-        'ring_current_effect': 1.2,  # Effet de courant de cycle
+        'ring_current_effect': 1.2,  # Ring-current effect
     },
-    14: {  # [14]annulène
+    14: {  # [14]Annulene
         '3J_vicinal': 10.5,
-        '4J_allylic': 3.0,       # Plus de délocalisation
+        '4J_allylic': 3.0,       # Greater delocalization
         '5J_homoallylic': 1.2,
         'ring_current_effect': 1.5,
     },
-    18: {  # [18]annulène (aromatique)
-        '3J_vicinal': 9.8,       # Légèrement réduit
-        '4J_allylic': 3.5,       # Forte délocalisation
+    18: {  # [18]Annulene (aromatic)
+        '3J_vicinal': 9.8,       # Slightly reduced
+        '4J_allylic': 3.5,       # Strong delocalization
         '5J_homoallylic': 1.5,
-        'ring_current_effect': 2.0,  # Fort courant de cycle
+        'ring_current_effect': 2.0,  # Strong ring current
     },
-    22: {  # [22]annulène
+    22: {  # [22]Annulene
         '3J_vicinal': 10.2,
         '4J_allylic': 3.2,
         '5J_homoallylic': 1.3,
@@ -59,62 +53,62 @@ ANNULENE_COUPLINGS: Dict[int, Dict[str, float]] = {
     },
 }
 
-# Tropylium et cycloheptatriène
+# Tropylium and cycloheptatriene
 TROPYLIUM_COUPLINGS: Dict[str, float] = {
     'tropylium_adjacent': 8.5,      # C⁺-adjacent
-    'tropylium_meta': 1.8,          # Méta au cation
+    'tropylium_meta': 1.8,          # Meta to the cation
     'tropylium_para': 0.5,          # Para (faible)
-    'cycloheptatriene_vicinal': 12.0,  # Cycloheptatriène neutre
-    'cycloheptatriene_allylic': 4.0,   # À travers π
-    'norcaradiene_vicinal': 8.0,    # Forme norcaradiène
-    'norcaradiene_bridge': 2.5,     # À travers pont
+    'cycloheptatriene_vicinal': 12.0,  # Neutral cycloheptatriene
+    'cycloheptatriene_allylic': 4.0,   # Through the pi system
+    'norcaradiene_vicinal': 8.0,    # Norcaradiene form
+    'norcaradiene_bridge': 2.5,     # Through the bridge
 }
 
-# Pentalènes et heptalènes (antiaromatiques)
+# Pentalenes and heptalenes (antiaromatic)
 PENTALENE_COUPLINGS: Dict[str, float] = {
-    'pentalene_vicinal': 13.5,      # Augmenté (antiaromatique)
-    'pentalene_across_bridge': 3.5, # À travers pont central
-    'pentalene_long_range': 1.8,    # Couplages W
-    'heptalene_vicinal': 12.8,      # Heptalène
-    'heptalene_across': 2.8,        # À travers système
+    'pentalene_vicinal': 13.5,      # Increased (antiaromatic)
+    'pentalene_across_bridge': 3.5, # Through the central bridge
+    'pentalene_long_range': 1.8,    # W couplings
+    'heptalene_vicinal': 12.8,      # Heptalene
+    'heptalene_across': 2.8,        # Through the system
 }
 
-# Corannulène et fullerènes partiels
+# Corannulene and partial fullerenes
 CORANNULENE_COUPLINGS: Dict[str, float] = {
-    'rim_vicinal': 9.2,             # Bord de bol (rim)
-    'rim_meta': 1.5,                # Méta sur bord
+    'rim_vicinal': 9.2,             # Bowl rim
+    'rim_meta': 1.5,                # Meta on the rim
     'spoke_hub': 8.8,               # Rayon vers centre (spoke)
     'hub_vicinal': 8.5,             # Centre (hub)
-    'across_bowl': 0.8,             # À travers courbure
-    'bowl_inversion': 2.0,          # Inversion de bol
+    'across_bowl': 0.8,             # Across the curved structure
+    'bowl_inversion': 2.0,          # Bowl inversion
 }
 
 # Cycles tendus
 STRAINED_CYCLES: Dict[str, float] = {
-    'cyclopropene_vicinal': 15.0,   # Très tendu
-    'cyclopropene_allylic': 5.5,    # À travers π
+    'cyclopropene_vicinal': 15.0,   # Highly strained
+    'cyclopropene_allylic': 5.5,    # Through the pi system
     'cyclobutene_vicinal': 13.2,    # Tendu
     'cyclobutene_across': 2.8,      # Trans-cyclique
     'bicyclobutane_bridge': 6.0,    # Pont cyclobutane
     'spiropentane_vicinal': 11.5,   # Spiropentane
 }
 
-# Bicycliques pontés exotiques
+# Unusual bridged bicyclic systems
 BRIDGED_BICYCLES: Dict[str, float] = {
     'norbornene_endo_exo': 4.2,     # Endo vs exo
-    'norbornene_bridge': 2.8,       # À travers pont
-    'norbornadiene_vicinal': 8.5,   # Norbornadiène
+    'norbornene_bridge': 2.8,       # Through the bridge
+    'norbornadiene_vicinal': 8.5,   # Norbornadiene
     'quadricyclane_cage': 3.5,      # Cage quadricyclane
     'adamantane_cage': 1.2,         # Adamantane (rigide)
-    'cubane_edge': 8.8,             # Arête de cube
+    'cubane_edge': 8.8,             # Cube edge
     'cubane_diagonal': 0.5,         # Diagonale cube
 }
 
-# Patterns SMARTS de reconnaissance
+# Recognition SMARTS patterns
 EXOTIC_PATTERNS: Dict[str, str] = {
-    # Annulènes (approximatifs)
+    # Approximate annulene patterns
     'cyclooctatetraene': '[CH1]=[CH1][CH1]=[CH1][CH1]=[CH1][CH1]=[CH1]1',
-    'cyclodecapentaene': 'C1=CC=CC=CC=CC=C1',  # [10]annulène
+    'cyclodecapentaene': 'C1=CC=CC=CC=CC=C1',  # [10]Annulene
     
     # Tropylium
     'tropylium': '[c+]1[c][c][c][c][c][c]1',
@@ -125,49 +119,44 @@ EXOTIC_PATTERNS: Dict[str, str] = {
     'cyclobutene': 'C1=CCC1',
     'bicyclobutane': 'C12CC1C2',
     
-    # Systèmes pontés
+    # Bridged systems
     'norbornene': 'C12C=CC(C1)C2',
     'norbornadiene': 'C12C=CC(C1)C=C2',
     'adamantane': 'C12CC3CC(C1)CC(C2)C3',
-    'cubane': 'C12C3C4C1C5C4C3C25',  # Simplifié
+    'cubane': 'C12C3C4C1C5C4C3C25',  # Simplified
     
-    # Corannulène (approximatif)
+    # Approximate corannulene pattern
     'corannulene_fragment': '[c]1[c]2[c][c][c][c]2[c]2[c][c][c][c]2[c]1',
 }
 
 
 # =============================================================================
-# FONCTIONS DE DÉTECTION
+# Detection functions
 # =============================================================================
 
 def detect_annulene(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
-    """
-    Détecte les annulènes et détermine leur taille.
-    
-    Returns:
-        Dict avec infos sur l'annulène détecté
-    """
+    """Detect annulenes and their ring sizes. Return a dictionary describing the detected annulene."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
     if not atom.GetIsAromatic() and atom.GetSymbol() != 'C':
         return None
     
-    # Trouver tous les cycles contenant cet atome
+    # Find all rings containing this atom.
     ring_info = mol.GetRingInfo()
     atom_rings = [ring for ring in ring_info.AtomRings() if atom_idx in ring]
     
     for ring in atom_rings:
         ring_size = len(ring)
         
-        # Vérifier si c'est potentiellement un annulène
+        # Check for a potential annulene.
         if ring_size >= 8 and ring_size % 2 == 0:  # Pairs ≥ 8
             
-            # Vérifier alternance simple/double liaisons
+            # Check alternating single and double bonds.
             ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
             all_carbon = all(a.GetSymbol() == 'C' for a in ring_atoms)
             
             if all_carbon:
-                # Compter liaisons doubles dans le cycle
+                # Count double bonds in the ring.
                 double_bonds = 0
                 for i in range(ring_size):
                     atom1_idx = ring[i]
@@ -176,11 +165,11 @@ def detect_annulene(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
                     if bond and bond.GetBondTypeAsDouble() == 2.0:
                         double_bonds += 1
                 
-                # Critère d'annulène: ~50% de liaisons doubles
+                # Annulene criterion: approximately 50% double bonds.
                 if double_bonds >= ring_size // 3:
                     
-                    # Déterminer aromaticité selon règle de Hückel
-                    # 4n+2 π-électrons = aromatique
+                    # Determine aromaticity using the Hückel rule.
+                    # 4n+2 pi electrons indicate aromaticity.
                     pi_electrons = double_bonds * 2
                     is_aromatic = (pi_electrons - 2) % 4 == 0
                     
@@ -198,23 +187,18 @@ def detect_annulene(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
 
 
 def detect_tropylium_system(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
-    """
-    Détecte les systèmes tropylium/cycloheptatriène.
-    
-    Returns:
-        Dict avec infos sur le système détecté
-    """
+    """Detect tropylium/cycloheptatriene systems and return a dictionary describing the match."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
-    # Chercher cycles à 7 carbones
+    # Look for seven-carbon rings.
     ring_info = mol.GetRingInfo()
     atom_rings = [ring for ring in ring_info.AtomRings() if atom_idx in ring]
     
     for ring in atom_rings:
-        if len(ring) == 7:  # Cycle à 7
+        if len(ring) == 7:  # Seven-membered ring
             ring_atoms = [mol.GetAtomWithIdx(i) for i in ring]
             
-            # Tous carbones ?
+            # Check whether every atom is carbon.
             if all(a.GetSymbol() == 'C' for a in ring_atoms):
                 
                 # Chercher charge positive (tropylium)
@@ -225,12 +209,12 @@ def detect_tropylium_system(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, 
                         'type': 'tropylium',
                         'ring_atoms': ring,
                         'formal_charge': total_charge,
-                        'aromatic': True,  # 6 π-électrons
+                        'aromatic': True,  # Six pi electrons
                         'coupling_type': 'tropylium',
                     }
                 
                 else:
-                    # Cycloheptatriène neutre - compter doubles liaisons
+                    # Count double bonds for neutral cycloheptatriene.
                     double_bonds = 0
                     for i in range(7):
                         atom1_idx = ring[i]
@@ -239,7 +223,7 @@ def detect_tropylium_system(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, 
                         if bond and bond.GetBondTypeAsDouble() == 2.0:
                             double_bonds += 1
                     
-                    if double_bonds == 3:  # Cycloheptatriène
+                    if double_bonds == 3:  # Cycloheptatriene
                         return {
                             'type': 'cycloheptatriene',
                             'ring_atoms': ring,
@@ -252,47 +236,42 @@ def detect_tropylium_system(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, 
 
 
 def detect_pentalene_system(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
-    """
-    Détecte les systèmes pentalène/heptalène (antiaromatiques).
-    
-    Returns:
-        Dict avec infos sur le système antiaromatique
-    """
+    """Detect antiaromatic pentalene/heptalene systems and return a dictionary describing the match."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
     if atom.GetSymbol() != 'C':
         return None
     
-    # Chercher systèmes bicycliques fusionnés
+    # Look for fused bicyclic systems.
     ring_info = mol.GetRingInfo()
     atom_rings = [ring for ring in ring_info.AtomRings() if atom_idx in ring]
     
-    # Pentalène: deux cycles à 5 fusionnés
+    # Pentalene: two fused five-membered rings.
     five_rings = [ring for ring in atom_rings if len(ring) == 5]
     
     if len(five_rings) >= 2:
-        # Vérifier fusion (atomes communs)
+        # Check for shared ring atoms.
         for i, ring1 in enumerate(five_rings):
             for ring2 in five_rings[i+1:]:
                 common_atoms = set(ring1) & set(ring2)
                 
-                if len(common_atoms) == 2:  # Fusion par arête
-                    # Vérifier si c'est du carbone conjugué
+                if len(common_atoms) == 2:  # Edge-fused rings
+                    # Check for conjugated carbon.
                     all_atoms = set(ring1) | set(ring2)
                     carbons = [mol.GetAtomWithIdx(i) for i in all_atoms 
                               if mol.GetAtomWithIdx(i).GetSymbol() == 'C']
                     
-                    if len(carbons) == len(all_atoms):  # Tous carbones
+                    if len(carbons) == len(all_atoms):  # All carbon atoms
                         return {
                             'type': 'pentalene',
                             'ring1': ring1,
                             'ring2': ring2,
                             'fusion_atoms': list(common_atoms),
-                            'antiaromatic': True,  # 8 π-électrons
+                            'antiaromatic': True,  # Eight pi electrons
                             'coupling_enhancement': 1.15,  # Antiaromatique
                         }
     
-    # Heptalène: cycles 5+7 ou 7+7
+    # Heptalene candidate rings: 5+7 or 7+7.
     seven_rings = [ring for ring in atom_rings if len(ring) == 7]
     
     if five_rings and seven_rings:
@@ -305,7 +284,7 @@ def detect_pentalene_system(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, 
                         'ring5': ring5,
                         'ring7': ring7,
                         'fusion_atoms': list(common_atoms),
-                        'antiaromatic': True,  # 12 π-électrons
+                        'antiaromatic': True,  # Twelve pi electrons
                         'coupling_enhancement': 1.08,
                     }
     
@@ -313,36 +292,31 @@ def detect_pentalene_system(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, 
 
 
 def detect_corannulene_fragment(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
-    """
-    Détecte les fragments corannulène/fullerène.
-    
-    Returns:
-        Dict avec infos sur la structure courbée
-    """
+    """Detect corannulene/fullerene fragments and return a dictionary describing the curved structure."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
     if not atom.GetIsAromatic():
         return None
     
-    # Compter cycles aromatiques fusionnés autour de cet atome
+    # Count fused aromatic rings around this atom.
     ring_info = mol.GetRingInfo()
     atom_rings = [ring for ring in ring_info.AtomRings() 
                   if atom_idx in ring and len(ring) <= 6]
     
-    # Corannulène typique: 5 cycles à 6 + 1 cycle à 5 central
-    if len(atom_rings) >= 3:  # Multi-fusionné
+    # Typical corannulene: five six-membered rings around a central five-membered ring.
+    if len(atom_rings) >= 3:  # Multiple fused rings
         
         ring_sizes = [len(ring) for ring in atom_rings]
         five_rings = ring_sizes.count(5)
         six_rings = ring_sizes.count(6)
         
-        # Pattern corannulène/fullerène
+        # Corannulene/fullerene pattern
         if five_rings >= 1 and six_rings >= 2:
             
-            # Vérifier courbure (approximation par densité de fusion)
-            fusion_density = len(atom_rings) / 6.0  # Normalisé
+            # Approximate curvature using ring-fusion density.
+            fusion_density = len(atom_rings) / 6.0  # Normalized
             
-            if fusion_density > 0.5:  # Fortement fusionné
+            if fusion_density > 0.5:  # Highly fused
                 return {
                     'type': 'corannulene_fragment',
                     'center_atom': atom_idx,
@@ -358,12 +332,7 @@ def detect_corannulene_fragment(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[s
 
 
 def detect_strained_cycle(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, Any]]:
-    """
-    Détecte les cycles très tendus (3, 4 membresinsaturés).
-    
-    Returns:
-        Dict avec infos sur la contrainte cyclique
-    """
+    """Detect highly strained unsaturated three- and four-membered rings. Return a dictionary describing the ring strain."""
     atom = mol.GetAtomWithIdx(atom_idx)
     
     ring_info = mol.GetRingInfo()
@@ -372,7 +341,7 @@ def detect_strained_cycle(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, An
     for ring in atom_rings:
         ring_size = len(ring)
         
-        if ring_size in [3, 4]:  # Cycles très tendus
+        if ring_size in [3, 4]:  # Highly strained rings
             
             # Compter insaturations
             double_bonds = 0
@@ -383,7 +352,7 @@ def detect_strained_cycle(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, An
                 if bond and bond.GetBondTypeAsDouble() == 2.0:
                     double_bonds += 1
             
-            if double_bonds >= 1:  # Insaturé ET tendu
+            if double_bonds >= 1:  # Unsaturated and strained
                 
                 if ring_size == 3 and double_bonds == 1:
                     return {
@@ -391,7 +360,7 @@ def detect_strained_cycle(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, An
                         'ring_atoms': ring,
                         'strain_energy': 'very_high',
                         'coupling_enhancement': 1.25,
-                        'bond_angles': 60,  # Très déformés
+                        'bond_angles': 60,  # Highly distorted
                     }
                 
                 elif ring_size == 4 and double_bonds == 1:
@@ -400,7 +369,7 @@ def detect_strained_cycle(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, An
                         'ring_atoms': ring,
                         'strain_energy': 'high',
                         'coupling_enhancement': 1.12,
-                        'bond_angles': 90,  # Déformés
+                        'bond_angles': 90,  # Distorted
                     }
     
     return None
@@ -411,16 +380,10 @@ def detect_strained_cycle(mol: Chem.Mol, atom_idx: int) -> Optional[Dict[str, An
 # =============================================================================
 
 def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
-    """
-    Calcule les couplages dans les carbocycles exotiques.
-    
-    Args:
-        mol: Molécule RDKit
-        h1_idx, h2_idx: Indices des hydrogènes
-        
-    Returns:
-        J en Hz pour carbocycles exotiques ou None
-    """
+    """Calculate couplings in unusual carbocycles.
+
+    mol is an RDKit molecule; h1_idx and h2_idx are hydrogen indices.
+    Return J in Hz for a recognized carbocycle, otherwise None."""
     if not RDKIT_AVAILABLE:
         return None
         
@@ -428,11 +391,11 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
         atom1 = mol.GetAtomWithIdx(h1_idx)
         atom2 = mol.GetAtomWithIdx(h2_idx)
         
-        # Ne traiter que les hydrogènes
+        # Only process hydrogen atoms.
         if atom1.GetSymbol() != 'H' or atom2.GetSymbol() != 'H':
             return None
         
-        # Trouver les atomes porteurs
+        # Find the atoms bearing the hydrogens.
         parent1_idx = None
         parent2_idx = None
         
@@ -456,15 +419,15 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
             
             distance = len(path) - 1
         except Exception as e:
-            # Protection contre les erreurs RDKit invariant
+            # Handle RDKit invariant errors.
             if "Invariant Violation" in str(e):
                 return None  # Ignorer silencieusement
             else:
                 raise e
         
-        # === DÉTECTION SYSTÈMES EXOTIQUES ===
+        # Detect unusual ring systems.
         
-        # 1. Annulènes
+        # Annulenes
         annulene_info = detect_annulene(mol, parent1_idx) or detect_annulene(mol, parent2_idx)
         if annulene_info:
             ring_size = annulene_info['ring_size']
@@ -479,7 +442,7 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
             elif distance == 4:  # Homoallylic  
                 return coupling_data.get('5J_homoallylic', 0.8)
         
-        # 2. Cycles tendus (plus simple et robuste)
+        # Strained rings
         strain_info = detect_strained_cycle(mol, parent1_idx) or detect_strained_cycle(mol, parent2_idx)
         if strain_info:
             strain_type = strain_info['type']
@@ -491,8 +454,8 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
                 elif strain_type == 'cyclobutene':
                     return STRAINED_CYCLES['cyclobutene_vicinal'] * enhancement
         
-        # 3. Approximation pour autres cycles exotiques
-        # Si c'est un grand cycle (≥8) avec insaturation
+        # Approximate other unusual rings.
+        # Check for an unsaturated ring with at least eight members.
         ring_info = mol.GetRingInfo()
         parent1_rings = [ring for ring in ring_info.AtomRings() if parent1_idx in ring]
         parent2_rings = [ring for ring in ring_info.AtomRings() if parent2_idx in ring]
@@ -500,12 +463,12 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
         for ring in parent1_rings:
             if len(ring) >= 8:  # Grand cycle
                 if distance == 2:
-                    return 10.5  # Couplage vicinal modifié
+                    return 10.5  # Modified vicinal coupling
         
         return None
         
     except Exception as e:
-        # Gestion d'erreur gracieuse
+        # Handle detection errors.
         print(f"Erreur dans exotic_carbocycles: {e}")
         return None
 
@@ -515,52 +478,41 @@ def get_coupling(mol: Chem.Mol, h1_idx: int, h2_idx: int) -> Optional[float]:
 # =============================================================================
 
 def calculate_ring_strain_effect(ring_size: int, bond_angles: List[float]) -> float:
-    """
-    Calcule l'effet de la contrainte cyclique sur les couplages.
-    
-    Args:
-        ring_size: Taille du cycle
-        bond_angles: Liste des angles de liaison
-        
-    Returns:
-        Facteur multiplicatif pour les couplages
-    """
-    # Angles idéaux
+    """Calculate the ring-strain correction factor for couplings.
+
+    ring_size is the number of ring atoms and bond_angles lists the bond angles.
+    Return a multiplicative coupling factor."""
+    # Ideal angles
     ideal_angles = {3: 60, 4: 90, 5: 108, 6: 120}
     ideal = ideal_angles.get(ring_size, 120)
     
-    # Écart moyen à l'idéal
+    # Mean deviation from the ideal angle
     if bond_angles:
         avg_deviation = np.mean([abs(angle - ideal) for angle in bond_angles])
-        # Plus la déformation est grande, plus les couplages sont affectés
+        # Greater distortion produces a larger coupling correction.
         enhancement = 1.0 + (avg_deviation / 100.0)  # Approximation
-        return min(enhancement, 2.0)  # Limiter à x2
+        return min(enhancement, 2.0)  # Cap the factor at two.
     
     return 1.0
 
 
 def identify_aromatic_system_type(mol: Chem.Mol, ring_atoms: List[int]) -> str:
-    """
-    Identifie le type de système aromatique selon Hückel.
-    
-    Returns:
-        'aromatic', 'antiaromatic', ou 'nonaromatic'
-    """
-    # Compter π-électrons
+    """Classify the system using the Hückel rule. Return 'aromatic', 'antiaromatic', or 'nonaromatic'."""
+    # Count pi electrons.
     pi_electrons = 0
     
     for atom_idx in ring_atoms:
         atom = mol.GetAtomWithIdx(atom_idx)
         
-        # π-électrons de l'atome
+        # Atom's pi electrons
         if atom.GetIsAromatic():
             if atom.GetSymbol() == 'C':
-                pi_electrons += 1  # Un électron π par carbone aromatique
+                pi_electrons += 1  # One pi electron per aromatic carbon
             elif atom.GetSymbol() in ['N', 'O']:
-                # Paire libre éventuelle
+                # Possible lone pair
                 pi_electrons += 2 if atom.GetTotalNumHs() == 0 else 1
     
-    # Règle de Hückel: 4n+2 = aromatique, 4n = antiaromatique
+    # Hückel rule: 4n+2 is aromatic; 4n is antiaromatic.
     if pi_electrons % 4 == 2:
         return 'aromatic'
     elif pi_electrons % 4 == 0 and pi_electrons > 0:
@@ -574,7 +526,7 @@ def identify_aromatic_system_type(mol: Chem.Mol, ring_atoms: List[int]) -> str:
 # =============================================================================
 
 def _test_exotic_carbocycles():
-    """Tests du plugin exotic_carbocycles."""
+    """Test the exotic_carbocycles plugin."""
     print("=" * 60)
     print("TEST DU PLUGIN CARBOCYCLES EXOTIQUES")
     print("=" * 60)
@@ -595,12 +547,12 @@ def _test_exotic_carbocycles():
         
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            print("  ❌ SMILES invalide")
+            print("  FAIL: Invalid SMILES")
             continue
         
         mol = Chem.AddHs(mol)
         
-        # Trouver hydrogènes
+        # Find hydrogens.
         h_atoms = [i for i, atom in enumerate(mol.GetAtoms()) 
                   if atom.GetSymbol() == 'H']
         
@@ -610,16 +562,16 @@ def _test_exotic_carbocycles():
             if J is not None:
                 diff = abs(J - expected_J)
                 if diff <= tolerance:
-                    print(f"  ✅ J = {J:.1f} Hz (attendu: {expected_J} ± {tolerance})")
+                    print(f"  PASS: J = {J:.1f} Hz (expected: {expected_J} ± {tolerance})")
                     passed += 1
                 else:
-                    print(f"  ❌ J = {J:.1f} Hz (écart: {diff:.1f})")
+                    print(f"  FAIL: J = {J:.1f} Hz (difference: {diff:.1f})")
             else:
-                print("  ⚠️ Pas de couplage exotique détecté")
+                print("  WARN: No unusual carbocycle coupling detected")
         else:
-            print("  ⚠️ Pas assez d'hydrogènes")
+            print("  WARN: Not enough hydrogens")
     
-    print(f"\n📊 Résultat: {passed}/{len(test_cases)} tests réussis")
+    print(f"\nResult: {passed}/{len(test_cases)} tests passed")
     return passed, len(test_cases)
 
 

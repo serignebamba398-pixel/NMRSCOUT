@@ -6,9 +6,6 @@ nmr_export_bg.py — Export PNG + JSON from Bruker pdata (server/frontend compat
 - 1D (1H, 13C): line plot
 - 2D (COSY, HSQC): contour/image
 
-Required orientation:
-    * F2 (horizontal) decreases left→right (ppm max on the left) — like TopSpin
-    * F1 (vertical) decreases top→bottom (e.g., -2 at top, 10 at bottom)
 """
 
 import argparse
@@ -228,7 +225,7 @@ def plot_2d(pdata_dir, out_png, meta_out,
 # ---------------- CLI ----------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--method", required=True, choices=["1H","13C","COSY","HSQC"])
+    ap.add_argument("--method", required=True, choices=["1H","13C","COSY","TOCSY","HSQC"])
     ap.add_argument("--pdata_dir", required=True)
     ap.add_argument("--out_png", required=True)
     ap.add_argument("--out_json", required=True)

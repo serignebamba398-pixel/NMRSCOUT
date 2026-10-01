@@ -1,19 +1,20 @@
 /**
- * Valeurs par défaut et constantes globales
+ * Shared default settings.
  */
 
 /**
- * Couleurs par défaut pour chaque méthode NMR
+ * Default colors for each NMR method.
  */
 export const DEFAULT_COLORS = {
   H1: { name: "Turquoise", hex: "#00B8A9", rgb: [0, 0.72, 0.66] },
   C13: { name: "Violet Profond", hex: "#3A0CA3", rgb: [0.23, 0.05, 0.64] },
   COSY: { name: "Orange Vif", hex: "#FFB000", rgb: [1, 0.69, 0] },
+  TOCSY: { name: "Vert Émeraude", hex: "#00A878", rgb: [0, 0.66, 0.47] },
   HSQC: { name: "Rose Magenta", hex: "#F72585", rgb: [0.97, 0.15, 0.52] },
 };
 
 /**
- * Wrapper pour sessionStorage avec gestion d'erreurs
+ * Session storage access with fallbacks for unavailable or invalid data.
  */
 export const sessionStorage = {
   get(key, fallback = null) {
@@ -55,7 +56,7 @@ export const sessionStorage = {
 };
 
 /**
- * Configuration des paramètres de prédiction par défaut
+ * Default prediction settings.
  */
 export const DEFAULT_PREDICTION_OPTIONS = {
   nb_cores: 2,
@@ -65,6 +66,7 @@ export const DEFAULT_PREDICTION_OPTIONS = {
     hsqc: { fold: true, fold_low: 4.8618, fold_high: 69.8395 },
   },
   cosy: { min_bonds: 2, max_bonds: 3 },
+  tocsy: { min_bonds: 2, max_bonds: 3, include_diagonal: true },
   idColumn: "id",
   smilesColumn: "smiles",
   // Experimental parameters for NMR prediction
@@ -75,7 +77,7 @@ export const DEFAULT_PREDICTION_OPTIONS = {
 };
 
 /**
- * Plages de tolérance par défaut pour l'optimisation
+ * Default tolerance ranges for optimization.
  */
 export const DEFAULT_TOLERANCE_RANGES = {
   "1H": {
@@ -88,6 +90,10 @@ export const DEFAULT_TOLERANCE_RANGES = {
     tol_correspondence_f1: { min: 0.05, max: 0.5, step: 0.1 },
     tol_correspondence_f2: { min: 0.05, max: 0.5, step: 0.1 },
   },
+  TOCSY: {
+    tol_correspondence_f1: { min: 0.05, max: 0.5, step: 0.1 },
+    tol_correspondence_f2: { min: 0.05, max: 0.5, step: 0.1 },
+  },
   HSQC: {
     tol_correspondence_f1: { min: 0.5, max: 5, step: 1 },
     tol_correspondence_f2: { min: 0.05, max: 0.5, step: 0.1 },
@@ -95,11 +101,12 @@ export const DEFAULT_TOLERANCE_RANGES = {
 };
 
 /**
- * Options de background par défaut (fenêtres PPM)
+ * Default background spectrum windows in ppm.
  */
 export const DEFAULT_BG_OPTIONS = {
   "1H": { ppm_min: -1.0, ppm_max: 12.0 },
   "13C": { ppm_min: 0.0, ppm_max: 220.0 },
   COSY: { f2_ppm_min: 0, f2_ppm_max: 10, f1_ppm_min: 0, f1_ppm_max: 10 },
+  TOCSY: { f2_ppm_min: 0, f2_ppm_max: 10, f1_ppm_min: 0, f1_ppm_max: 10 },
   HSQC: { f2_ppm_min: 0, f2_ppm_max: 10, f1_ppm_min: 0, f1_ppm_max: 220 },
 };

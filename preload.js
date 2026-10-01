@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 console.log('[Preload] preload.js loaded');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  // Gestion des projets (style Sirius)
+  // Project management.
   createProject: async () => { console.log('[Preload] createProject invoked'); return await ipcRenderer.invoke('create-project'); },
   openProject: async () => { console.log('[Preload] openProject invoked'); return await ipcRenderer.invoke('open-project'); },
   saveProjectState: async (state) => { console.log('[Preload] saveProjectState invoked'); return await ipcRenderer.invoke('save-project-state', state); },
@@ -13,10 +13,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLastProject: async () => { console.log('[Preload] getLastProject invoked'); return await ipcRenderer.invoke('get-last-project'); },
   closeProject: async () => { console.log('[Preload] closeProject invoked'); return await ipcRenderer.invoke('close-project'); },
   
-  // Sélection de dossier
+  // Directory selection.
   selectDirectory: async () => { console.log('[Preload] selectDirectory invoked'); return await ipcRenderer.invoke('select-directory'); },
   
-  // Chemins système
+  // System paths.
   getUserDataPath: async () => { console.log('[Preload] getUserDataPath invoked'); return await ipcRenderer.invoke('get-user-data-path'); },
   getDocumentsPath: async () => { console.log('[Preload] getDocumentsPath invoked'); return await ipcRenderer.invoke('get-documents-path'); },
 
@@ -26,11 +26,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return await ipcRenderer.invoke('export-logs', { rendererLogs });
   },
   
-  // Événements
+  // Events.
   onBackendReady: (callback) => ipcRenderer.on('backend-ready', (event, data) => callback(data)),
   onBackendError: (callback) => ipcRenderer.on('backend-error', (event, data) => callback(data)),
   
-  // Vérifier si on est dans Electron
+  // Expose the Electron runtime flag.
   isElectron: true,
 });
 

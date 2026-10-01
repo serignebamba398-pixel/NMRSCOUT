@@ -1,5 +1,5 @@
 // src/constants/colors.js
-// Palette de couleurs et constantes visuelles pour l'application NMR
+// NMR display colors and layout constants.
 
 export const COLOR_OPTIONS = [
   // === BLEUS ===
@@ -97,31 +97,34 @@ export const COLOR_OPTIONS = [
   { name: "Violet Profond", hex: "#3A0CA3", rgb: [0.23, 0.05, 0.64] },
 ];
 
-// Couleurs par défaut par méthode (couleurs distinctes et bien visibles)
+// Default colors for each method.
 export const DEFAULT_COLORS = {
   H1: COLOR_OPTIONS.find(c => c.name === "Bleu Océan"),
   C13: COLOR_OPTIONS.find(c => c.name === "Violet Profond"),
   COSY: COLOR_OPTIONS.find(c => c.name === "Orange Vif"),
+  TOCSY: COLOR_OPTIONS.find(c => c.name === "Vert Pomme"),
   HSQC: COLOR_OPTIONS.find(c => c.name === "Rose Magenta"),
 };
 
-// Labels affichés pour les méthodes (H1, C13, ...)
+// Display labels for method identifiers (H1, C13, ...).
 export const METHOD_LABELS_SHORT = {
   H1: "¹H",
   C13: "¹³C",
   COSY: "COSY",
+  TOCSY: "TOCSY",
   HSQC: "HSQC",
 };
 
-// Labels affichés pour les types de spectres (1H, 13C, ...)
+// Display labels for spectrum types (1H, 13C, ...).
 export const TYPE_LABELS = {
   "1H": "¹H",
   "13C": "¹³C",
   COSY: "COSY",
+  TOCSY: "TOCSY",
   HSQC: "HSQC",
 };
 
-// Constantes de style
+// Style constants
 export const COLOR_THEORY = "#2563eb";
 export const COLOR_EXP = "#ef4444";
 export const BG = "#ffffff";

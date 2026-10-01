@@ -1,3 +1,5 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
+import { TocsyPredictionFields } from './TocsyPredictionFields';
 import React from 'react';
 import { FileUpload, ParameterInput } from '../common';
 import { formatFileSize } from '../../utils';
@@ -188,7 +190,7 @@ export const PredictionForm = ({
       <div className="card">
         <h3>Prediction methods to run</h3>
         <div className="parameters-grid">
-          {["1H", "13C", "COSY", "HSQC"].map((m) => {
+          {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((m) => {
             const checked = selectedPredMethods.includes(m);
             return (
               <label
@@ -274,6 +276,21 @@ export const PredictionForm = ({
                 disabled={running}
               />
             </div>
+          </>
+        )}
+
+        {/* TOCSY Parameters */}
+        {isMethodAvailable("TOCSY") && selectedPredMethods.includes("TOCSY") && (
+          <>
+            <h4 style={{ marginTop: 12 }}>TOCSY Parameters</h4>
+            <TocsyPredictionFields
+              options={options.tocsy}
+              disabled={running}
+              onChange={(key, value) => setPredictionState(prev => ({
+                ...prev,
+                options: { ...prev.options, tocsy: { ...(prev.options.tocsy || {}), [key]: value } },
+              }))}
+            />
           </>
         )}
 

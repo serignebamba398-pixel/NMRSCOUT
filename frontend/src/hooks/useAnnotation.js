@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../constants/releaseFeatures';
 import { useState, useRef, useCallback } from 'react';
 import { 
   getPredictionTasks, 
@@ -120,7 +121,7 @@ export const useAnnotation = ({
    */
   const runSelectedIntegrated = useCallback(async () => {
     const types = annotationState.selectedMethods.filter((t) =>
-      canRunAnnotation(t)
+      isMethodAvailable(t) && canRunAnnotation(t)
     );
 
     if (types.length === 0) {
@@ -141,7 +142,7 @@ export const useAnnotation = ({
     }));
     setShowLogs(true);
 
-    // ===== NEW EXACT PROGRESSION LOGIC =====
+    // Annotation progress tracking.
     // Total = nb_molecules × nb_methods
     // Each completed annotation = +1
     // Progression = (counter / total) × 100
@@ -190,7 +191,7 @@ export const useAnnotation = ({
     updateGlobalProgress('Initializing…');
 
     // ===== PHASE 0 : EXPORT BACKGROUNDS (no progression, just log) =====
-    addLog("🎨 Exporting spectral backgrounds (grouped with automatic retry)...");
+    addLog("Exporting spectral backgrounds (grouped with automatic retry)...");
 
     const bgResults = {};
 
@@ -243,6 +244,7 @@ export const useAnnotation = ({
           oneH: bgOptionsForExport["1H"] || {},
           c13: bgOptionsForExport["13C"] || {},
           cosy: bgOptionsForExport["COSY"] || {},
+          tocsy: bgOptionsForExport["TOCSY"] || {},
           hsqc: bgOptionsForExport["HSQC"] || {},
         };
 
@@ -474,7 +476,12 @@ export const useAnnotation = ({
       setUiLock({ lockedBy: null, message: "" });
     }
 
-    addLog('[OK] Workflow completed');
+    const failedResults = results.filter(r => !r?.success || !r?.downloadUrl);
+    if (failedResults.length > 0) {
+      addLog(`[ERROR] Workflow completed with ${failedResults.length} failed annotation(s): ${failedResults.map(r => r?.type || 'unknown').join(', ')}`, 'error');
+    } else {
+      addLog('[OK] Workflow completed');
+    }
   }, [
     annotationState,
     setAnnotationState,

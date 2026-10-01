@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../../constants/releaseFeatures';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAppState } from '../../contexts/AppStateContext';
 import { LockOverlay, ProgressBar, ParameterInput } from '../common';
@@ -40,7 +41,7 @@ export const ToleranceOptimizationInterface = ({ inModal = false, onClose }) => 
 
   const dimmed = uiLock.lockedBy === "PRED" || uiLock.lockedBy === "ANNO";
 
-  // Clés de tolérance à masquer des paramètres
+  // Tolerance fields hidden from the parameter controls.
   const toleranceKeysByType = {
     "1H": ["tol_correspondence", "tol_correspondance", "tol_match"],
     "13C": ["tol_correspondence", "tol_correspondance", "tol_match"],
@@ -137,7 +138,7 @@ export const ToleranceOptimizationInterface = ({ inModal = false, onClose }) => 
   const renderCsvStatus = () => {
     if (!annotationState.selectedTask) return null;
     const csvMap = selectedTaskData?.csvFiles || {};
-    const order = ["1H", "13C", "COSY", "HSQC"];
+    const order = ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable);
     return (
       <div className="csv-status">
         {order.map((t) => {
@@ -169,7 +170,7 @@ export const ToleranceOptimizationInterface = ({ inModal = false, onClose }) => 
     return (
       <div className="tolerance-interface">
         <div className="warning-box">
-          <span className="warning-icon">⚠️</span>
+          <span className="warning-icon" aria-hidden="true">!</span>
           <div>
             <h3 className="warning-title">No project open</h3>
             <p className="warning-text">
@@ -200,7 +201,7 @@ export const ToleranceOptimizationInterface = ({ inModal = false, onClose }) => 
       </div>
 
       <div className="info-box">
-        💡 <strong>Note:</strong> This interface runs annotations with different
+        <strong>Note:</strong> This interface runs annotations with different
         tolerance values to generate optimization curves. The{" "}
         <code>tol_match</code> parameters will automatically follow the{" "}
         <code>tol_correspondence</code> values.
@@ -251,7 +252,7 @@ export const ToleranceOptimizationInterface = ({ inModal = false, onClose }) => 
       <div className="type-selector">
         <h3>Method to Optimize</h3>
         <div className="type-tabs">
-          {["1H", "13C", "COSY", "HSQC"].map((t) => {
+          {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((t) => {
             const available = hasCsvForMethod(t);
             return (
               <button
@@ -374,7 +375,7 @@ export const ToleranceOptimizationInterface = ({ inModal = false, onClose }) => 
       {/* Test results */}
       {toleranceResults && toleranceResults.length > 0 && (
         <div className="all-tolerance-results">
-          {toleranceResults.map((resultSet) => (
+          {toleranceResults.filter(result => isMethodAvailable(result.type)).map((resultSet) => (
             <div key={resultSet.id} className="tolerance-result-section">
               {/* Summary table */}
               <ToleranceSummaryTable resultSet={resultSet} />

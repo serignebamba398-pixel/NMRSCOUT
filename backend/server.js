@@ -74,7 +74,7 @@ const spectralBgRoutes = require('./routes/spectralBg');
 const cleanupRoutes = require('./routes/cleanup');
 const pathNormalizeRoutes = require('./routes/pathNormalize');
 const projectRoutes = require('./routes/projects');
-const spectrumRoutes = require('./routes/spectrum');  // Simulation de spectre 1H
+const spectrumRoutes = require('./routes/spectrum');  // 1H spectrum simulation
 
 const shouldServeFrontend = process.env.SERVE_FRONTEND === 'true';
 const frontendBuildDir =
@@ -141,7 +141,7 @@ app.use(spectralBgRoutes);
 app.use(cleanupRoutes);
 app.use(pathNormalizeRoutes);
 app.use(projectRoutes);
-app.use(spectrumRoutes);  // Simulation de spectre 1H
+app.use(spectrumRoutes);  // 1H spectrum simulation
 
 // In packaged/Electron mode, serve the React build from the backend so the renderer can load via http://
 if (shouldServeFrontend && fs.existsSync(frontendBuildDir)) {
@@ -162,7 +162,7 @@ const server = app.listen(PORT, () => {
     `Endpoints: /api/run-annotation, /api/run-annotation-from-prediction, /api/predict/start, /api/prediction-tasks, /api/tasks/:taskId/cancel, /api/diagnostic, /health, /api/files, /api/tasks, /api/cleanup, /api/download/:taskId/:filename, /api/inspect/:taskId, /api/spectral-bg/export, /api/spectral-bg/zoom, /api/spectral-bg/relevel, /api/spectral-bg/interact, /api/path/normalize (+ alias /path/normalize)`
   );
   
-  // ✅ PERSISTENCE: Initialiser le système de persistance des tâches au démarrage
+  // Initialize persisted task state at startup.
   try {
     const { initializeOnStartup } = require('./services/taskPersistence');
     initializeOnStartup();

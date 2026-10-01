@@ -1,8 +1,8 @@
 /**
  * Sleep Prevention Utility
  * 
- * Empêche Windows de se mettre en veille pendant les tâches longues.
- * Utilise PowerShell pour maintenir le système éveillé.
+ * Keep Windows awake during long-running tasks.
+ * Request wakefulness through PowerShell.
  */
 
 const { exec, spawn } = require('child_process');
@@ -12,9 +12,9 @@ let preventSleepProcess = null;
 let activeTaskCount = 0;
 
 /**
- * Script PowerShell pour empêcher la mise en veille
- * Utilise SetThreadExecutionState pour signaler à Windows
- * que le système doit rester éveillé
+ * PowerShell script for sleep prevention.
+ * Use SetThreadExecutionState to tell Windows
+ * to keep the system awake.
  */
 const PREVENT_SLEEP_SCRIPT = `
 Add-Type -TypeDefinition @"
@@ -38,21 +38,21 @@ public class SleepPreventer {
 }
 "@
 
-# Empêcher la veille
+# Prevent sleep.
 [SleepPreventer]::PreventSleep()
 Write-Host "Sleep prevention ENABLED"
 
-# Attendre jusqu'à ce que le processus soit tué
+# Wait until the process is terminated.
 while ($true) {
     Start-Sleep -Seconds 60
-    # Rafraîchir le signal toutes les minutes
+    # Refresh the signal every minute.
     [SleepPreventer]::PreventSleep()
 }
 `;
 
 /**
- * Démarre la prévention de mise en veille
- * Appelé quand une tâche longue démarre
+ * Start sleep prevention.
+ * Called when a long-running task starts.
  */
 function startPreventSleep(taskId) {
     if (process.platform !== 'win32') {
@@ -64,7 +64,7 @@ function startPreventSleep(taskId) {
     logWithMemory(`[${taskId}] Task started - active tasks: ${activeTaskCount}`, 'DEBUG');
 
     if (preventSleepProcess) {
-        // Déjà en cours
+        // Already active.
         logWithMemory(`[${taskId}] Sleep prevention already active`, 'DEBUG');
         return;
     }
@@ -101,8 +101,8 @@ function startPreventSleep(taskId) {
 }
 
 /**
- * Arrête la prévention de mise en veille
- * Appelé quand une tâche longue se termine
+ * Stop sleep prevention.
+ * Called when a long-running task ends.
  */
 function stopPreventSleep(taskId) {
     if (process.platform !== 'win32') {
@@ -113,7 +113,7 @@ function stopPreventSleep(taskId) {
     logWithMemory(`[${taskId}] Task finished - active tasks: ${activeTaskCount}`, 'DEBUG');
 
     if (activeTaskCount > 0) {
-        // D'autres tâches en cours
+        // Other tasks still need sleep prevention.
         logWithMemory(`[${taskId}] Other tasks still running, keeping sleep prevention`, 'DEBUG');
         return;
     }
@@ -128,12 +128,12 @@ function stopPreventSleep(taskId) {
         preventSleepProcess = null;
     }
 
-    // Réactiver explicitement la possibilité de veille
+    // Release the system wakefulness request.
     exec('powershell.exe -NoProfile -Command "[SleepPreventer]::AllowSleep()" 2>$null', () => {});
 }
 
 /**
- * Force l'arrêt de la prévention (cleanup)
+ * Force cleanup of sleep prevention.
  */
 function forceStopPreventSleep() {
     activeTaskCount = 0;
@@ -146,7 +146,7 @@ function forceStopPreventSleep() {
 }
 
 /**
- * Vérifie si la prévention est active
+ * Check whether sleep prevention is active.
  */
 function isPreventingSleep() {
     return preventSleepProcess !== null && activeTaskCount > 0;

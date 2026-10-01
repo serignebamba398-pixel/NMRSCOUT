@@ -1,12 +1,11 @@
+import { isMethodAvailable } from './constants/releaseFeatures';
 // src/api.js
 import axios from "axios";
 
 // Electron mode detection via window.electronAPI (exposed by preload.js)
 const IS_ELECTRON = window.electronAPI?.isElectron === true;
 
-/* ============================================================================
-   [NEW] BACKEND READINESS CHECK (for Electron)
-   ============================================================================ */
+/*   BACKEND READINESS CHECK (for Electron)*/
 
 let backendReadyPromise = null;
 let isBackendReady = false;
@@ -83,7 +82,7 @@ const RAW_BASE = IS_ELECTRON
 
 let API_BASE_URL = (RAW_BASE === "" ? "/api" : RAW_BASE).replace(/\/+$/, "");
 
-// Automatic fix for /api/api duplication
+// Normalize duplicate /api prefixes.
 if (API_BASE_URL.includes("/api/api")) {
   API_BASE_URL = API_BASE_URL.replace(/\/api\/api/g, "/api");
   console.warn("[WARN] Double /api/ detected and auto-corrected");
@@ -106,9 +105,7 @@ export const DEFAULT_PERSIST_KEY = process.env.REACT_APP_PERSIST_KEY || "fronten
 const api = axios.create({ baseURL: API_BASE_URL, timeout: 0 });
 
 
-/* ============================================================================
-   GENERAL UTILITIES
-   ============================================================================ */
+/*   GENERAL UTILITIES*/
 export const downloadBlob = (blob, filename) => {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -134,9 +131,7 @@ const coerceTransparent = (v) =>
   : (Number(v) === 0 || Number(v) === 1) ? Number(v)
   : undefined;
 
-/* ============================================================================
-   [NEW] RETRY MECHANISM (to handle 503 errors)
-   ============================================================================ */
+/*   RETRY MECHANISM (to handle 503 errors)*/
 
 /**
  * Async wait
@@ -181,9 +176,7 @@ export async function withRetry503(fn, { retries = 3, base = 600, factor = 1.8 }
   }
 }
 
-/* ============================================================================
-   [NEW] FETCH WITH TIMEOUT (for Electron)
-   ============================================================================ */
+/*   FETCH WITH TIMEOUT (for Electron)*/
 
 /**
  * Fetch with timeout to prevent hanging requests in Electron
@@ -232,7 +225,7 @@ export async function normalizeServerPath(rawPath) {
 }
 
 // === 13C carbon modes =======================================================
-// IMPORTANT: backend expects 'all' or 'nonquaternary'
+// The backend accepts 'all' or 'nonquaternary'.
 export const CARBON_MODES = {
   NON_QUATERNARY: 'nonquaternary',
   ALL: 'all',
@@ -259,7 +252,7 @@ export const getPredictionTaskWithAnnotations = async (taskId) => {
   
   // Build paths to "latest" annotation files
   const annotationResults = {};
-  for (const type of ["1H", "13C", "COSY", "HSQC"]) {
+  for (const type of ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable)) {
     const latestPath = `/outputs/${taskId}/annotations/annotation_${type}_latest.csv`;
     annotationResults[type] = latestPath;
   }
@@ -330,9 +323,7 @@ export const with13CAllCarbons = (options = {}) => ({
 });
 
 
-/* ============================================================================
-   PARAMS HELPERS
-   ============================================================================ */
+/*   PARAMS HELPERS*/
 const clampInt = (v, min, max) => {
   const n = Number(v);
   if (!Number.isFinite(n)) return null;
@@ -358,9 +349,7 @@ const sanitizeParameters = (params = {}) => {
   return out;
 };
 
-/* ============================================================================
-   [NEW] HELPER: NETWORK ERROR FORMATTING
-   ============================================================================ */
+/*   HELPER: NETWORK ERROR FORMATTING*/
 const formatNetworkError = (error, context = "") => {
   const status = error?.response?.status;
   const url = error?.config?.url || "";
@@ -388,7 +377,7 @@ const formatNetworkError = (error, context = "") => {
   }
   
   if (error?.code === "ECONNABORTED" || error?.message?.includes("timeout")) {
-    return `⏱️ Timeout: Request took too long\n` +
+    return `Timeout: Request took too long\n` +
            `Check your connection or retry.`;
   }
   
@@ -400,9 +389,7 @@ const formatNetworkError = (error, context = "") => {
   return `[ERROR] Error ${context}: ${msg}`;
 };
 
-/* ============================================================================
-   FILES (upload / listing / delete)
-   ============================================================================ */
+/*   FILES (upload / listing / delete)*/
 export const uploadFile = async (file) => {
   const formData = new FormData();
   formData.append("file", file);
@@ -435,9 +422,8 @@ export const downloadFile = async (taskId, filename) => {
 };
 
 
-/* === NEW =====================================================================
-   LIST OF ALREADY UPLOADED FILES (to select without re-uploading)
-   ========================================================================== */
+/* 
+   LIST OF ALREADY UPLOADED FILES (to select without re-uploading)*/
 const _inferKindByName = (name = "") => {
   const n = String(name).toLowerCase();
   if (n.endsWith(".csv")) return "csv";
@@ -497,7 +483,7 @@ export async function listUploads(kind) {
         (a, b) => new Date(b.mtime || 0) - new Date(a.mtime || 0)
       );
     }
-    // [NEW] LOG IF 404 (missing endpoint, normal fallback)
+    // LOG IF 404 (missing endpoint, normal fallback)
     if (r.status === 404) {
     }
   } catch (e) {
@@ -518,9 +504,7 @@ export async function listUploads(kind) {
   }
 }
 
-/* ============================================================================
-   SSE HELPERS (POST streaming recommended)
-   ============================================================================ */
+/*   SSE HELPERS (POST streaming recommended)*/
 const normalizeProgress = (msg) => {
   let p = Number(msg?.percent);
   if (!Number.isFinite(p)) {
@@ -537,7 +521,7 @@ const normalizeProgress = (msg) => {
 };
 
 // POST (streaming fetch) — cancellable via .cancel() and .cancelTask()
-// IMPORTANT: this must NOT be `async`, otherwise the returned Promise would be wrapped
+// Keep this function synchronous to preserve the identity of the returned Promise
 // and we'd lose custom methods/properties (cancel/cancelTask/getTaskId).
 const createPostSSEConnection = (
   url,
@@ -566,7 +550,7 @@ const createPostSSEConnection = (
       if (!response.ok) {
         const errorText = await response.text().catch(() => "");
         
-        // [NEW] IMPROVED HTTP ERROR HANDLING
+        // HTTP error handling
         let userMessage = "";
         
         if (response.status === 503) {
@@ -755,9 +739,7 @@ const _wrapCancelableWith404Fallback = (primary, fallbackFactory, onLog) => {
   return wrapped;
 };
 
-/* ============================================================================
-   TASK CANCELLATION (NEW)
-   ============================================================================ */
+/*   Task cancellation*/
 /**
  * Cancels a task server-side by killing the R/Python process
  * @param {string} taskId - ID of the task to cancel
@@ -779,9 +761,7 @@ export const cancelTask = async (taskId) => {
   }
 };
 
-/* ============================================================================
-   R ANNOTATIONS — MAIN API
-   ============================================================================ */
+/*   R ANNOTATIONS — MAIN API*/
 export const runAnnotationPost = (
   tableauFile,
   matrixFile,
@@ -792,6 +772,7 @@ export const runAnnotationPost = (
   onError,
   onComplete
 ) => {
+  if (!isMethodAvailable(annotationType)) throw new Error('Selected method is unavailable in this version.');
   const url = `${API_BASE_URL}/run-annotation`;
   const cleanParams = sanitizeParameters(parameters);
   const body = {
@@ -816,9 +797,9 @@ export const runAnnotationValidated = async (
   if (!tableauFile || !matrixFile) {
     throw new Error("Table and matrix files are required");
   }
-  if (!["1H", "13C", "COSY", "HSQC"].includes(annotationType)) {
+  if (!["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).includes(annotationType)) {
     throw new Error(
-      "Unsupported annotation type. Use: 1H, 13C, COSY, HSQC"
+      "Unsupported annotation type for this version."
     );
   }
   const cleanParams = sanitizeParameters(parameters);
@@ -975,9 +956,7 @@ export const runAnnotationHSQC = (
   );
 };
 
-/* ============================================================================
-   TASKS / DIAGNOSTIC / HEALTH
-   ============================================================================ */
+/*   TASKS / DIAGNOSTIC / HEALTH*/
 export const getTasks = async () => {
   try {
     const direct = await api.get("/tasks");
@@ -1047,9 +1026,7 @@ export const getTaskParams = async (taskId) => {
   }
 };
 
-/* ============================================================================
-   ANNOTATION UTILITIES
-   ============================================================================ */
+/*   ANNOTATION UTILITIES*/
 export const validateAnnotationFiles = async (tableauFile, matrixFile) => {
   try {
     const files = await getFiles();
@@ -1068,13 +1045,13 @@ export const validateAnnotationFiles = async (tableauFile, matrixFile) => {
   }
 };
 
-/* === NEW =====================================================================
-   Strict detection & short labels for prediction CSV
-   ========================================================================== */
+/* 
+   Strict detection & short labels for prediction CSV*/
 const CSV_PATTERNS = {
   "1H": /(^|\/)prediction_1H_.*\.csv$/i,
   "13C": /(^|\/)prediction_13C_.*\.csv$/i,
   COSY: /(^|\/)prediction_COSY_.*\.csv$/i,
+  TOCSY: /(^|\/)prediction_TOCSY_.*\.csv$/i,
   HSQC: /(^|\/)prediction_HSQC_.*\.csv$/i,
 };
 
@@ -1088,13 +1065,14 @@ export const shortCsvLabel = (filename) => {
   if (CSV_PATTERNS["1H"].test(filename)) return "prediction_1H";
   if (CSV_PATTERNS["13C"].test(filename)) return "prediction_13C";
   if (CSV_PATTERNS.COSY.test(filename)) return "prediction_COSY";
+  if (CSV_PATTERNS.TOCSY.test(filename)) return "prediction_TOCSY";
   if (CSV_PATTERNS.HSQC.test(filename)) return "prediction_HSQC";
   return filename; // fallback
 };
 
 const filterValidCsvFiles = (csvFiles = {}) => {
   const out = {};
-  for (const type of ["1H", "13C", "COSY", "HSQC"]) {
+  for (const type of ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable)) {
     const f = csvFiles[type];
     if (isValidCsvForType(f, type)) out[type] = f;
   }
@@ -1127,6 +1105,14 @@ export const getAnnotationTypes = () => [
     dimensions: 2,
   },
   {
+    key: "TOCSY",
+    name: "TOCSY 2D",
+    description: "2D TOCSY NMR annotation (1H-1H)",
+    expectedOutput: "TOCSY_With_Ransy_and_ECFP4.csv",
+    tolerances: { F1: 0.2, F2: 0.2 },
+    dimensions: 2,
+  },
+  {
     key: "HSQC",
     name: "HSQC 2D",
     description: "2D HSQC NMR annotation (13C-1H)",
@@ -1134,7 +1120,7 @@ export const getAnnotationTypes = () => [
     tolerances: { F1: 4, F2: 0.2 },
     dimensions: 2,
   },
-];
+].filter(type => isMethodAvailable(type.key));
 
 export const getDefaultParameters = (annotationType) =>
   ({
@@ -1179,6 +1165,21 @@ export const getDefaultParameters = (annotationType) =>
       max_missing_ransy: 50,
       nb_cores: 4,
     },
+    TOCSY: {
+      tol_correspondance_F1: 0.2,
+      tol_correspondance_F2: 0.2,
+      tol_match_F1: 0.2,
+      tol_match_F2: 0.2,
+      correlation_threshold: 0.8,
+      correlation_method: "pearson",
+      ratio_min: 0.01,
+      ransy_cv_threshold: 0.15,
+      coverage_threshold_group: 0,
+      coverage_threshold_subchain: 0,
+      coverage_threshold_ransy: 0,
+      max_missing_ransy: 50,
+      nb_cores: 4,
+    },
     HSQC: {
       tol_correspondance_F1: 4,
       tol_correspondance_F2: 0.2,
@@ -1196,9 +1197,7 @@ export const getDefaultParameters = (annotationType) =>
     },
   }[annotationType] || {});
 
-/* ============================================================================
-   PREDICTIONS (SMILES/CSV → SDF + tables 1H/13C/COSY/HSQC)
-   ============================================================================ */
+/*  PREDICTIONS (SMILES/CSV → SDF + tables 1H/13C/COSY/TOCSY/HSQC)*/
 const DEFAULT_PREDICT_OPTIONS = { run_extractors: true };
 
 const sanitizePredictOptions = (opts = {}) => {
@@ -1308,7 +1307,7 @@ const sanitizePredictOptions = (opts = {}) => {
 
 export const runPredictionFromSmiles = (
   smiles,
-  { molId = "mol", methods = ["1H", "13C", "COSY", "HSQC"], methodOptions = {}, global = {} } = {},
+  { molId = "mol", methods = ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable), methodOptions = {}, global = {} } = {},
   onProgress,
   onLog,
   onError,
@@ -1317,7 +1316,7 @@ export const runPredictionFromSmiles = (
   const body = {
     mode: "SMILES",
     smiles,
-    methods,
+    methods: methods.filter(isMethodAvailable),
     options: sanitizePredictOptions({
       ...DEFAULT_PREDICT_OPTIONS,
       ...global,
@@ -1373,7 +1372,7 @@ export const runPredictionFromSmiles = (
 
 export const runPredictionFromCSV = (
   csvFile,
-  { idColumn, smilesColumn, methods = ["1H", "13C", "COSY", "HSQC"], methodOptions = {}, global = {}, resumeFromDir = null } = {},
+  { idColumn, smilesColumn, methods = ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable), methodOptions = {}, global = {}, resumeFromDir = null } = {},
   onProgress,
   onLog,
   onError,
@@ -1383,7 +1382,7 @@ export const runPredictionFromCSV = (
     mode: "CSV",
     source: "csv",
     csvFile,
-    methods,
+    methods: methods.filter(isMethodAvailable),
     options: sanitizePredictOptions({
       ...DEFAULT_PREDICT_OPTIONS,
       ...global,
@@ -1455,9 +1454,7 @@ export const getPredictionResult = async () => {
   throw new Error("getPredictionResult not supported: server-side REST endpoint unavailable");
 };
 
-/* ============================================================================
-   INTEGRATED WORKFLOW: PRED TASK LIST + ANNOTATION FROM PRED CSV
-   ============================================================================ */
+/*   INTEGRATED WORKFLOW: PRED TASK LIST + ANNOTATION FROM PRED CSV*/
 export const getPredictionTasks = async () => {
   try {
     const res = await fetchWithTimeout(`${API_BASE_URL}/prediction-tasks`, {}, 8000);
@@ -1483,6 +1480,7 @@ export const runAnnotationFromPrediction = (
   onError,
   onComplete
 ) => {
+  if (!isMethodAvailable(annotationType)) throw new Error('Selected method is unavailable in this version.');
   const url = `${API_BASE_URL}/run-annotation-from-prediction`;
   const body = {
     predictionTaskId,
@@ -1495,7 +1493,7 @@ export const runAnnotationFromPrediction = (
 
 export const validatePredictionTask = async (
   taskId,
-  requiredTypes = ["1H", "13C", "COSY", "HSQC"]
+  requiredTypes = ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable)
 ) => {
   try {
     const tasks = await getPredictionTasks();
@@ -1732,7 +1730,7 @@ export const checkPredictionAnnotationCompatibility = (task, annotationType) => 
 export const getPredictionTasksSummary = async () => {
   const tasks = await getPredictionTasks();
 
-  const byType = { "1H": 0, "13C": 0, COSY: 0, HSQC: 0 };
+  const byType = { "1H": 0, "13C": 0, COSY: 0, TOCSY: 0, HSQC: 0 };
   const usableForAnnotations = tasks.filter((t) => {
     const valid = filterValidCsvFiles(t.csvFiles || {});
     Object.keys(valid).forEach((k) => (byType[k] = (byType[k] || 0) + 1));
@@ -1767,7 +1765,7 @@ export const runPredictionFromSmilesWithAnnotations = (
   onError,
   onComplete
 ) => {
-  // IMPORTANT: pass options in "global" (not "options")
+  // The backend expects these settings in the "global" field.
   const enhancedGlobal = { ...options, run_extractors: true };
 
   return runPredictionFromSmiles(
@@ -1781,7 +1779,7 @@ export const runPredictionFromSmilesWithAnnotations = (
         const enhancedResult = {
           ...result,
           annotationReady: true,
-          availableAnnotationTypes: ["1H", "13C", "COSY", "HSQC"],
+          availableAnnotationTypes: ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable),
         };
         onComplete(enhancedResult);
       } else {
@@ -1799,7 +1797,7 @@ export const runPredictionFromCSVWithAnnotations = (
   onError,
   onComplete
 ) => {
-  // IMPORTANT: pass options in "global" (not "options")
+  // The backend expects these settings in the "global" field.
   const enhancedGlobal = { ...options, run_extractors: true };
 
   return runPredictionFromCSV(
@@ -1813,7 +1811,7 @@ export const runPredictionFromCSVWithAnnotations = (
         const enhancedResult = {
           ...result,
           annotationReady: true,
-          availableAnnotationTypes: ["1H", "13C", "COSY", "HSQC"],
+          availableAnnotationTypes: ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable),
         };
         onComplete(enhancedResult);
       } else {
@@ -1823,9 +1821,7 @@ export const runPredictionFromCSVWithAnnotations = (
   );
 };
 
-/* ============================================================================
-   >>> NEW: EXPORT BACKGROUNDS (PNG + JSON) FROM BRUKER PDATA
-   ============================================================================ */
+/*   >>> EXPORT BACKGROUNDS (PNG + JSON) FROM BRUKER PDATA*/
 
 const withPersist = (body, { persistKey = DEFAULT_PERSIST_KEY, overwrite = true } = {}) => ({
   ...body,
@@ -1947,15 +1943,13 @@ export const exportBgHSQC = async (pdataDirHSQC, opts = {}, extra = {}) =>
     extra
   );
 
-/* ============================================================================
-   [NEW] GROUPED EXPORTS WITH AUTOMATIC RETRY
-   ============================================================================ */
+/*   GROUPED EXPORTS WITH AUTOMATIC RETRY*/
 
 /**
  * Grouped export of all spectral backgrounds with automatic retry on 503
  * 
- * @param {Object} pdataPaths - Spectrum paths { "1H": "/path/...", "13C": "...", "COSY": "...", "HSQC": "..." }
- * @param {Object} options - Options for each method { oneH: {...}, c13: {...}, cosy: {...}, hsqc: {...} }
+ * @param {Object} pdataPaths - Spectrum paths { "1H": "/path/...", "13C": "...", "COSY": "...", "TOCSY": "...", "HSQC": "..." }
+ * @param {Object} options - Options for each method { oneH: {...}, c13: {...}, cosy: {...}, tocsy: {...}, hsqc: {...} }
  * @param {Object} extra - Additional options { persistKey, overwrite }
  * @returns {Promise<Object>} Results with taskId and outputs
  * 
@@ -1979,7 +1973,7 @@ export async function exportAllSpectralBackgroundsWithRetry(
 ) {
   // Filter methods that have a valid path
   const methods = Object.keys(pdataPaths).filter(
-    method => pdataPaths[method] && typeof pdataPaths[method] === 'string'
+    method => isMethodAvailable(method) && pdataPaths[method] && typeof pdataPaths[method] === 'string'
   );
   
   if (methods.length === 0) {
@@ -1988,7 +1982,7 @@ export async function exportAllSpectralBackgroundsWithRetry(
   
   console.log(`[INFO] Grouped export of ${methods.length} spectra: ${methods.join(', ')}`);
   
-  // Appel unique avec retry automatique
+  // Make one request with automatic retries.
   return withRetry503(
     () => exportSpectralBackgrounds(
       {
@@ -2007,6 +2001,14 @@ export async function exportAllSpectralBackgroundsWithRetry(
               level_start: 0.005, 
               ...(options.cosy || {}) 
             } 
+          } : {}),
+
+          // Options TOCSY
+          ...(pdataPaths["TOCSY"] ? {
+            tocsy: {
+              level_start: 0.005,
+              ...(options.tocsy || {})
+            }
           } : {}),
           
           // Options HSQC
@@ -2034,7 +2036,7 @@ export async function exportAllSpectralBackgrounds(
   extra = {}
 ) {
   const methods = Object.keys(pdataPaths).filter(
-    method => pdataPaths[method] && typeof pdataPaths[method] === 'string'
+    method => isMethodAvailable(method) && pdataPaths[method] && typeof pdataPaths[method] === 'string'
   );
   
   if (methods.length === 0) {
@@ -2049,6 +2051,7 @@ export async function exportAllSpectralBackgrounds(
         ...(pdataPaths["1H"] ? { oneH: options.oneH || {} } : {}),
         ...(pdataPaths["13C"] ? { c13: options.c13 || {} } : {}),
         ...(pdataPaths["COSY"] ? { cosy: { level_start: 0.005, ...(options.cosy || {}) } } : {}),
+        ...(pdataPaths["TOCSY"] ? { tocsy: { level_start: 0.005, ...(options.tocsy || {}) } } : {}),
         ...(pdataPaths["HSQC"] ? { hsqc: { level_start: 0.005, ...(options.hsqc || {}) } } : {}),
       },
     },
@@ -2119,9 +2122,7 @@ export const make2DMapper = (meta, widthPx, heightPx, { invertF1 = false } = {})
   return { mapX, mapY, axisRect: { x: axisX0, y: axisY0, w: axisW, h: axisH } };
 };
 
-/* ============================================================================
-   >>> NEW: INTERACTIVE — zoom / relevel / targeted PNG+JSON background (re)generation
-   ============================================================================ */
+/*   >>> INTERACTIVE — zoom / relevel / targeted PNG+JSON background (re)generation*/
 
 const _clip = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -2241,7 +2242,7 @@ export const spectralBgZoom = async (method, pdataDir, meta, rectPx, opts = {}) 
       ...(Number.isFinite(+opts.line.width) ? { width: +opts.line.width } : {}),
     };
   }
-  if (method === "COSY" || method === "HSQC") {
+  if (method === "COSY" || method === "TOCSY" || method === "HSQC") {
     const { level_start = 0.005, transparent, ...rest } = opts.contour || {};
     const t = coerceTransparent(transparent);
     base.contour = {
@@ -2326,7 +2327,7 @@ const cleanMetaForBackend = (meta) => {
       const nested = {};
       
       for (const [k, v] of Object.entries(value)) {
-        // [NOTE] STRICT FILTER: ignore null, undefined, NaN, empty string
+        // STRICT FILTER: ignore null, undefined, NaN, empty string
         if (v === null || v === undefined || v === '') continue;
         if (typeof v === 'number' && !Number.isFinite(v)) continue;
         
@@ -2347,8 +2348,8 @@ const cleanMetaForBackend = (meta) => {
   return clean;
 };
 export const spectralBgRelevel = async (method, pdataDir, meta, opts = {}) => {
-  if (!["COSY", "HSQC"].includes(method)) {
-    throw new Error("relevel only supports COSY/HSQC");
+  if (!["COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).includes(method)) {
+    throw new Error("relevel only supports COSY/TOCSY/HSQC");
   }
   const base = {
     method,
@@ -2387,14 +2388,14 @@ const _wrapCancelable = (raw, method) => ({
  * Cancelable relevel (COSY/HSQC) — identical to spectralBgRelevel but cancelable
  */
 export function spectralBgRelevelCancelable(method, pdataDir, meta, opts = {}) {
-  if (!["COSY", "HSQC"].includes(method)) {
-    throw new Error("cancelable relevel only supports COSY/HSQC");
+  if (!["COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).includes(method)) {
+    throw new Error("cancelable relevel only supports COSY/TOCSY/HSQC");
   }
   
-  // [NOTE] CLEAN meta
+  // CLEAN meta
   const cleanedMeta = cleanMetaForBackend(meta);
   
-  // [NOTE] CLEAN opts.size (remove null/undefined)
+  // CLEAN opts.size (remove null/undefined)
   let cleanedSize = null;
   if (opts.size && typeof opts.size === 'object') {
     const temp = {};
@@ -2418,8 +2419,8 @@ export function spectralBgRelevelCancelable(method, pdataDir, meta, opts = {}) {
   const base = {
     method,
     pdata_dir: pdataDir,
-    meta: cleanedMeta,  // [NOTE] Cleaned meta
-    ...(cleanedSize ? { size: cleanedSize } : {}),  // [NOTE] Cleaned size or absent
+    meta: cleanedMeta,  // Cleaned meta
+    ...(cleanedSize ? { size: cleanedSize } : {}),  // Cleaned size or absent
     level_start: Number.isFinite(+opts.levelStart) ? +opts.levelStart : 0.005,
     ...(opts.nLevels != null ? { n_levels: +opts.nLevels } : {}),
     ...(opts.mode ? { mode: String(opts.mode) } : {}),
@@ -2676,7 +2677,7 @@ export const startNmrInteract = (
   onTaskId
 ) => {
   const url = `${API_BASE_URL}/spectral-bg/interact`;
-  const body = withPersist({ method, pdata_dir: pdataDir, ...(method === "COSY" || method === "HSQC" ? { mode2d } : {}) });
+  const body = withPersist({ method, pdata_dir: pdataDir, ...(method === "COSY" || method === "TOCSY" || method === "HSQC" ? { mode2d } : {}) });
 
   return createPostSSEConnection(url, body, {}, {
     onProgress: null,
@@ -2775,35 +2776,33 @@ export const debugSpectralMeta = (meta, method = 'unknown') => {
   return true;
 };
 
-/* ============================================================================
-   SIMULATE SPECTRUM 1H (détaillé avec formes de raie)
-   ============================================================================ */
+/*   1H spectrum simulation with line shapes*/
 
 /**
- * Simule un spectre 1H complet avec formes de raie (Lorentzian/Voigt)
+ * Simulate a 1H spectrum with Lorentzian, Gaussian, or Voigt line shapes.
  * 
- * DEUX MODES:
- * 1. Mode JSON (RECOMMANDÉ) - utilise les données de multiplicité pré-calculées
- * 2. Mode SMILES (fallback) - calcule les multiplicités à la volée
+ * Data sources:
+ * 1. JSON: use precomputed multiplicity data.
+ * 2. SMILES fallback: calculate multiplicities on demand.
  * 
  * @param {Object} options
- * @param {string} [options.smiles] - SMILES de la molécule (fallback)
- * @param {Object} [options.multiplicity_json] - Données de multiplicité pré-calculées (recommandé)
- * @param {string} [options.multiplicity_json_path] - Chemin vers fichier JSON de multiplicité
- * @param {string} [options.mol_id] - Identifiant de la molécule
- * @param {number} [options.freq_mhz=700] - Fréquence du spectromètre en MHz
- * @param {string} [options.solvent="CDCl3"] - Solvant
- * @param {string} [options.line_shape="lorentzian"] - Forme de raie (lorentzian, gaussian, voigt)
- * @param {number} [options.digital_resolution_hz=0.1] - Résolution numérique en Hz
- * @param {number[]} [options.ppm_range=[-0.5, 12]] - Intervalle ppm [min, max]
- * @param {number} [options.line_width_hz=1.0] - Largeur de raie par défaut en Hz
+ * @param {string} [options.smiles] - Molecule SMILES used as a fallback.
+ * @param {Object} [options.multiplicity_json] - Precomputed multiplicity data.
+ * @param {string} [options.multiplicity_json_path] - Path to the multiplicity JSON file.
+ * @param {string} [options.mol_id] - Molecule identifier.
+ * @param {number} [options.freq_mhz=700] - Spectrometer frequency in MHz.
+ * @param {string} [options.solvent="CDCl3"] - Solvent.
+ * @param {string} [options.line_shape="lorentzian"] - Line shape: lorentzian, gaussian, or voigt.
+ * @param {number} [options.digital_resolution_hz=0.1] - Digital resolution in Hz.
+ * @param {number[]} [options.ppm_range=[-0.5, 12]] - PPM range [min, max].
+ * @param {number} [options.line_width_hz=1.0] - Default line width in Hz.
  * 
- * @returns {Promise<Object>} Résultat de la simulation
- *   - ppm: number[] - axe des ppm
- *   - intensity: number[] - intensité normalisée
- *   - peaks: {ppm, intensity, label, multiplicity, J_hz, n_protons}[] - informations sur les pics
- *   - n_groups: number - nombre de groupes de protons
- *   - total_protons: number - nombre total de protons
+ * @returns {Promise<Object>} Simulation result.
+ *   - ppm: number[] - ppm axis
+ *   - intensity: number[] - normalized intensity
+ *   - peaks: {ppm, intensity, label, multiplicity, J_hz, n_protons}[] - peak data
+ *   - n_groups: number - number of proton groups
+ *   - total_protons: number - total proton count
  */
 export const simulateSpectrum = async ({
   smiles,
@@ -2816,12 +2815,12 @@ export const simulateSpectrum = async ({
   digital_resolution_hz = 0.1,
   ppm_range = [-0.5, 12],
   line_width_hz = 1.0,
-  // Paramètres dynamics post-processeur
+  // Dynamics postprocessing settings.
   enable_dynamics = false,
   temperature_k = 298,
   ph = 7.4,
 } = {}) => {
-  // Vérifier qu'on a au moins une source de données
+  // Require at least one simulation data source.
   if (!smiles && !multiplicity_json && !multiplicity_json_path) {
     throw new Error('Either smiles, multiplicity_json, or multiplicity_json_path is required');
   }
@@ -2838,7 +2837,7 @@ export const simulateSpectrum = async ({
       digital_resolution_hz,
       ppm_range,
       line_width_hz,
-      // Paramètres dynamics post-processeur
+      // Dynamics postprocessing settings.
       enable_dynamics,
       temperature_k,
       ph,
@@ -2856,18 +2855,18 @@ export const simulateSpectrum = async ({
 };
 
 /**
- * Simule les spectres de TOUTES les molécules d'un fichier all_multiplicities.json (mode batch)
+ * Simulate spectra for every molecule in all_multiplicities.json.
  *
  * @param {Object} options
- * @param {string} options.task_id - UUID de la tâche de prédiction
- * @param {number} [options.freq_mhz=700] - Fréquence en MHz
- * @param {string} [options.solvent='CDCl3'] - Solvant
- * @param {string} [options.line_shape='lorentzian'] - Forme de ligne
- * @param {number} [options.line_width_hz=1.0] - Largeur de ligne en Hz
- * @param {boolean} [options.enable_dynamics=false] - Activer le post-processeur dynamics
- * @param {number} [options.temperature_k=298] - Température en Kelvin
+ * @param {string} options.task_id - Prediction task UUID.
+ * @param {number} [options.freq_mhz=700] - Frequency in MHz.
+ * @param {string} [options.solvent='CDCl3'] - Solvent.
+ * @param {string} [options.line_shape='lorentzian'] - Line shape.
+ * @param {number} [options.line_width_hz=1.0] - Line width in Hz.
+ * @param {boolean} [options.enable_dynamics=false] - Enable dynamics postprocessing.
+ * @param {number} [options.temperature_k=298] - Temperature in kelvin.
  * @param {number} [options.ph=7.4] - pH
- * @returns {Promise<Object>} Résultat batch
+ * @returns {Promise<Object>} Batch simulation result.
  *   - status: "ok"
  *   - mode: "batch"
  *   - total_molecules: number
@@ -2922,15 +2921,15 @@ export const simulateSpectrumBatch = async ({
 };
 
 /**
- * Récupère les données de multiplicité pré-calculées depuis all_multiplicities.json
+ * Load precomputed multiplicity data from all_multiplicities.json.
  *
- * @param {string} taskId - UUID de la tâche de prédiction
- * @param {string} molId - Identifiant de la molécule
- * @returns {Promise<Object>} Données de multiplicité
+ * @param {string} taskId - Prediction task UUID.
+ * @param {string} molId - Molecule identifier.
+ * @returns {Promise<Object>} Multiplicity data.
  *   - status: "ok"
  *   - mol_id: string
  *   - smiles: string
- *   - multiplicity_data: object - données de multiplicité complètes
+ *   - multiplicity_data: object - complete multiplicity data
  */
 export const getMultiplicityData = async (taskId, molId) => {
   if (!taskId || !molId) {
@@ -2947,9 +2946,9 @@ export const getMultiplicityData = async (taskId, molId) => {
 };
 
 /**
- * Extrait les données brutes du spectre Bruker (ppm, intensity)
+ * Extract raw Bruker spectrum data (ppm, intensity).
  *
- * @param {string} pdataDir - Chemin vers le dossier pdata/1
+ * @param {string} pdataDir - Path to the pdata/1 directory.
  * @returns {Promise<{ppm: number[], intensity: number[], sf: number, status: string}>}
  */
 export const extractBrukerSpectrum = async (pdataDir) => {

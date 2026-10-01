@@ -1,34 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-simulate_spectrum_api.py
-
-Script CLI pour simuler un spectre RMN 1H complet avec formes de raie.
-Utilise DIRECTEMENT les données de multiplicité (JSON) générées par le simulateur.
-
-DEUX MODES :
-1. --json_path : Utilise un fichier JSON de multiplicité existant (recommandé, plus précis)
-2. --smiles : Calcule les multiplicités à la volée (fallback)
-
-Usage:
-    # Mode 1: Utiliser le JSON existant (RECOMMANDÉ)
-    python simulate_spectrum_api.py --json_path "output/mol_multiplicity.json" --freq_mhz 700
-    
-    # Mode 2: Calculer depuis SMILES (fallback)
-    python simulate_spectrum_api.py --smiles "CCO" --freq_mhz 700
-    
-Output (JSON sur stdout):
-    {
-      "mol_id": "mol",
-      "smiles": "CCO",
-      "freq_mhz": 700,
-      "ppm": [0.0, 0.001, ...],
-      "intensity": [0.0, 0.1, ...],
-      "peaks": [{"ppm": 1.2, "intensity": 1.0, "label": "t", "J_hz": [7.0]}, ...],
-      "n_points": 120000,
-      "status": "ok"
-    }
-"""
+"""CLI utilities for simulated spectrum generation."""
 
 import argparse
 import json
@@ -40,7 +12,6 @@ import traceback
 script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.insert(0, script_dir)
-
 
 def main():
     parser = argparse.ArgumentParser(description="Simulate 1H NMR spectrum from multiplicity JSON")
@@ -59,12 +30,11 @@ def main():
     parser.add_argument("--ppm_min", type=float, default=-0.5, help="Minimum ppm")
     parser.add_argument("--ppm_max", type=float, default=12.0, help="Maximum ppm")
     parser.add_argument("--line_width_hz", type=float, default=1.2, help="Default line width in Hz")
-    # Paramètres dynamics post-processeur
+
     parser.add_argument("--enable_dynamics", action="store_true", help="Enable dynamics post-processor")
     parser.add_argument("--temperature_k", type=float, default=298.0, help="Temperature in Kelvin for dynamics")
     parser.add_argument("--ph", type=float, default=7.4, help="pH for dynamics post-processor (1.0-14.0)")
     
-    # Mode batch pour traiter toutes les molécules d'un JSON consolidé
     parser.add_argument("--all", action="store_true", help="Process ALL molecules in a consolidated JSON (batch mode)")
     
     args = parser.parse_args()
@@ -79,18 +49,18 @@ def main():
         if args.json_path and os.path.exists(args.json_path):
             with open(args.json_path, "r", encoding="utf-8") as f:
                 mult_data = json.load(f)
-            # 🔍 DIAGNOSTIC: Vérifier la présence de 'partners' dans le JSON lu du fichier
+
             chain_groups = [g for g in mult_data.get('groups', []) if 0.8 <= g.get('H_shifts_ppm', [0])[0] <= 1.6]
             total_partners = sum(len(g.get('partners', [])) for g in chain_groups)
-            print(f"🔍 [DIAGNOSTIC] JSON lu depuis {args.json_path}: {len(chain_groups)} groupes chaîne, {total_partners} partners totaux", file=sys.stderr)
+            print(f" [DIAGNOSTIC] JSON lu depuis {args.json_path}: {len(chain_groups)} groupes chaîne, {total_partners} partners totaux", file=sys.stderr)
 
         # Priority 2: Inline JSON data
         elif args.json_data:
             mult_data = json.loads(args.json_data)
-            # 🔍 DIAGNOSTIC: Vérifier la présence de 'partners' dans le JSON reçu
+
             chain_groups = [g for g in mult_data.get('groups', []) if 0.8 <= g.get('H_shifts_ppm', [0])[0] <= 1.6]
             total_partners = sum(len(g.get('partners', [])) for g in chain_groups)
-            print(f"🔍 [DIAGNOSTIC] JSON reçu via --json_data: {len(chain_groups)} groupes chaîne, {total_partners} partners totaux", file=sys.stderr)
+            print(f" [DIAGNOSTIC] JSON reçu via --json_data: {len(chain_groups)} groupes chaîne, {total_partners} partners totaux", file=sys.stderr)
             
         # Priority 3: Compute from SMILES
         elif args.smiles:
@@ -108,9 +78,6 @@ def main():
             output_error("Failed to get multiplicity data")
             return
         
-        # ============================================
-        # MODE BATCH: Traiter toutes les molécules
-        # ============================================
         if getattr(args, 'all', False) and "molecules" in mult_data:
             all_spectra = []
             molecules = mult_data.get("molecules", [])
@@ -135,7 +102,7 @@ def main():
                     result["smiles"] = mol.get("smiles", "")
                     all_spectra.append(result)
                 except Exception as e:
-                    # En cas d'erreur sur une molécule, l'ajouter avec statut error
+
                     all_spectra.append({
                         "status": "error",
                         "mol_id": mol.get("mol_id", "unknown"),
@@ -155,9 +122,6 @@ def main():
             print(json.dumps(batch_result, ensure_ascii=False))
             return
         
-        # ============================================
-        # MODE SINGLE: Une seule molécule
-        # ============================================
         # Handle consolidated JSON (multiple molecules) vs single molecule
         if "molecules" in mult_data:
             # Consolidated JSON - find the right molecule
@@ -198,9 +162,8 @@ def main():
     except Exception as e:
         output_error(str(e), traceback.format_exc())
 
-
 def output_error(message: str, tb: str = ""):
-    """Output error as JSON"""
+    """Output an error response as JSON."""
     result = {
         "status": "error",
         "error": message,
@@ -209,12 +172,9 @@ def output_error(message: str, tb: str = ""):
     print(json.dumps(result, ensure_ascii=False))
     sys.exit(1)
 
-
 def compute_multiplicities_from_smiles(smiles: str, mol_id: str, freq_mhz: float, solvent: str) -> dict:
-    """
-    Compute multiplicities from SMILES using the full simulation pipeline.
-    This is the fallback when no pre-computed JSON is available.
-    """
+    """Compute multiplicity data from a SMILES string."""
+
     try:
         import sim_mult_rulebased as sim_mod
         from rdkit import Chem
@@ -288,42 +248,17 @@ def compute_multiplicities_from_smiles(smiles: str, mol_id: str, freq_mhz: float
         print(f"[WARN] compute_multiplicities_from_smiles error: {e}", file=sys.stderr)
         return None
 
-
 def merge_groups_by_heavy_idx(groups: list) -> list:
-    """
-    Les protons diastéréotopiques/vinyliques sur le même carbone sont 
-    chimiquement non-équivalents et doivent rester SÉPARÉS.
-    
-    Chaque proton garde:
-    - Son propre shift (prédit par ML)
-    - Ses propres J_couplings individuels
-    - Son propre pattern de multiplicité
-    
-    Cette fonction ne fait PAS de fusion - elle retourne les groupes tels quels.
-    Les protons vinyliques =CH₂ apparaîtront comme deux dd distincts.
-    
-    Returns:
-        Liste de groupes inchangée
-    """
-    # Pas de fusion - retourner les groupes tels quels
-    # Les protons diastéréotopiques sont non-équivalents et doivent rester séparés
+    """Return proton groups without merging them."""
+
     return groups
     return result_groups
 
-
 def _superpose_groups(group_list: list, heavy_idx: int) -> list:
-    """
-    Superpose les groupes au même shift moyen, en gardant leurs J individuels.
-    
-    Chaque proton garde son pattern de couplage (label, J_couplings, partners)
-    mais tous sont déplacés vers le shift moyen.
-    
-    Returns:
-        Liste de groupes modifiés (même taille que l'entrée)
-    """
+    """Align groups to a shared average shift."""
+
     import sys
     
-    # Calculer le shift moyen de tous les protons
     all_shifts = []
     for g in group_list:
         all_shifts.extend(g.get("H_shifts_ppm", []))
@@ -339,36 +274,23 @@ def _superpose_groups(group_list: list, heavy_idx: int) -> list:
           f"shifts {[f'{s:.3f}' for s in original_shifts]} -> {avg_shift:.4f} ppm", 
           file=sys.stderr)
     
-    # Modifier chaque groupe pour utiliser le shift moyen
     result = []
     for g in group_list:
-        # Copier le groupe pour ne pas modifier l'original
+
         new_g = g.copy()
         
-        # Remplacer tous les shifts par le shift moyen
         n_h = len(g.get("H_indices", [1]))
         new_g["H_shifts_ppm"] = [avg_shift] * n_h
         
-        # Marquer comme superposé
         new_g["note"] = "superposed_equivalent"
-        
-        # Garder label, J_couplings, partners INCHANGÉS
-        # (déjà copiés par g.copy())
         
         result.append(new_g)
     
     return result
 
 def _merge_group_list(group_list: list, heavy_idx: int) -> dict:
-    """
-    Fusionne une liste de groupes en un seul groupe.
-    
-    - Moyenne des shifts
-    - Union des H_indices
-    - Combinaison des J_couplings (moyenne si différents pour même partenaire)
-    - Label recalculé selon le nombre de protons et couplings
-    """
-    # Collecter tous les H_indices et shifts
+    """Merge a list of groups into one group."""
+
     all_h_indices = []
     all_shifts = []
     all_j_couplings = []
@@ -380,47 +302,30 @@ def _merge_group_list(group_list: list, heavy_idx: int) -> dict:
         all_j_couplings.extend(g.get("J_couplings", []))
         all_partners.extend(g.get("partners", []))
     
-    # Calculer le shift moyen
     avg_shift = sum(all_shifts) / len(all_shifts) if all_shifts else 0.0
     n_protons = len(all_h_indices)
     
-    # =========================================================================
-    # FUSION DES J_COUPLINGS
-    # =========================================================================
-    # Pour les protons fusionnés (ex: vinyl =CH₂), les couplages vers le même
-    # partenaire doivent être moyennés car ils apparaissent comme un seul signal.
-    # Ex: J_trans=16 Hz et J_cis=10 Hz vers H33 → J_moyen=13 Hz
-    # 
-    # IMPORTANT: Les couplages ENTRE les protons fusionnés eux-mêmes (geminal)
-    # doivent être EXCLUS car on ne couple pas avec soi-même après fusion.
-    # =========================================================================
-    
-    # 1. Construire un dictionnaire partner_h_index -> liste de J
-    #    EXCLURE les partenaires qui font partie des protons fusionnés
     partner_j_values = {}
     for p in all_partners:
         ph_idx = p.get("partner_h_index")
         j_hz = p.get("J_hz", 0)
         if ph_idx is not None and abs(j_hz) > 0.1:
-            # EXCLURE les couplages entre protons fusionnés (geminal interne)
+
             if ph_idx in all_h_indices:
-                continue  # Ce partenaire est un des protons fusionnés, ignorer
+                continue
             if ph_idx not in partner_j_values:
                 partner_j_values[ph_idx] = []
             partner_j_values[ph_idx].append(j_hz)
     
-    # 2. Moyenner les J vers chaque partenaire externe
     merged_j = []
     for ph_idx, j_list in partner_j_values.items():
         avg_j = sum(j_list) / len(j_list)
-        # n_equiv = 1 car c'est un seul partenaire
+
         merged_j.append({"J_hz": round(avg_j, 2), "n_equiv": 1})
     
-    # Log de debug
     print(f"[DEBUG] Fusion heavy_idx={heavy_idx}: H_indices={all_h_indices}, "
           f"J_fusionnés={merged_j}", file=__import__('sys').stderr)
     
-    # 3. Si pas de partners, utiliser les J_couplings directement (dédupliqués)
     if not merged_j and all_j_couplings:
         j_values = {}
         for jc in all_j_couplings:
@@ -435,16 +340,14 @@ def _merge_group_list(group_list: list, heavy_idx: int) -> dict:
                     old["count"] += 1
         merged_j = [{"J_hz": v["J_hz"], "n_equiv": v["n_equiv"]} for v in j_values.values()]
     
-    # Dédupliquer les partners (par partner_h_index) avec J moyenné
-    # EXCLURE les partenaires internes (protons fusionnés)
     partner_dict = {}
     for p in all_partners:
         ph_idx = p.get("partner_h_index")
-        if ph_idx is not None and ph_idx not in all_h_indices:  # Exclure internes
+        if ph_idx is not None and ph_idx not in all_h_indices:
             if ph_idx not in partner_dict:
                 partner_dict[ph_idx] = p.copy()
             else:
-                # Moyenner les J si présent
+
                 old_j = partner_dict[ph_idx].get("J_hz", 0)
                 new_j = p.get("J_hz", 0)
                 if old_j and new_j:
@@ -452,14 +355,12 @@ def _merge_group_list(group_list: list, heavy_idx: int) -> dict:
     
     merged_partners = list(partner_dict.values())
     
-    # Déterminer le label basé sur les J restants
     label = _determine_label_from_j(merged_j)
     
-    # Prendre les métadonnées du premier groupe
     first = group_list[0]
     
     return {
-        "group_id": 0,  # Sera réindexé
+        "group_id": 0,
         "heavy_idx": heavy_idx,
         "heavy_symbol": first.get("heavy_symbol", "C"),
         "H_indices": all_h_indices,
@@ -475,15 +376,12 @@ def _merge_group_list(group_list: list, heavy_idx: int) -> dict:
         "satellites_13C_hz": first.get("satellites_13C_hz", []),
     }
 
-
 def _determine_label_from_j(j_couplings: list) -> str:
-    """
-    Détermine le label de multiplicité à partir des J_couplings.
-    """
+    """Determine a multiplicity label from coupling data."""
+
     if not j_couplings:
         return "s"
     
-    # Compter le nombre total de couplages
     total_couplings = sum(jc.get("n_equiv", 1) for jc in j_couplings)
     
     # Labels standards
@@ -508,25 +406,12 @@ def _determine_label_from_j(j_couplings: list) -> str:
     else:
         return "m"
 
-
 def find_connected_group_fragments(groups: list) -> list:
-    """
-    Trouve les fragments de groupes connectés via le champ 'partners'.
+    """Find connected group fragments from partner links."""
 
-    Utilise Union-Find pour identifier les systèmes de spins isolés.
-    Deux groupes sont connectés s'ils partagent un couplage J (via partners).
-
-    Args:
-        groups: Liste de groupes avec leurs H_indices et partners
-
-    Returns:
-        Liste de fragments, chaque fragment étant une liste de groupes
-        Ex: [[g0, g1, g2], [g3, g4], [g5]] = 3 systèmes isolés
-    """
     if not groups:
         return []
 
-    # Créer un mapping H_index -> group_id
     h_to_group = {}
     group_by_id = {}
     for g in groups:
@@ -548,7 +433,6 @@ def find_connected_group_fragments(groups: list) -> list:
         if px != py:
             parent[px] = py
 
-    # Connecter les groupes via partners
     for g in groups:
         gid = g.get("group_id", id(g))
         partners = g.get("partners", [])
@@ -558,7 +442,6 @@ def find_connected_group_fragments(groups: list) -> list:
                 partner_gid = h_to_group[partner_h_idx]
                 union(gid, partner_gid)
 
-    # Regrouper par composante connexe
     components = {}
     for g in groups:
         gid = g.get("group_id", id(g))
@@ -569,10 +452,9 @@ def find_connected_group_fragments(groups: list) -> list:
 
     fragments = list(components.values())
 
-    # Log si fragmentation utile
     if len(fragments) > 1:
         total_spins = sum(len(g.get("H_indices", [])) for g in groups)
-        print(f"[INFO] GROUP FRAGMENTATION: {len(groups)} groups → {len(fragments)} isolated systems", file=sys.stderr)
+        print(f"[INFO] GROUP FRAGMENTATION: {len(groups)} groups -> {len(fragments)} isolated systems", file=sys.stderr)
         for i, frag in enumerate(fragments):
             n_spins = sum(len(g.get("H_indices", [])) for g in frag)
             gids = [g.get("group_id") for g in frag]
@@ -580,9 +462,8 @@ def find_connected_group_fragments(groups: list) -> list:
 
     return fragments
 
-
 def _estimate_shift(mol, h_idx: int) -> float:
-    """Estimate chemical shift for a hydrogen atom."""
+    """Estimate a hydrogen chemical shift."""
     from rdkit import Chem
     
     atom = mol.GetAtomWithIdx(h_idx)
@@ -615,39 +496,16 @@ def _estimate_shift(mol, h_idx: int) -> float:
     
     return 2.0
 
-
 def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int = 8, threshold: float = 3.0) -> list:
-    """
-    Pré-traitement: détecte et marque les systèmes fortement couplés.
+    """Detect and mark strongly coupled group systems."""
 
-    1) Trouve le noyau fortement couplé (Δν/J < threshold)
-    2) Si total ≤ max_spins : inclut tout dans le Hamiltonien
-    3) Si total > max_spins : noyau seul + élargir les voisins (couplage virtuel)
-
-    Args:
-        groups: liste des groupes du JSON
-        freq_mhz: fréquence du spectromètre
-        max_spins: limite de spins pour le Hamiltonien (8 = 256×256, rapide)
-        threshold: seuil Δν/J en dessous duquel considérer comme fortement couplé (3.0 = standard)
-
-    Returns:
-        groups modifiés avec:
-        - hamiltonian_system_id: ID du système à simuler ensemble
-        - hamiltonian_role: 'full' ou 'core'
-        - virtual_coupling: True si couplé au noyau mais exclu (pour élargissement)
-        - virtual_linewidth_extra_hz: élargissement additionnel en Hz
-
-    Référence: Claridge, High-Resolution NMR Techniques (20-40% du J)
-    """
     n = len(groups)
     if n == 0:
         return groups
 
-    # Étape 1: Construire les matrices de couplage
     J_matrix = [[0.0] * n for _ in range(n)]
     strongly_coupled = [[False] * n for _ in range(n)]
 
-    # Indexer les groupes par H_indices pour recherche rapide
     h_idx_to_group = {}
     for gi, group in enumerate(groups):
         for h_idx in group.get("H_indices", []):
@@ -658,15 +516,14 @@ def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int 
             gi = groups[i]
             gj = groups[j]
 
-            # Chercher si les groupes sont couplés (vérifier les deux sens)
             J_ij = 0.0
-            # Direction i → j
+
             for partner in gi.get("partners", []):
                 partner_h_idx = partner.get("partner_h_index")
                 if partner_h_idx in gj.get("H_indices", []):
                     J_ij = abs(partner.get("J_hz", 0.0))
                     break
-            # Direction j → i (si pas trouvé)
+
             if J_ij == 0:
                 for partner in gj.get("partners", []):
                     partner_h_idx = partner.get("partner_h_index")
@@ -677,17 +534,14 @@ def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int 
             if J_ij > 0:
                 J_matrix[i][j] = J_matrix[j][i] = J_ij
 
-                # Calculer Δν en Hz
                 shift_i = gi.get("H_shifts_ppm", [0])[0] if gi.get("H_shifts_ppm") else 0
                 shift_j = gj.get("H_shifts_ppm", [0])[0] if gj.get("H_shifts_ppm") else 0
                 delta_hz = abs(shift_i - shift_j) * freq_mhz
 
-                # Couplage fort si Δν/J < threshold
                 if J_ij > 0 and delta_hz / J_ij < threshold:
                     strongly_coupled[i][j] = True
                     strongly_coupled[j][i] = True
 
-    # Étape 2: Trouver les noyaux fortement couplés (BFS)
     visited = [False] * n
     systems = []
 
@@ -695,7 +549,6 @@ def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int 
         if visited[i] or not any(strongly_coupled[i]):
             continue
 
-        # BFS pour trouver le cluster
         core = set()
         queue = [i]
         while queue:
@@ -710,14 +563,12 @@ def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int 
         for c in core:
             visited[c] = True
 
-        # Étape 3: Trouver les voisins couplés au noyau
         neighbors = set()
         for member in core:
             for j in range(n):
                 if j not in core and J_matrix[member][j] > 0:
                     neighbors.add(j)
 
-        # Compter les spins
         core_spins = sum(len(groups[k].get("H_indices", [])) for k in core)
         neighbor_spins = sum(len(groups[k].get("H_indices", [])) for k in neighbors)
         total_spins = core_spins + neighbor_spins
@@ -729,7 +580,6 @@ def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int 
             "total_spins": total_spins,
         })
 
-    # Étape 4: Assigner les rôles
     system_id = 0
     for system in systems:
         core = system["core"]
@@ -737,16 +587,16 @@ def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int 
         total = system["total_spins"]
 
         if total <= max_spins:
-            # CAS A: Tout tient → Hamiltonien complet
+
             all_members = core | neighbors
             for k in all_members:
                 groups[k]["hamiltonian_system_id"] = system_id
                 groups[k]["hamiltonian_role"] = "full"
                 groups[k]["hamiltonian_total_spins"] = total
                 groups[k]["second_order_type"] = "strong_coupling"
-            print(f"[INFO] Virtual coupling system {system_id}: {len(all_members)} groups, {total} spins → full Hamiltonian", file=sys.stderr)
+            print(f"[INFO] Virtual coupling system {system_id}: {len(all_members)} groups, {total} spins -> full Hamiltonian", file=sys.stderr)
         else:
-            # CAS B: Trop de spins → noyau seul + élargir voisins
+
             for k in core:
                 groups[k]["hamiltonian_system_id"] = system_id
                 groups[k]["hamiltonian_role"] = "core"
@@ -754,35 +604,25 @@ def merge_strongly_coupled_groups(groups: list, freq_mhz: float, max_spins: int 
                 groups[k]["second_order_type"] = "strong_coupling"
 
             for k in neighbors:
-                # NE PAS inclure dans le Hamiltonien mais marquer pour élargissement
+
                 groups[k]["virtual_coupling"] = True
                 groups[k]["virtual_coupling_source"] = system_id
-                # Facteur d'élargissement: ~30% du J vers le noyau (Claridge)
+
                 J_to_core = max(J_matrix[k][m] for m in core) if core else 0.0
                 groups[k]["virtual_linewidth_extra_hz"] = J_to_core * 0.3
 
             print(f"[INFO] Virtual coupling system {system_id}: core {len(core)} groups ({system['core_spins']} spins), "
-                  f"neighbors {len(neighbors)} groups → broadened", file=sys.stderr)
+                  f"neighbors {len(neighbors)} groups -> broadened", file=sys.stderr)
 
         system_id += 1
 
     return groups
 
-
 def get_effective_linewidth(group: dict, base_linewidth_hz: float) -> float:
-    """
-    Calcule la largeur de raie effective incluant le couplage virtuel.
+    """Return the effective linewidth for a group."""
 
-    Args:
-        group: groupe du JSON
-        base_linewidth_hz: largeur de raie de base en Hz
-
-    Returns:
-        largeur de raie effective en Hz
-    """
     extra = group.get("virtual_linewidth_extra_hz", 0.0)
     return base_linewidth_hz + extra
-
 
 def simulate_spectrum_hamiltonian(
     mult_data: dict,
@@ -798,37 +638,26 @@ def simulate_spectrum_hamiltonian(
     ph: float = 7.4,
     solvent: str = None,
 ) -> dict:
-    """
-    Use advanced Hamiltonian simulation from sim_mult_rulebased.py.
+    """Simulate a spectrum with the Hamiltonian pipeline."""
 
-    This provides exact quantum mechanical simulation for:
-    - AB systems (two coupled protons with similar shifts)
-    - ABX systems (three coupled protons)
-    - AA'BB' systems (symmetrically coupled systems)
-    - Larger systems via fragmentation
-
-    Returns None if simulation fails (triggers fallback to 1st order).
-    """
     import numpy as np
 
     try:
         mol_id = mult_data.get("mol_id", "mol")
         smiles = mult_data.get("smiles", "")
-        # Priorité: solvant passé en paramètre > solvant dans JSON > défaut CDCl3
+
         if solvent is None:
             solvent = mult_data.get("solvent", "CDCl3")
         groups = mult_data.get("groups", [])
 
-        # Filter out exchangeable protons based on solvent (D2O exchanges OH/NH)
-        # Le module dynamics gère automatiquement la visibilité selon le solvant
         hide_exchangeable = solvent.upper() in ('D2O', 'D20', 'DEUTERIUM_OXIDE')
         if hide_exchangeable:
             original_count = len(groups)
-            # Filtrer par "note" OU par heavy_symbol (O, N, S = protons échangeables)
+
             def is_exchangeable_h(g):
                 if g.get("note") == "exchangeable":
                     return True
-                # Fallback: si heavy_symbol est O, N, ou S → proton échangeable (OH, NH, SH)
+
                 heavy_sym = g.get("heavy_symbol", "")
                 if heavy_sym in ("O", "N", "S"):
                     return True
@@ -839,10 +668,6 @@ def simulate_spectrum_hamiltonian(
             if filtered_count > 0:
                 print(f"[INFO] Hamiltonian: Filtered out {filtered_count} exchangeable protons (OH, NH, SH) - solvent={solvent}", file=sys.stderr)
 
-        # ═══════════════════════════════════════════════════════════════════════════
-        # DÉTECTION DU COUPLAGE VIRTUEL (avant séparation des groupes)
-        # Fusionne les groupes fortement couplés et marque les voisins pour élargissement
-        # ═══════════════════════════════════════════════════════════════════════════
         max_hamiltonian_spins = mult_data.get("max_hamiltonian_spins", 8)
         virtual_coupling_threshold = mult_data.get("virtual_coupling_threshold", 3.0)
         groups = merge_strongly_coupled_groups(groups, freq_mhz, max_hamiltonian_spins, virtual_coupling_threshold)
@@ -859,28 +684,20 @@ def simulate_spectrum_hamiltonian(
 
         # Separate groups by simulation method
         second_order_groups = []  # AA'BB', AB, ABX, etc.
-        first_order_groups = []   # s, d, t, q, dd, dt, etc.
+        first_order_groups = []  # s, d, t, q, dd, dt, etc.
 
-        # Compter le nombre total de protons
         total_protons = sum(len(g.get("H_indices", [])) for g in groups)
 
-        # Option: Forcer TOUS les groupes dans l'Hamiltonien (pour systèmes couplés complets)
         force_all_hamiltonian = mult_data.get("force_all_hamiltonian", False)
 
-        # DÉTECTION AUTOMATIQUE: Si ≤8 protons, simuler tout ensemble pour un spectre plus réaliste
         auto_force_threshold = mult_data.get("auto_force_threshold", 8)
         if not force_all_hamiltonian and total_protons <= auto_force_threshold:
             force_all_hamiltonian = True
-            print(f"[INFO] Auto-Hamiltonian: {total_protons} protons ≤ {auto_force_threshold} → simulation complète activée", file=sys.stderr)
+            print(f"[INFO] Auto-Hamiltonian: {total_protons} protons <= {auto_force_threshold} -> simulation complète activée", file=sys.stderr)
 
         for group in groups:
             second_order_type = group.get("second_order_type", "first_order")
 
-            # Use Hamiltonian for second-order systems OR if force_all_hamiltonian is True
-            # ⚠️ IMPORTANT: Ne pas utiliser system_type seul pour décider du mode de simulation!
-            # system_type est juste un tag descriptif (ex: "saturated_diketopiperazine"),
-            # pas une indication de couplage fort. Un quartet couplé à un CH3 externe
-            # doit être traité en first-order, pas en Hamiltonien sans ses partenaires!
             is_truly_second_order = second_order_type in ["strong_coupling", "weak_second_order", "moderate_second_order"]
 
             if force_all_hamiltonian or is_truly_second_order:
@@ -888,34 +705,25 @@ def simulate_spectrum_hamiltonian(
             else:
                 first_order_groups.append(group)
 
-        # Option: Inclure les groupes first-order CONNECTÉS aux second-order
-        # pour simuler la chaîne alkyle complète (plus lent mais plus réaliste)
         include_connected = mult_data.get("include_connected_groups", False)
-        max_hamiltonian_spins = mult_data.get("max_hamiltonian_spins", 8)  # Limite par défaut (8 = 256x256, rapide)
+        max_hamiltonian_spins = mult_data.get("max_hamiltonian_spins", 8)
 
-        # AUTO-ACTIVATION: Si des groupes fortement couplés existent, activer include_connected
-        # automatiquement pour simuler le sous-système couplé complet (ex: ABX diastéréotopique)
-        # Cela permet un multiplet réaliste sans simuler TOUS les protons
-        # ✅ FIX: Inclure moderate_second_order (Δν/J ~ 3-5) pour systèmes ABX diastéréotopiques
         has_strong_or_moderate_coupling = any(
             g.get("second_order_type") in ["strong_coupling", "moderate_second_order"]
             for g in second_order_groups
         )
         if has_strong_or_moderate_coupling and not include_connected:
             include_connected = True
-            print(f"[INFO] Auto-include connected groups: strong/moderate coupling détecté → activation", file=sys.stderr)
+            print(f"[INFO] Auto-include connected groups: strong/moderate coupling détecté -> activation", file=sys.stderr)
 
         if include_connected and second_order_groups:
-            # Compter les spins actuels dans second_order_groups
+
             current_spins = sum(len(g.get("H_indices", [])) for g in second_order_groups)
 
-            # Collecter tous les H_indices des groupes second-order
             second_order_h_indices = set()
             for g in second_order_groups:
                 second_order_h_indices.update(g.get("H_indices", []))
 
-            # Trouver les groupes first-order qui sont couplés aux second-order
-            # Prioriser les groupes avec shift proche des second-order (pour le massif)
             candidates = []
             for group in first_order_groups:
                 partners = group.get("partners", [])
@@ -927,23 +735,19 @@ def simulate_spectrum_hamiltonian(
                         candidates.append((group, avg_shift, n_protons))
                         break
 
-            # Trier par shift décroissant (groupes plus proches de la région 1.2-1.5 ppm d'abord)
             candidates.sort(key=lambda x: -x[1])
 
-            # Ajouter jusqu'à la limite de spins
             for group, avg_shift, n_protons in candidates:
                 if current_spins + n_protons <= max_hamiltonian_spins:
                     first_order_groups.remove(group)
                     second_order_groups.append(group)
                     current_spins += n_protons
-                    print(f"[INFO] Including connected group {group.get('group_id')} ({group.get('label')}, {avg_shift:.2f} ppm, {n_protons}H) → total {current_spins} spins", file=sys.stderr)
+                    print(f"[INFO] Including connected group {group.get('group_id')} ({group.get('label')}, {avg_shift:.2f} ppm, {n_protons}H) -> total {current_spins} spins", file=sys.stderr)
 
-        # LIMITE STRICTE: Si les groupes second-ordre dépassent max_hamiltonian_spins,
-        # déplacer les groupes excédentaires vers first-order (traités analytiquement)
         total_second_order_spins = sum(len(g.get("H_indices", [])) for g in second_order_groups)
         if total_second_order_spins > max_hamiltonian_spins:
-            print(f"[WARN] {total_second_order_spins} spins > max {max_hamiltonian_spins} → réduction", file=sys.stderr)
-            # Trier par priorité: garder les vrais systèmes AA'BB' d'abord
+            print(f"[WARN] {total_second_order_spins} spins > max {max_hamiltonian_spins} -> réduction", file=sys.stderr)
+
             def priority(g):
                 st = g.get("system_type")
                 sot = g.get("second_order_type", "")
@@ -957,7 +761,6 @@ def simulate_spectrum_hamiltonian(
                     return 3
             second_order_groups.sort(key=priority)
 
-            # Garder seulement jusqu'à max_hamiltonian_spins
             kept = []
             current = 0
             for g in second_order_groups:
@@ -967,34 +770,28 @@ def simulate_spectrum_hamiltonian(
                     current += n
                 else:
                     first_order_groups.append(g)
-                    print(f"[INFO] Groupe {g.get('group_id')} ({g.get('label')}) → first-order (limite spins)", file=sys.stderr)
+                    print(f"[INFO] Groupe {g.get('group_id')} ({g.get('label')}) -> first-order (limite spins)", file=sys.stderr)
             second_order_groups = kept
 
         print(f"[INFO] {len(second_order_groups)} second-order groups, {len(first_order_groups)} first-order groups", file=sys.stderr)
         print(f"[DEBUG] Second-order groups: {len(second_order_groups)}, spins: {sum(len(g.get('H_indices', [])) for g in second_order_groups)}", file=sys.stderr)
 
-        # ═══════════════════════════════════════════════════════════════════════════
-        # FRAGMENTATION AU NIVEAU GROUPE: Identifier les systèmes de spins isolés
-        # Chaque fragment sera simulé indépendamment avec son propre Hamiltonian
-        # ═══════════════════════════════════════════════════════════════════════════
         use_group_fragmentation = mult_data.get("use_group_fragmentation", True)
         group_fragments = []
 
         if use_group_fragmentation and len(second_order_groups) > 1:
-            # Fragmenter les groupes second-order basé sur la connectivité partners
+
             all_fragments = find_connected_group_fragments(second_order_groups)
 
-            # Traiter chaque fragment: vérifier la limite de spins
             for frag in all_fragments:
                 frag_spins = sum(len(g.get("H_indices", [])) for g in frag)
                 if frag_spins <= max_hamiltonian_spins:
-                    # Fragment OK, garder tel quel
+
                     group_fragments.append(frag)
                 else:
-                    # Fragment trop grand, appliquer la réduction
-                    print(f"[WARN] Fragment {len(frag)} groups, {frag_spins} spins > max {max_hamiltonian_spins} → réduction", file=sys.stderr)
 
-                    # Trier par priorité
+                    print(f"[WARN] Fragment {len(frag)} groups, {frag_spins} spins > max {max_hamiltonian_spins} -> réduction", file=sys.stderr)
+
                     def priority(g):
                         st = g.get("system_type")
                         sot = g.get("second_order_type", "")
@@ -1008,7 +805,6 @@ def simulate_spectrum_hamiltonian(
                             return 3
                     frag.sort(key=priority)
 
-                    # Garder jusqu'à max_hamiltonian_spins
                     kept = []
                     current = 0
                     for g in frag:
@@ -1018,12 +814,12 @@ def simulate_spectrum_hamiltonian(
                             current += n
                         else:
                             first_order_groups.append(g)
-                            print(f"[INFO] Groupe {g.get('group_id')} ({g.get('label')}) → first-order (fragment trop grand)", file=sys.stderr)
+                            print(f"[INFO] Groupe {g.get('group_id')} ({g.get('label')}) -> first-order (fragment trop grand)", file=sys.stderr)
 
                     if kept:
                         group_fragments.append(kept)
         else:
-            # Pas de fragmentation: un seul fragment avec tous les groupes
+
             if second_order_groups:
                 group_fragments.append(second_order_groups)
 
@@ -1095,8 +891,6 @@ def simulate_spectrum_hamiltonian(
                 peak_info["effective_linewidth_hz"] = effective_lw
             peaks_info.append(peak_info)
 
-        # PART 2: Handle second-order systems with Hamiltonian simulation
-        # Simuler chaque fragment indépendamment
         if group_fragments and hasattr(sim_mod, 'simulate_with_fragmentation'):
             for frag_idx, fragment_groups in enumerate(group_fragments):
                 print(f"[INFO] Simulating fragment {frag_idx + 1}/{len(group_fragments)}...", file=sys.stderr)
@@ -1112,23 +906,19 @@ def simulate_spectrum_hamiltonian(
                     if not shifts:
                         continue
 
-                    # ✅ CORRECTION: Créer TOUS les spins même s'ils sont équivalents
-                    # Pour un CH3 avec H_indices:[22,23,24] et shifts:[0.88,0.88,0.88],
-                    # il faut créer 3 spins à 0.88 ppm pour que le simulateur Hamiltonien
-                    # puisse calculer correctement le système A3X2 (triplet)
                     n_protons = len(h_indices)
                     n_shifts = len(shifts)
 
                     group_spins = []
                     if n_shifts == 1 and n_protons > 1:
-                        # Un seul shift pour plusieurs protons équivalents → créer n_protons spins
+
                         shift_hz = shifts[0] * freq_mhz
                         for _ in range(n_protons):
                             all_shifts_hz.append(shift_hz)
                             group_spins.append(spin_idx)
                             spin_idx += 1
                     else:
-                        # Cas normal: un shift par proton (ou diastéréotopique)
+
                         for shift_ppm in shifts:
                             shift_hz = shift_ppm * freq_mhz
                             all_shifts_hz.append(shift_hz)
@@ -1170,7 +960,6 @@ def simulate_spectrum_hamiltonian(
                                             j_matrix[i, partner_spin_idx] = j_hz
                                             j_matrix[partner_spin_idx, i] = j_hz
 
-                    # Also add geminal couplings between diastereotopic pairs (same heavy_idx)
                     heavy_to_spins = {}
                     for group_id, (group, spins) in group_to_spins.items():
                         heavy_idx = group.get("heavy_idx")
@@ -1224,14 +1013,14 @@ def simulate_spectrum_hamiltonian(
                         for group in fragment_groups:
                             shifts = group.get("H_shifts_ppm", [])
                             if shifts:
-                                # ✅ CORRIGÉ: Extraire les J_couplings du groupe JSON
+
                                 j_couplings = group.get("J_couplings", [])
                                 j_hz_list = []
                                 for jc in j_couplings:
                                     j_val = jc.get("J_hz", 0)
                                     n_equiv = jc.get("n_equiv", 1)
                                     if abs(j_val) > 0.1:
-                                        # Ajouter le J autant de fois que n_equiv
+
                                         for _ in range(n_equiv):
                                             j_hz_list.append(j_val)
 
@@ -1276,7 +1065,6 @@ def simulate_spectrum_hamiltonian(
         traceback.print_exc(file=sys.stderr)
         return None
 
-
 def generate_spectrum_from_multiplicity_json(
     mult_data: dict,
     freq_mhz: float = 700.0,
@@ -1290,21 +1078,8 @@ def generate_spectrum_from_multiplicity_json(
     ph: float = 7.4,
     solvent: str = None,
 ) -> dict:
-    """
-    Generate a complete 1H NMR spectrum from multiplicity JSON data.
+    """Generate a spectrum from multiplicity JSON data."""
 
-    Uses ADVANCED HAMILTONIAN SIMULATION for realistic spectra:
-    - Exact quantum mechanical simulation for strongly coupled systems (AB, ABX, AA'BB')
-    - Adaptive line widths based on proton type and molecular environment
-    - First-order approximation only for simple uncoupled systems
-
-    Uses the groups data with:
-    - H_shifts_ppm: chemical shifts
-    - label: multiplicity (s, d, t, dd, etc.)
-    - J_couplings: coupling constants in Hz
-    - partners: coupling partners info
-    - note: "exchangeable" for OH, NH protons (auto-filtered based on solvent, e.g., D2O)
-    """
     import numpy as np
 
     # Try to import the advanced simulator
@@ -1320,26 +1095,23 @@ def generate_spectrum_from_multiplicity_json(
     # Extract metadata
     mol_id = mult_data.get("mol_id", "mol")
     smiles = mult_data.get("smiles", "")
-    # Priorité: solvant passé en paramètre > solvant dans JSON > défaut CDCl3
+
     if solvent is None:
         solvent = mult_data.get("solvent", "CDCl3")
     groups = mult_data.get("groups", [])
 
-    # DEBUG: Log all notes in groups
     notes_found = [(g.get("group_id"), g.get("note"), g.get("heavy_symbol"), g.get("H_shifts_ppm", [])) for g in groups]
     print(f"[DEBUG] Solvent={solvent}, Groups with notes: {notes_found}", file=sys.stderr)
 
-    # Filter out exchangeable protons based on solvent (D2O exchanges OH/NH)
-    # Le module dynamics gère automatiquement la visibilité selon le solvant
     hide_exchangeable = solvent.upper() in ('D2O', 'D20', 'DEUTERIUM_OXIDE')
     print(f"[DEBUG] hide_exchangeable={hide_exchangeable} (solvent.upper()={solvent.upper()})", file=sys.stderr)
     if hide_exchangeable:
         original_count = len(groups)
-        # Filtrer par "note" OU par heavy_symbol (O, N, S = protons échangeables)
+
         def is_exchangeable(g):
             if g.get("note") == "exchangeable":
                 return True
-            # Fallback: si heavy_symbol est O, N, ou S → proton échangeable (OH, NH, SH)
+
             heavy_sym = g.get("heavy_symbol", "")
             if heavy_sym in ("O", "N", "S"):
                 return True
@@ -1348,15 +1120,6 @@ def generate_spectrum_from_multiplicity_json(
         groups = [g for g in groups if not is_exchangeable(g)]
         filtered_count = original_count - len(groups)
         print(f"[INFO] Filtered out {filtered_count} exchangeable protons (OH, NH, SH) - solvent={solvent}", file=sys.stderr)
-
-    # =========================================================================
-    # PROTONS DIASTÉRÉOTOPIQUES / VINYLIQUES
-    # =========================================================================
-    # Les protons sur le même carbone (même heavy_idx) mais chimiquement 
-    # non-équivalents (vinyl_nonequiv, diastereotopic) restent SÉPARÉS.
-    # Chaque proton garde son shift et ses J individuels.
-    # Pas de fusion - c'est scientifiquement correct.
-    # =========================================================================
 
     # Override freq if specified in JSON
     json_freq = mult_data.get("freq_MHz", mult_data.get("freq_mhz"))
@@ -1391,7 +1154,7 @@ def generate_spectrum_from_multiplicity_json(
     peaks_info = []
 
     # Use linewidth from parameter (user override), fallback to JSON value
-    # PRIORITÉ: line_width_hz (paramètre utilisateur) > typical_linewidth_hz (JSON)
+
     default_lw = line_width_hz if line_width_hz is not None else mult_data.get("typical_linewidth_hz", 1.0)
 
     # TRY ADVANCED SIMULATION IF AVAILABLE
@@ -1434,12 +1197,10 @@ def generate_spectrum_from_multiplicity_json(
             for jc in group["J_couplings"]:
                 if isinstance(jc, dict):
                     j_hz = jc.get("J_hz", jc.get("j_hz", jc.get("J", 0)))
-                    n_equiv = jc.get("n_equiv", 1)  # Nombre de protons équivalents couplés
+                    n_equiv = jc.get("n_equiv", 1)
                     print(f"[DEBUG] Group {group.get('group_id')}: label={label}, J_hz={j_hz}, n_equiv={n_equiv}", file=sys.stderr)
                     if j_hz and abs(float(j_hz)) > 0.1:
-                        # Ajouter J_hz autant de fois que n_equiv pour générer le bon multiplet
-                        # triplet (t) = couplage avec 2 H équivalents = [J, J]
-                        # quartet (q) = couplage avec 3 H équivalents = [J, J, J]
+
                         for _ in range(int(n_equiv)):
                             j_couplings.append(float(j_hz))
                         print(f"[DEBUG] Generated j_couplings={j_couplings}", file=sys.stderr)
@@ -1454,7 +1215,6 @@ def generate_spectrum_from_multiplicity_json(
                 if j_hz and abs(float(j_hz)) > 0.1:
                     j_couplings.append(float(j_hz))
 
-        # Get number of equivalent protons
         n_h = len(group.get("H_indices", [1]))
 
         # Get linewidth (adaptive if available)
@@ -1474,7 +1234,7 @@ def generate_spectrum_from_multiplicity_json(
         for line_ppm, line_intensity in pattern:
             add_peak_to_spectrum(
                 spectrum, ppm_axis,
-                line_ppm, line_intensity * n_h,  # Scale by number of protons
+                line_ppm, line_intensity * n_h,
                 lw_ppm,
                 line_shape
             )
@@ -1497,8 +1257,6 @@ def generate_spectrum_from_multiplicity_json(
     if max_intensity > 0:
         spectrum = spectrum / max_intensity
 
-    # Spectre propre sans bruit ni baseline artificielle
-
     return {
         "status": "ok",
         "mol_id": mol_id,
@@ -1516,7 +1274,6 @@ def generate_spectrum_from_multiplicity_json(
         "simulation_method": "first_order_fallback",
     }
 
-
 def generate_multiplet_from_label_and_j(
     center_ppm: float, 
     label: str, 
@@ -1524,11 +1281,8 @@ def generate_multiplet_from_label_and_j(
     freq_mhz: float,
     n_h: int = 1
 ) -> list:
-    """
-    Generate multiplet pattern based on multiplicity label and J couplings.
-    
-    Returns list of (ppm, relative_intensity) tuples.
-    """
+    """Generate a multiplet pattern from a label and couplings."""
+
     import numpy as np
     
     # If no J couplings, generate pattern from label
@@ -1563,12 +1317,9 @@ def generate_multiplet_from_label_and_j(
     
     return pattern
 
-
 def estimate_j_from_label(label: str) -> list:
-    """
-    Estimate J couplings from multiplicity label when not provided.
-    Uses typical J values.
-    """
+    """Estimate coupling values from a multiplicity label."""
+
     label_lower = label.lower().strip()
     
     # Common patterns
@@ -1594,9 +1345,8 @@ def estimate_j_from_label(label: str) -> list:
     
     return patterns.get(label_lower, [])
 
-
 def merge_close_lines(lines: list, tolerance_hz: float = 0.3) -> list:
-    """Merge lines that are very close together."""
+    """Merge nearby spectral lines."""
     if not lines:
         return lines
     
@@ -1619,11 +1369,9 @@ def merge_close_lines(lines: list, tolerance_hz: float = 0.3) -> list:
     
     return merged
 
-
 def add_peak_to_spectrum(spectrum, ppm_axis, center_ppm, intensity, width_ppm, shape_type):
-    """
-    Add a peak shape to the spectrum at the given position.
-    """
+    """Add a peak shape to the spectrum."""
+
     import numpy as np
     
     if shape_type == "lorentzian":
@@ -1644,21 +1392,10 @@ def add_peak_to_spectrum(spectrum, ppm_axis, center_ppm, intensity, width_ppm, s
     
     spectrum += peak
 
-
 def add_realistic_baseline(spectrum: 'np.ndarray', noise_level: float = 0.002,
                           baseline_amplitude: float = 0.005, n_waves: int = 3) -> 'np.ndarray':
-    """
-    Add realistic baseline artifacts to NMR spectrum.
+    """Add baseline variation and noise to a spectrum."""
 
-    Args:
-        spectrum: Input spectrum array
-        noise_level: Random noise amplitude (default 0.002 = 0.2%)
-        baseline_amplitude: Baseline wave amplitude (default 0.005 = 0.5%)
-        n_waves: Number of baseline waves (default 3)
-
-    Returns:
-        Spectrum with added baseline and noise
-    """
     import numpy as np
 
     n_points = len(spectrum)
@@ -1684,9 +1421,8 @@ def add_realistic_baseline(spectrum: 'np.ndarray', noise_level: float = 0.002,
 
     return result
 
-
 def label_to_name(label: str) -> str:
-    """Convert multiplicity label to full name."""
+    """Convert a multiplicity label to its full name."""
     mapping = {
         "s": "singlet",
         "d": "doublet",
@@ -1713,7 +1449,6 @@ def label_to_name(label: str) -> str:
         "app q": "apparent quartet",
     }
     return mapping.get(label.lower().strip(), label)
-
 
 if __name__ == "__main__":
     main()

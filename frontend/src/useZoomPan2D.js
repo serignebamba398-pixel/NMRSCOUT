@@ -29,7 +29,7 @@ export default function useZoomPan2D(canvas, win, onViewportChange) {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const mx = (e.clientX - rect.left) / rect.width;   // 0..1
-      const my = (e.clientY - rect.top)  / rect.height;  // 0..1  (0 en haut)
+      const my = (e.clientY - rect.top)  / rect.height;  // 0..1 (0 at the top)
 
       const z = e.deltaY < 0 ? 0.85 : 1.15;
       const spanX = (win.f2R - win.f2L) * z;

@@ -1,9 +1,9 @@
 /**
  * Task Persistence Service
  * 
- * Permet de sauvegarder l'état des tâches sur disque pour
- * qu'elles puissent être reprises après un redémarrage du serveur
- * ou une fermeture de l'ordinateur.
+ * Persist task state on disk so tasks can resume
+ * after a server restart
+ * or computer shutdown.
  */
 
 const fs = require('fs');
@@ -16,19 +16,19 @@ const CHECKPOINT_FILE = 'checkpoint.json';
 const PENDING_TASKS_FILE = path.join(outputsDir, 'pending_tasks.json');
 
 /**
- * États possibles d'une tâche persistée
+ * Persisted task states.
  */
 const TaskStatus = {
-  PENDING: 'pending',       // En attente de reprise
-  RUNNING: 'running',       // En cours d'exécution
-  COMPLETED: 'completed',   // Terminée avec succès
-  FAILED: 'failed',         // Échouée
-  CANCELLED: 'cancelled',   // Annulée par l'utilisateur
+  PENDING: 'pending',       // Waiting to resume
+  RUNNING: 'running',       // Running.
+  COMPLETED: 'completed',   // Completed successfully.
+  FAILED: 'failed',         // Failed.
+  CANCELLED: 'cancelled',   // Cancelled by the user.
   INTERRUPTED: 'interrupted' // Interrompue (fermeture ordi, etc.)
 };
 
 /**
- * Sauvegarde un checkpoint pour une tâche
+ * Save a task checkpoint.
  */
 function saveCheckpoint(taskId, checkpointData) {
   if (!ENABLE_CHECKPOINTS) return false;
@@ -57,7 +57,7 @@ function saveCheckpoint(taskId, checkpointData) {
 }
 
 /**
- * Charge un checkpoint pour une tâche
+ * Load a task checkpoint.
  */
 function loadCheckpoint(taskId) {
   try {
@@ -77,7 +77,7 @@ function loadCheckpoint(taskId) {
 }
 
 /**
- * Marque une tâche comme interrompue (pour reprise ultérieure)
+ * Mark a task as interrupted so it can resume later.
  */
 function markTaskInterrupted(taskId, reason = 'connection_lost') {
   try {
@@ -98,7 +98,7 @@ function markTaskInterrupted(taskId, reason = 'connection_lost') {
 }
 
 /**
- * Marque une tâche comme complétée
+ * Mark a task as completed.
  */
 function markTaskCompleted(taskId, outputs = {}) {
   try {
@@ -124,7 +124,7 @@ function markTaskCompleted(taskId, outputs = {}) {
 }
 
 /**
- * Marque une tâche comme échouée
+ * Mark a task as failed.
  */
 function markTaskFailed(taskId, error) {
   try {
@@ -145,7 +145,7 @@ function markTaskFailed(taskId, error) {
 }
 
 /**
- * Ajoute une tâche à la liste des tâches en attente
+ * Add a task to the pending list.
  */
 function addToPendingTasks(taskId, checkpointData) {
   try {
@@ -169,7 +169,7 @@ function addToPendingTasks(taskId, checkpointData) {
 }
 
 /**
- * Retire une tâche de la liste des tâches en attente
+ * Remove a task from the pending list.
  */
 function removeFromPendingTasks(taskId) {
   try {
@@ -187,7 +187,7 @@ function removeFromPendingTasks(taskId) {
 }
 
 /**
- * Charge la liste des tâches en attente
+ * Load pending tasks.
  */
 function loadPendingTasks() {
   try {
@@ -203,7 +203,7 @@ function loadPendingTasks() {
 }
 
 /**
- * Sauvegarde la liste des tâches en attente
+ * Save pending tasks.
  */
 function savePendingTasks(pending) {
   try {
@@ -218,7 +218,7 @@ function savePendingTasks(pending) {
 }
 
 /**
- * Obtient toutes les tâches qui peuvent être reprises
+ * List resumable tasks.
  */
 function getResumableTasks() {
   const pending = loadPendingTasks();
@@ -242,7 +242,7 @@ function getResumableTasks() {
 }
 
 /**
- * Vérifie si une tâche peut être reprise
+ * Check whether a task can resume.
  */
 function canResumeTask(taskId) {
   const checkpoint = loadCheckpoint(taskId);
@@ -254,7 +254,7 @@ function canResumeTask(taskId) {
 }
 
 /**
- * Obtient les données de reprise pour une tâche
+ * Read the data needed to resume a task.
  */
 function getResumeData(taskId) {
   const checkpoint = loadCheckpoint(taskId);
@@ -271,7 +271,7 @@ function getResumeData(taskId) {
 }
 
 /**
- * Nettoie les vieilles tâches pendantes (plus de X heures)
+ * Remove pending tasks older than the configured age limit.
  */
 function cleanupOldPendingTasks(maxAgeHours = 48) {
   const pending = loadPendingTasks();
@@ -297,8 +297,8 @@ function cleanupOldPendingTasks(maxAgeHours = 48) {
 }
 
 /**
- * Initialisation au démarrage du serveur
- * Marque toutes les tâches "running" comme "interrupted"
+ * Initialize persisted state when the server starts.
+ * Mark previously running tasks as interrupted.
  */
 function initializeOnStartup() {
   logWithMemory('Task persistence: checking for interrupted tasks...', 'INFO');

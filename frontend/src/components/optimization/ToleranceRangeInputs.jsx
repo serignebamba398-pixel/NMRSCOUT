@@ -80,7 +80,7 @@ export const ToleranceRangeInputs = ({ type, ranges, setAnnotationState, running
               color: "#475569",
             }}
           >
-            ℹ️ <strong>tol_match</strong> will automatically use the same value as{" "}
+            <strong>tol_match</strong> will automatically use the same value as{" "}
             <strong>tol_correspondence</strong>
           </div>
         </>
@@ -118,7 +118,7 @@ export const ToleranceRangeInputs = ({ type, ranges, setAnnotationState, running
               color: "#475569",
             }}
           >
-            ℹ️ <strong>tol_match_f1</strong> will automatically use the same value as{" "}
+            <strong>tol_match_f1</strong> will automatically use the same value as{" "}
             <strong>tol_correspondence_f1</strong>
           </div>
 
@@ -152,7 +152,7 @@ export const ToleranceRangeInputs = ({ type, ranges, setAnnotationState, running
               color: "#475569",
             }}
           >
-            ℹ️ <strong>tol_match_f2</strong> will automatically use the same value as{" "}
+            <strong>tol_match_f2</strong> will automatically use the same value as{" "}
             <strong>tol_correspondence_f2</strong>
           </div>
         </>
@@ -190,7 +190,7 @@ export const ToleranceRangeInputs = ({ type, ranges, setAnnotationState, running
               color: "#475569",
             }}
           >
-            ℹ️ <strong>tol_match_f1</strong> will automatically use the same value as{" "}
+            <strong>tol_match_f1</strong> will automatically use the same value as{" "}
             <strong>tol_correspondence_f1</strong>
           </div>
 

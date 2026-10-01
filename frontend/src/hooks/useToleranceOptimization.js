@@ -1,3 +1,4 @@
+import { isMethodAvailable } from '../constants/releaseFeatures';
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   API_BASE_URL,
@@ -55,6 +56,7 @@ export const useToleranceOptimization = ({
 
   const canRunTest = useCallback(() => {
     const type = annotationState.activeType;
+    if (!isMethodAvailable(type)) return false;
     return hasCsvForMethod(type) && !!annotationState.uploadedMatrixNames[type];
   }, [annotationState.activeType, annotationState.uploadedMatrixNames, hasCsvForMethod]);
 
@@ -285,6 +287,7 @@ export const useToleranceOptimization = ({
     if (running) return;
 
     const type = annotationState.activeType;
+    if (!isMethodAvailable(type)) return false;
     const ranges = annotationState.toleranceRanges[type];
     const baseParams = annotationState.parameters[type];
 
@@ -362,7 +365,7 @@ export const useToleranceOptimization = ({
           tol_match: roundedTol,
         });
       }
-    } else if (type === "COSY" || type === "HSQC") {
+    } else if (type === "COSY" || type === "TOCSY" || type === "HSQC") {
       for (
         let tolF1 = ranges.tol_correspondence_f1.min;
         tolF1 <= ranges.tol_correspondence_f1.max + 1e-9;
@@ -542,7 +545,7 @@ export const useToleranceOptimization = ({
   const getStatusLabel = useCallback(() => {
     if (!annotationState.selectedTask) return "";
     const csvMap = selectedTaskData?.csvFiles || {};
-    const order = ["1H", "13C", "COSY", "HSQC"];
+    const order = ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable);
     const ok = order.filter((t) => {
       const f = csvMap[t];
       return f && isValidCsvForType(f, t);

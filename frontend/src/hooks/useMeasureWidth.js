@@ -4,9 +4,9 @@
 import { useRef, useState, useEffect } from "react";
 
 /**
- * Hook qui mesure la largeur d'un élément DOM
- * @param {number} initial - Largeur initiale par défaut
- * @returns {[React.RefObject, number]} - Ref à attacher et largeur mesurée
+ * Measure the width of a DOM element.
+ * @param {number} initial - Initial width before the element is measured.
+ * @returns {[React.RefObject, number]} - Element ref and measured width.
  */
 export function useMeasureWidth(initial = 600) {
   const ref = useRef(null);

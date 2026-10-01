@@ -1,5 +1,5 @@
 // backend/routes/spectrum.js
-// Route pour la simulation de spectre 1H détaillé
+// Detailed 1H spectrum simulation routes.
 
 const express = require('express');
 const router = express.Router();
@@ -12,26 +12,26 @@ const { normalizeHostPathToContainer } = require('../utils/pathNormalizer');
 /**
  * POST /api/simulate-spectrum
  * 
- * DEUX MODES:
+ * Data sources:
  * 
- * 1. Mode JSON (RECOMMANDÉ - utilise les données de multiplicité pré-calculées):
- *   - multiplicity_json: object (données de multiplicité complètes)
- *   - OU multiplicity_json_path: string (chemin vers le fichier JSON)
+ * 1. JSON: use precomputed multiplicity data.
+ *   - multiplicity_json: object (complete multiplicity data)
+ *   - or multiplicity_json_path: string (path to the JSON file)
  * 
- * 2. Mode SMILES (fallback - calcule les multiplicités à la volée):
- *   - smiles: string (SMILES de la molécule)
+ * 2. SMILES fallback: calculate multiplicities on demand.
+ *   - smiles: string (molecule SMILES)
  * 
- * Options communes:
- *   - mol_id: string (optionnel, identifiant)
- *   - freq_mhz: number (fréquence en MHz, défaut 700)
- *   - solvent: string (solvant, défaut "CDCl3")
- *   - line_shape: string ("lorentzian" | "gaussian" | "voigt", défaut "lorentzian")
- *   - digital_resolution_hz: number (résolution en Hz, défaut 0.1)
- *   - ppm_range: [number, number] (intervalle ppm, défaut [-0.5, 12])
+ * Shared options:
+ *   - mol_id: string (optional identifier)
+ *   - freq_mhz: number (frequency in MHz, default 700)
+ *   - solvent: string (solvent, default "CDCl3")
+ *   - line_shape: string ("lorentzian" | "gaussian" | "voigt", default "lorentzian")
+ *   - digital_resolution_hz: number (resolution in Hz, default 0.1)
+ *   - ppm_range: [number, number] (ppm range, default [-0.5, 12])
  * 
  * Response:
- *   - ppm: number[] (axe des ppm)
- *   - intensity: number[] (intensité normalisée)
+ *   - ppm: number[] (ppm axis)
+ *   - intensity: number[] (normalized intensity)
  *   - peaks: { ppm, intensity, label, multiplicity, J_hz, n_protons }[]
  *   - mol_id: string
  *   - freq_mhz: number
@@ -48,14 +48,14 @@ router.post('/api/simulate-spectrum', async (req, res) => {
     line_shape = 'lorentzian',
     digital_resolution_hz = 0.1,
     ppm_range = [-0.5, 12],
-    line_width_hz, // Optionnel : si non fourni, calculé automatiquement par le backend Python
-    // Paramètres dynamics post-processeur
+    line_width_hz, // Optional; the Python backend calculates this when omitted.
+    // Dynamics postprocessing settings.
     enable_dynamics = false,
     temperature_k = 298,
     ph: ph_raw = 7.4,
   } = req.body;
 
-  // Validation basique du pH (plage chimique valide)
+  // Validate pH against the supported chemical range.
   let ph = Number(ph_raw) || 7.4;
   if (isNaN(ph) || ph < 0.0 || ph > 14.0) {
     console.warn(`[simulate-spectrum] pH invalide: ${ph_raw}, fallback vers 7.4`);
@@ -71,23 +71,23 @@ router.post('/api/simulate-spectrum', async (req, res) => {
     multiplicity_json_size: multiplicity_json ? JSON.stringify(multiplicity_json).length : 0
   });
 
-  // Vérifier qu'on a au moins une source de données
+  // Require at least one simulation data source.
   if (!smiles && !multiplicity_json && !multiplicity_json_path) {
     return res.status(400).json({ 
       error: 'Either smiles, multiplicity_json, or multiplicity_json_path is required' 
     });
   }
 
-  // Détermine le chemin vers le script Python
+  // Resolve the Python script path.
   const scriptsDir = path.resolve(__dirname, '../scripts');
   const simulatorScript = path.join(scriptsDir, 'simulate_spectrum_api.py');
   
-  // Vérifier que le script existe
+  // Check that the script exists.
   if (!fs.existsSync(simulatorScript)) {
     return res.status(500).json({ error: 'Simulator script not found' });
   }
 
-  // IMPORTANT: L'app doit être 100% autonome - toujours utiliser le Python bundled
+  // Use the bundled Python runtime so the installed app does not require system Python.
   console.log('[simulate-spectrum] Environment:', {
     IS_ELECTRON: process.env.IS_ELECTRON,
     IS_ELECTRON_BUNDLED: process.env.IS_ELECTRON_BUNDLED,
@@ -113,7 +113,7 @@ router.post('/api/simulate-spectrum', async (req, res) => {
     });
   }
 
-  // Le Python bundled utilise un système de commandes intégré
+  // The bundled Python executable dispatches commands internally.
   const isBundledEnv = process.env.IS_ELECTRON_BUNDLED === 'true';
   const isActuallyBundled = isBundledEnv && pythonPath.endsWith('.exe') && fs.existsSync(pythonPath);
   
@@ -126,7 +126,7 @@ router.post('/api/simulate-spectrum', async (req, res) => {
     args = [simulatorScript];
   }
   
-  // Mode 1: JSON de multiplicité inline
+  // Inline multiplicity JSON.
   if (multiplicity_json) {
     args.push('--json_data', JSON.stringify(multiplicity_json));
   }
@@ -148,12 +148,12 @@ router.post('/api/simulate-spectrum', async (req, res) => {
     '--digital_resolution_hz', String(digital_resolution_hz),
     '--ppm_min', String(ppm_range[0] ?? -0.5),
     '--ppm_max', String(ppm_range[1] ?? 12),
-    // Paramètres dynamics post-processeur
+    // Dynamics postprocessing settings.
     '--temperature_k', String(temperature_k),
     '--ph', String(ph),
   );
 
-  // line_width_hz optionnel : si fourni par le frontend, l'utiliser ; sinon auto-calculé par Python
+  // Use the supplied line_width_hz, or let Python calculate it when omitted.
   if (line_width_hz !== null && line_width_hz !== undefined) {
     args.push('--line_width_hz', String(line_width_hz));
   }
@@ -216,7 +216,7 @@ router.post('/api/simulate-spectrum', async (req, res) => {
     }
 
     try {
-      // Le script retourne du JSON sur stdout
+      // The script writes JSON to stdout.
       const result = JSON.parse(stdout);
       console.log('[simulate-spectrum] Simulation successful, result keys:', Object.keys(result));
       sendResponse(200, result);
@@ -511,14 +511,14 @@ router.get('/api/extract-bruker-2d', async (req, res) => {
 /**
  * POST /api/simulate-spectrum-batch
  * 
- * Simule les spectres de TOUTES les molécules d'un fichier all_multiplicities.json
+ * Simulate spectra for all molecules in all_multiplicities.json.
  * 
  * Body:
- *   - task_id: string (UUID de la tâche, pour trouver le fichier JSON)
- *   - freq_mhz: number (fréquence en MHz, défaut 700)
- *   - solvent: string (solvant, défaut "CDCl3")
+ *   - task_id: string (task UUID used to locate the JSON file)
+ *   - freq_mhz: number (frequency in MHz, default 700)
+ *   - solvent: string (solvent, default "CDCl3")
  *   - line_shape: string ("lorentzian" | "gaussian" | "voigt")
- *   - line_width_hz: number (largeur de ligne en Hz)
+ *   - line_width_hz: number (line width in Hz)
  *   - enable_dynamics: boolean
  *   - temperature_k: number
  *   - ph: number
@@ -539,13 +539,13 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     line_shape = 'lorentzian',
     digital_resolution_hz = 0.1,
     ppm_range = [-0.5, 12],
-    line_width_hz, // Optionnel : si non fourni, calculé automatiquement par le backend Python
+    line_width_hz, // Optional; the Python backend calculates this when omitted.
     enable_dynamics = false,
     temperature_k = 298,
     ph: ph_raw = 7.4,
   } = req.body;
 
-  // ✅ VALIDATION pH ULTRA-ROBUSTE - Prévention bug pH erronés 
+  // Validate pH before passing it to the simulator. 
   let ph = ph_raw;
   console.log(`[simulate-spectrum-batch] pH reçu: ${ph_raw} (type: ${typeof ph_raw})`);
   
@@ -563,7 +563,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     ph = 7.4;
   } else if (typeof ph_raw !== 'number' || ph_raw < 1.0 || ph_raw > 14.0) {
     console.warn(`[simulate-spectrum-batch] pH invalide reçu: ${ph_raw} (type: ${typeof ph_raw}), fallback vers 7.4`);
-    ph = 7.4;  // Fallback sécurisé
+    ph = 7.4;  // Use the default when validation fails.
   }
 
   console.log('[simulate-spectrum-batch] Request received:', { task_id, freq_mhz });
@@ -575,7 +575,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     });
   }
 
-  // Trouve le dossier de la tâche
+  // Locate the task directory.
   const projectService = require('../services/projectService');
   const currentProject = projectService.getCurrent();
   const outputsDir = path.resolve(__dirname, '../../outputs');
@@ -588,7 +588,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
 
   console.log('[simulate-spectrum-batch] Looking for:', allMultiplicitiesPath);
 
-  // Chercher le fichier de multiplicité
+  // Locate the multiplicity data file.
   let multiplicityFilePath = null;
   let isSingleMode = false;
 
@@ -597,7 +597,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     multiplicityFilePath = allMultiplicitiesPath;
     console.log('[simulate-spectrum-batch] Found all_multiplicities.json');
   } else {
-    // Mode single: chercher un fichier *_multiplicity.json
+    // In single mode, find a *_multiplicity.json file.
     console.log('[simulate-spectrum-batch] all_multiplicities.json not found, looking for single molecule file...');
     
     if (fs.existsSync(taskDir)) {
@@ -620,7 +620,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     });
   }
 
-  // Détermine le chemin Python
+  // Resolve the Python executable.
   const scriptsDir = path.resolve(__dirname, '../scripts');
   const simulatorScript = path.join(scriptsDir, 'simulate_spectrum_api.py');
 
@@ -645,7 +645,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     args = [simulatorScript];
   }
 
-  // Construire les arguments selon le mode
+  // Build arguments for the selected execution mode.
   args.push(
     '--json_path', multiplicityFilePath,
     '--freq_mhz', String(freq_mhz),
@@ -658,7 +658,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     '--ph', String(ph),
   );
 
-  // line_width_hz optionnel : si fourni par le frontend, l'utiliser ; sinon auto-calculé par Python
+  // Use the supplied line_width_hz, or let Python calculate it when omitted.
   if (line_width_hz !== null && line_width_hz !== undefined) {
     args.push('--line_width_hz', String(line_width_hz));
   }
@@ -691,7 +691,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
 
   child.stderr.on('data', (data) => {
     stderr += data.toString();
-    // Log mais ne pas échouer (peut contenir des warnings)
+    // Log stderr without failing the request; it can contain warnings.
     console.log('[simulate-spectrum-batch] stderr:', data.toString().substring(0, 200));
   });
 
@@ -710,7 +710,7 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
     try {
       const result = JSON.parse(stdout);
       
-      // Si mode single, wrapper le résultat dans un format batch-like
+      // Wrap a single-molecule result in the batch response format.
       if (isSingleMode) {
         console.log('[simulate-spectrum-batch] Single mode result for:', result.mol_id);
         const batchResult = {
