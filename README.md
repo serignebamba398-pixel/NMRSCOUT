@@ -1,95 +1,105 @@
 # NMRScout
 
-Application d'annotation et de prédiction RMN (NMR) pour les produits naturels.
+NMRScout is an NMR prediction and annotation application for natural products.
 
-Disponible en deux versions :
-- **Docker** : application web accessible via navigateur (recommandé)
-- **Electron** : application desktop Windows
+Two versions are available:
 
-## Installation Docker (recommandé)
+- **Docker**: a browser-based web application. Recommended for most users.
+- **Electron**: a Windows desktop application.
 
-Fonctionne sur **Windows, macOS (Intel + Apple Silicon), et Linux**.
+## Docker Installation
 
-### Prérequis
+The Docker version runs on Windows, macOS (Intel and Apple Silicon), and Linux.
 
-- [Docker Desktop](https://docs.docker.com/desktop/install/) installé et démarré
+### Requirements
 
-### Installation
+- [Docker Desktop](https://docs.docker.com/desktop/install/) installed and running
 
-1. Téléchargez le zip correspondant à votre système :
+### Install
 
-| Système | Téléchargement |
-|---------|---------------|
-| **Windows** | [NMRScout-Docker-Windows.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Windows.zip) |
-| **macOS / Linux** | [NMRScout-Docker-Unix.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Unix.zip) |
+1. Download the archive for your operating system:
 
-2. Décompressez le zip dans un dossier de votre choix
+| Operating system | Download |
+| --- | --- |
+| Windows | [NMRScout-Docker-Windows.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Windows.zip) |
+| macOS or Linux | [NMRScout-Docker-Unix.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Unix.zip) |
 
-3. Lancez l'installation :
-   - **Windows** : double-cliquez sur `install.bat`
-   - **macOS / Linux** :
+2. Extract the archive to a folder of your choice.
+
+3. Run the installer:
+   - **Windows**: double-click `install.bat`.
+   - **macOS or Linux**:
      ```bash
      chmod +x install.sh start.sh stop.sh
      ./install.sh
      ```
 
-L'installation détecte automatiquement tous vos disques (internes, externes, clés USB) pour que l'application puisse lire vos spectres Bruker.
+The installer detects available internal and external drives, including USB drives, so NMRScout can access Bruker spectra.
 
-Les projets sont stockés dans `Documents/NMRScout/` sur votre PC.
+Projects are stored in `Documents/NMRScout/` on your computer. After installation, open [http://localhost:3000](http://localhost:3000) in your browser.
 
-L'application sera accessible sur **http://localhost:3000**
+### Archive contents
 
-#### Contenu des zips
+- **Windows**: `install.bat`, `install.ps1`, `docker-compose.shareable.yml`, `start.bat`, `stop.bat`
+- **macOS and Linux**: `install.sh`, `docker-compose.shareable.yml`, `start.sh`, `stop.sh`
 
-**Windows** : `install.bat`, `install.ps1`, `docker-compose.shareable.yml`, `start.bat`, `stop.bat`
+### Common commands
 
-**macOS/Linux** : `install.sh`, `docker-compose.shareable.yml`, `start.sh`, `stop.sh`
+| Action | Windows | macOS or Linux |
+| --- | --- | --- |
+| Start | Double-click `start.bat` | `./start.sh` |
+| Stop | Double-click `stop.bat` | `./stop.sh` |
+| View logs | `docker compose -f docker-compose.shareable.yml -f docker-compose.volumes.yml logs -f` | Same command |
 
-### Commandes utiles
+To detect a newly connected external drive, run `install.bat` or `./install.sh` again.
 
-| Action | Windows | macOS / Linux |
-|--------|---------|---------------|
-| Démarrer | double-clic `start.bat` | `./start.sh` |
-| Arrêter | double-clic `stop.bat` | `./stop.sh` |
-| Logs | `docker compose -f docker-compose.shareable.yml -f docker-compose.volumes.yml logs -f` | idem |
+## Electron Installation for Windows
 
-> **Nouveau disque externe ?** Relancez `install.bat` (ou `./install.sh`) pour le détecter.
+The Windows desktop installers are distributed from the [GitHub Releases page](https://github.com/serignebamba398-pixel/annotation-nmr/releases):
 
-## Installation Electron (Windows)
+- `NMRScout-vX.X.X-Setup.exe`: standard Windows installer
+- `NMRScout-vX.X.X-portable.zip`: portable version that does not require installation
 
-Téléchargez l'installateur depuis la page [Releases](https://github.com/serignebamba398-pixel/annotation-nmr/releases) :
-- `NMRScout-vX.X.X-Setup.exe` : installateur classique
-- `NMRScout-vX.X.X-portable.zip` : version portable (pas d'installation requise)
+The GitHub Actions release workflow builds and publishes the Electron application when a version tag matching `v*` is pushed.
 
-## Structure du projet
+## Project structure
 
+```text
+frontend/          React application (Create React App)
+backend/           Node.js API and Python NMR engine
+docker/            Dockerfiles and nginx configuration
+scripts/           Build and deployment scripts
 ```
-frontend/          React (Create React App)
-backend/           Node.js API + Python ML/NMR engine
-docker/            Dockerfiles + nginx.conf
-scripts/           Scripts de build et déploiement
-```
 
-## Développement
+## Development
 
-### Prérequis dev
+### Requirements
 
-- Node.js 18+
-- Python 3.10+ (avec les dépendances de `backend/requirements.cpu.txt`)
-- R (pour les scripts d'annotation)
+- Node.js 18 or later
+- Python 3.10 or later, with dependencies from `backend/requirements.cpu.txt`
+- R for the annotation scripts
 
-### Lancer en dev
+### Run locally
+
+Start the backend, frontend, and Electron application from the repository root:
 
 ```bash
-# Tout (backend + frontend + Electron)
 npm install
 npm start
+```
 
-# Frontend seul
-cd frontend && npm install && npm start
+To run one component, open a terminal in its directory:
 
-# Backend seul
-cd backend && npm install && npm start
+```bash
+cd frontend
+npm install
+npm start
+```
+
+```bash
+cd backend
+npm install
+npm start
 ```
 
 ### Build Electron
@@ -98,29 +108,27 @@ cd backend && npm install && npm start
 npm run build:production
 ```
 
-## CI/CD (GitHub Actions)
+## GitHub Actions
 
-| Workflow | Déclencheur | Action |
-|----------|-------------|--------|
-| **CI** (`ci.yml`) | Push / PR | Tests, lint, build frontend |
-| **Release** (`release.yml`) | Tag `v*` | Build Electron Windows + publication GitHub Release |
-| **Docker Publish** (`docker-publish.yml`) | Manuel / Tag `v*` | Build multi-arch + push sur Docker Hub |
+| Workflow | Trigger | Action |
+| --- | --- | --- |
+| CI (`ci.yml`) | Push or pull request | Run tests, lint, and build the frontend |
+| Release (`release.yml`) | Tag matching `v*` | Build the Windows Electron app and publish a GitHub Release |
+| Docker Publish (`docker-publish.yml`) | Manual run or tag matching `v*` | Build multi-architecture images and push them to Docker Hub |
 
-### Secrets GitHub requis
+### Required GitHub secrets
 
 | Secret | Description |
-|--------|-------------|
-| `DOCKERHUB_USERNAME` | Nom d'utilisateur Docker Hub |
-| `DOCKERHUB_TOKEN` | Token d'accès Docker Hub |
-| `MODELS_ZIP_URL` | URL du zip contenant les modèles ML et données |
-| `R_PORTABLE_ZIP_URL` | URL du zip R-Portable pour le build Electron |
+| --- | --- |
+| `DOCKERHUB_USERNAME` | Docker Hub username |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `MODELS_ZIP_URL` | URL of the archive containing ML models and data |
+| `R_PORTABLE_ZIP_URL` | URL of the R-Portable archive used for Electron builds |
 
-### Fichiers volumineux
+### Large files
 
-Les modèles ML et données (`.pt`, `.npz`, `.pkl`, `.sd`, `.jar`) ne sont pas dans le repo Git. Ils sont :
-- Intégrés dans les **images Docker** sur Docker Hub
-- Téléchargés depuis les **GitHub Release assets** lors des builds CI
+ML models and data files (`.pt`, `.npz`, `.pkl`, `.sd`, and `.jar`) are not stored in the Git repository. They are included in the Docker images on Docker Hub or downloaded from GitHub Release assets during CI builds.
 
-## Licence
+## License
 
-Projet privé - Tous droits réservés.
+Private project. All rights reserved.
