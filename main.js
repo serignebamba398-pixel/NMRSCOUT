@@ -147,8 +147,6 @@ function createWindow() {
     // (backend sends an IPC "ready" message; see startBackend())
     hasLoadedProdUI = false;
     mainWindow.loadURL('about:blank');
-    // Open DevTools for debugging.
-    mainWindow.webContents.openDevTools();
   }
 
   mainWindow.on('closed', () => {

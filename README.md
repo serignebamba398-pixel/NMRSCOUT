@@ -30,15 +30,15 @@ The Docker version runs on Windows, macOS (Intel and Apple Silicon), and Linux.
    - **Windows**: double-click `install.bat`.
    - **macOS or Linux**:
      ```bash
-    chmod +x install.sh
+     chmod +x install.sh
      ./install.sh
      ```
 
 The installer detects available internal and external drives, including USB drives, so NMRScout can access Bruker spectra.
 
-  After installation, NMRScout starts automatically and opens [http://localhost:3000](http://localhost:3000) in your default browser. No separate start or stop script is needed.
+After installation, NMRScout starts automatically and opens [http://localhost:3000](http://localhost:3000) in your default browser. No separate start or stop script is needed.
 
-  Projects are stored in `Documents/NMRScout/` on your computer.
+Projects are stored in `Documents/NMRScout/` on your computer.
 
 ### Archive contents
 
