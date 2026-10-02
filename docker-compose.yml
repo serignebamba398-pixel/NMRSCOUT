@@ -2,7 +2,7 @@
 # Cross-platform: Windows, macOS, Linux
 services:
   backend:
-    image: docker.io/serignebamba398/annotation-nmr-backend:v1
+    image: docker.io/serignebamba398/annotation-nmr-backend:v1.0.0
     container_name: nmr-backend
     restart: unless-stopped
     env_file:
@@ -23,7 +23,7 @@ services:
       start_period: 90s
 
   frontend:
-    image: docker.io/serignebamba398/annotation-nmr-frontend:v1
+    image: docker.io/serignebamba398/annotation-nmr-frontend:v1.0.0
     container_name: nmr-frontend
     restart: unless-stopped
     env_file:
