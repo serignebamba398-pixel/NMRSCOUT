@@ -75,12 +75,25 @@ jobs:
           unzip -o models.zip -d /tmp/models-extract
 
           # Move files to correct locations
-          cp /tmp/models-extract/*.pt backend/models/ 2>/dev/null || true
-          cp /tmp/models-extract/*graph*.npz backend/ml_dependencies/data/ 2>/dev/null || true
-          cp /tmp/models-extract/sample_*.npz backend/ml_dependencies/ 2>/dev/null || true
-          cp /tmp/models-extract/*.jar backend/ml_dependencies/ 2>/dev/null || true
-          cp /tmp/models-extract/*.pkl backend/ml_dependencies/data/ 2>/dev/null || true
-          cp /tmp/models-extract/*.sd backend/ml_dependencies/data/ 2>/dev/null || true
+          find /tmp/models-extract -type f -name '*.pt' -exec cp -t backend/models/ {} +
+          find /tmp/models-extract -type f -name '*graph*.npz' -exec cp -t backend/ml_dependencies/data/ {} +
+          find /tmp/models-extract -type f -name 'sample_*.npz' -exec cp -t backend/ml_dependencies/ {} +
+          find /tmp/models-extract -type f -name '*.jar' -exec cp -t backend/ml_dependencies/ {} +
+          find /tmp/models-extract -type f -name '*.pkl' -exec cp -t backend/ml_dependencies/data/ {} +
+          find /tmp/models-extract -type f -name '*.sd' -exec cp -t backend/ml_dependencies/data/ {} +
+
+          test -s backend/ml_dependencies/data/fingerprint_database.pkl || {
+            echo "::error::models.zip did not provide fingerprint_database.pkl"
+            exit 1
+          }
+          test -s backend/models/1H_sparsified_proposed_proposed_set2set_1.pt || {
+            echo "::error::models.zip did not provide the 1H model"
+            exit 1
+          }
+          test -s backend/models/13C_sparsified_proposed_proposed_set2set_1.pt || {
+            echo "::error::models.zip did not provide the 13C model"
+            exit 1
+          }
 
           echo "Files ready for Docker build:"
           ls -lh backend/models/ backend/ml_dependencies/data/ backend/ml_dependencies/*.jar 2>/dev/null

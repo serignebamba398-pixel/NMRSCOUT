@@ -75,7 +75,7 @@ jobs:
           Expand-Archive -Path $zip -DestinationPath $tempExtract -Force
 
           # Move .pt files to backend/models/
-          Get-ChildItem "$tempExtract/*.pt" | ForEach-Object {
+          Get-ChildItem -Path $tempExtract -Filter "*.pt" -File -Recurse | ForEach-Object {
             Copy-Item $_.FullName -Destination $modelsDir -Force
             Write-Host "Model: $($_.Name) -> $modelsDir"
           }
@@ -83,34 +83,42 @@ jobs:
           # Move .npz files to backend/ml_dependencies/data/
           $dataDir = "backend/ml_dependencies/data"
           if (-not (Test-Path $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force }
-          Get-ChildItem "$tempExtract/*.npz" | Where-Object { $_.Name -like "*graph*" } | ForEach-Object {
+          Get-ChildItem -Path $tempExtract -Filter "*.npz" -File -Recurse | Where-Object { $_.Name -like "*graph*" } | ForEach-Object {
             Copy-Item $_.FullName -Destination $dataDir -Force
             Write-Host "Data: $($_.Name) -> $dataDir"
           }
 
           # Move sample .npz files to backend/ml_dependencies/
           $mlDir = "backend/ml_dependencies"
-          Get-ChildItem "$tempExtract/sample_*.npz" | ForEach-Object {
+          Get-ChildItem -Path $tempExtract -Filter "sample_*.npz" -File -Recurse | ForEach-Object {
             Copy-Item $_.FullName -Destination $mlDir -Force
             Write-Host "Sample: $($_.Name) -> $mlDir"
           }
 
           # Move .jar files to backend/ml_dependencies/
-          Get-ChildItem "$tempExtract/*.jar" | ForEach-Object {
+          Get-ChildItem -Path $tempExtract -Filter "*.jar" -File -Recurse | ForEach-Object {
             Copy-Item $_.FullName -Destination $mlDir -Force
             Write-Host "JAR: $($_.Name) -> $mlDir"
           }
 
           # Move .pkl files to backend/ml_dependencies/data/
-          Get-ChildItem "$tempExtract/*.pkl" | ForEach-Object {
+          Get-ChildItem -Path $tempExtract -Filter "*.pkl" -File -Recurse | ForEach-Object {
             Copy-Item $_.FullName -Destination $dataDir -Force
             Write-Host "PKL: $($_.Name) -> $dataDir"
           }
 
           # Move .sd files to backend/ml_dependencies/data/
-          Get-ChildItem "$tempExtract/*.sd" | ForEach-Object {
+          Get-ChildItem -Path $tempExtract -Filter "*.sd" -File -Recurse | ForEach-Object {
             Copy-Item $_.FullName -Destination $dataDir -Force
             Write-Host "SD: $($_.Name) -> $dataDir"
+          }
+
+          $fingerprintDatabase = Join-Path $dataDir "fingerprint_database.pkl"
+          if (-not (Test-Path $fingerprintDatabase)) {
+            throw "fingerprint_database.pkl was not found in models.zip"
+          }
+          if ((Get-Item $fingerprintDatabase).Length -lt 1000000) {
+            throw "fingerprint_database.pkl is unexpectedly small"
           }
 
           # Verify models
@@ -243,7 +251,7 @@ jobs:
           if (-not (Test-Path $unpackedDir)) {
             throw "win-unpacked folder not found"
           }
-          $zipPath = "dist\NMRScout-v1.0.1-portable.zip"
+          $zipPath = "dist\NMRScout-v1.0.0-portable.zip"
           Write-Host "Creating portable ZIP: $zipPath"
           Compress-Archive -Path "$unpackedDir\*" -DestinationPath $zipPath -Force
           Write-Host "ZIP created: $((Get-Item $zipPath).Length / 1MB) MB"
@@ -265,8 +273,8 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.1
-          name: NMRScout v1.0.1
+          tag_name: v1.0.0
+          name: NMRScout v1.0.0
           generate_release_notes: true
           make_latest: true
           files: |
