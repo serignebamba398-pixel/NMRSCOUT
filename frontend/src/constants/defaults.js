@@ -7,10 +7,10 @@
  */
 export const DEFAULT_COLORS = {
   H1: { name: "Turquoise", hex: "#00B8A9", rgb: [0, 0.72, 0.66] },
-  C13: { name: "Violet Profond", hex: "#3A0CA3", rgb: [0.23, 0.05, 0.64] },
-  COSY: { name: "Orange Vif", hex: "#FFB000", rgb: [1, 0.69, 0] },
-  TOCSY: { name: "Vert Émeraude", hex: "#00A878", rgb: [0, 0.66, 0.47] },
-  HSQC: { name: "Rose Magenta", hex: "#F72585", rgb: [0.97, 0.15, 0.52] },
+  C13: { name: "Deep Violet", hex: "#3A0CA3", rgb: [0.23, 0.05, 0.64] },
+  COSY: { name: "Bright Orange", hex: "#FFB000", rgb: [1, 0.69, 0] },
+  TOCSY: { name: "Emerald Green", hex: "#00A878", rgb: [0, 0.66, 0.47] },
+  HSQC: { name: "Magenta Pink", hex: "#F72585", rgb: [0.97, 0.15, 0.52] },
 };
 
 /**

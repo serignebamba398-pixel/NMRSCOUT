@@ -7,6 +7,7 @@ import {
   COLOR_OPTIONS,
   DEFAULT_COLORS,
   METHOD_LABELS_SHORT,
+  normalizeColorLabel,
 } from "../../constants/colors";
 import {
   hexToRgb255,
@@ -21,13 +22,18 @@ import {
  * Advanced color selection component
  */
 function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
+  const mergeColor = (method) => normalizeColorLabel({
+    ...DEFAULT_COLORS[method],
+    ...customColors?.[method],
+  });
+
   // Merge with defaults so every method always has hex/rgb fields
   const safeColors = {
-    H1:   { ...DEFAULT_COLORS.H1,   ...customColors?.H1 },
-    C13:  { ...DEFAULT_COLORS.C13,  ...customColors?.C13 },
-    COSY: { ...DEFAULT_COLORS.COSY, ...customColors?.COSY },
-    TOCSY: { ...DEFAULT_COLORS.TOCSY, ...customColors?.TOCSY },
-    HSQC: { ...DEFAULT_COLORS.HSQC, ...customColors?.HSQC },
+    H1: mergeColor("H1"),
+    C13: mergeColor("C13"),
+    COSY: mergeColor("COSY"),
+    TOCSY: mergeColor("TOCSY"),
+    HSQC: mergeColor("HSQC"),
   };
   const [draft, setDraft] = useState(safeColors);
   const [active, setActive] = useState("H1");
@@ -36,11 +42,11 @@ function ColorPicker({ isOpen, onClose, customColors, onColorChange }) {
 
   useEffect(() => {
     setDraft({
-      H1:   { ...DEFAULT_COLORS.H1,   ...customColors?.H1 },
-      C13:  { ...DEFAULT_COLORS.C13,  ...customColors?.C13 },
-      COSY: { ...DEFAULT_COLORS.COSY, ...customColors?.COSY },
-      TOCSY: { ...DEFAULT_COLORS.TOCSY, ...customColors?.TOCSY },
-      HSQC: { ...DEFAULT_COLORS.HSQC, ...customColors?.HSQC },
+      H1: normalizeColorLabel({ ...DEFAULT_COLORS.H1, ...customColors?.H1 }),
+      C13: normalizeColorLabel({ ...DEFAULT_COLORS.C13, ...customColors?.C13 }),
+      COSY: normalizeColorLabel({ ...DEFAULT_COLORS.COSY, ...customColors?.COSY }),
+      TOCSY: normalizeColorLabel({ ...DEFAULT_COLORS.TOCSY, ...customColors?.TOCSY }),
+      HSQC: normalizeColorLabel({ ...DEFAULT_COLORS.HSQC, ...customColors?.HSQC }),
     });
   }, [customColors]);
 
