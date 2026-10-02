@@ -5,6 +5,7 @@
 # ==========================================
 
 $ErrorActionPreference = "Stop"
+Set-Location -LiteralPath $PSScriptRoot
 
 $APP_NAME = "NMRScout"
 $COMPOSE_FILE = "docker-compose.shareable.yml"
@@ -73,7 +74,12 @@ New-Item -ItemType Directory -Path (Join-Path $projectsDir "outputs") -Force | O
 New-Item -ItemType Directory -Path (Join-Path $projectsDir "cache") -Force | Out-Null
 # projects.json must exist before Docker mounts it (bind mount of a file)
 $projectsJsonPath = Join-Path $projectsDir "projects.json"
-if (-not (Test-Path $projectsJsonPath)) {
+if (Test-Path -LiteralPath $projectsJsonPath -PathType Container) {
+    $backupPath = "$projectsJsonPath.directory-backup-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+    Move-Item -LiteralPath $projectsJsonPath -Destination $backupPath
+    Write-Host "[WARN] Moved the unexpected projects.json directory to: $backupPath" -ForegroundColor Yellow
+}
+if (-not (Test-Path -LiteralPath $projectsJsonPath -PathType Leaf)) {
     "[]" | Out-File -FilePath $projectsJsonPath -Encoding utf8 -NoNewline
 }
 Write-Host "[OK] Projects folder: $projectsDir" -ForegroundColor Green

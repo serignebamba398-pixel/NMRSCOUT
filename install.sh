@@ -8,6 +8,9 @@
 
 set -e
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 APP_NAME="NMRScout"
 COMPOSE_FILE="docker-compose.shareable.yml"
 VOLUMES_FILE="docker-compose.volumes.yml"
@@ -66,6 +69,11 @@ fi
 PROJECTS_DIR="$HOME/Documents/NMRScout"
 mkdir -p "$PROJECTS_DIR/uploads" "$PROJECTS_DIR/outputs" "$PROJECTS_DIR/cache"
 # projects.json must exist before Docker mounts it (bind mount of a file)
+if [ -d "$PROJECTS_DIR/projects.json" ]; then
+    backup_path="$PROJECTS_DIR/projects.json.directory-backup-$(date +%Y%m%d-%H%M%S)"
+    mv "$PROJECTS_DIR/projects.json" "$backup_path"
+    echo -e "${YELLOW}[WARN] Moved the unexpected projects.json directory to: ${backup_path}${NC}"
+fi
 if [ ! -f "$PROJECTS_DIR/projects.json" ]; then
     echo "[]" > "$PROJECTS_DIR/projects.json"
 fi
