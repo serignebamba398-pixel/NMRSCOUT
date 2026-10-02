@@ -20,7 +20,8 @@ Write-Host "==========================================" -ForegroundColor Cyan
 # ---- Check Docker ----
 try {
     $null = docker --version 2>&1
-} catch {
+}
+catch {
     Write-Host "[ERROR] Docker is not installed." -ForegroundColor Red
     Write-Host "Install Docker Desktop: https://docs.docker.com/desktop/install/windows-install/"
     exit 1
@@ -29,7 +30,8 @@ try {
 try {
     $null = docker info 2>&1
     if ($LASTEXITCODE -ne 0) { throw }
-} catch {
+}
+catch {
     Write-Host "[ERROR] Docker daemon is not running. Start Docker Desktop and retry." -ForegroundColor Red
     exit 1
 }
@@ -41,13 +43,15 @@ $COMPOSE_CMD = $null
 try {
     $null = docker compose version 2>&1
     if ($LASTEXITCODE -eq 0) { $COMPOSE_CMD = "docker compose" }
-} catch {}
+}
+catch {}
 
 if (-not $COMPOSE_CMD) {
     try {
         $null = docker-compose version 2>&1
         if ($LASTEXITCODE -eq 0) { $COMPOSE_CMD = "docker-compose" }
-    } catch {}
+    }
+    catch {}
 }
 
 if (-not $COMPOSE_CMD) {
@@ -91,7 +95,8 @@ if (-not (Test-Path $ENV_FILE)) {
     if (Test-Path $ENV_EXAMPLE) {
         Copy-Item $ENV_EXAMPLE $ENV_FILE
         Write-Host "[INFO] Created .env from .env.example" -ForegroundColor Yellow
-    } else {
+    }
+    else {
         @"
 PORT=4000
 NODE_ENV=production
@@ -119,7 +124,8 @@ NMR_PROJECTS_DIR=$projectsDirDocker
 "@ | Out-File -FilePath $ENV_FILE -Encoding utf8
         Write-Host "[INFO] Created default .env file" -ForegroundColor Yellow
     }
-} else {
+}
+else {
     Write-Host "[OK] .env file exists" -ForegroundColor Green
     # Ensure NMR_PROJECTS_DIR exists in .env
     $envContent = Get-Content $ENV_FILE -Raw
@@ -150,7 +156,7 @@ foreach ($drv in $drives) {
 if ($volumes.Count -eq 0) {
     # Fallback: at least mount user profile
     $userHome = $env:USERPROFILE -replace '\\', '/'
-    $driveLetter = $userHome.Substring(0,1).ToLower()
+    $driveLetter = $userHome.Substring(0, 1).ToLower()
     $restOfPath = $userHome.Substring(2)
     $volumes += "      - ${userHome}:/host/$driveLetter$restOfPath`:ro"
     Write-Host "  Fallback: $userHome" -ForegroundColor Gray
@@ -196,7 +202,8 @@ while ($retries -lt $maxRetries) {
             $healthy = $true
             break
         }
-    } catch {}
+    }
+    catch {}
     $retries++
     Start-Sleep -Seconds 3
 }
@@ -204,8 +211,27 @@ while ($retries -lt $maxRetries) {
 if (-not $healthy) {
     Write-Host "[WARN] Backend not healthy yet. It may still be starting (ML models take time to load)." -ForegroundColor Yellow
     Write-Host "  Check logs: $COMPOSE_CMD -f $COMPOSE_FILE -f $VOLUMES_FILE logs -f backend"
-} else {
+}
+else {
     Write-Host "[OK] Backend is healthy" -ForegroundColor Green
+}
+
+# ---- Wait for frontend ----
+Write-Host "Waiting for the frontend to be available..." -ForegroundColor Yellow
+$frontendRetries = 0
+$frontendReady = $false
+
+while ($frontendRetries -lt $maxRetries) {
+    try {
+        $response = Invoke-WebRequest -Uri "http://localhost:3000" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+        if ($response.StatusCode -eq 200) {
+            $frontendReady = $true
+            break
+        }
+    }
+    catch {}
+    $frontendRetries++
+    Start-Sleep -Seconds 3
 }
 
 # ---- Done ----
@@ -218,10 +244,16 @@ Write-Host "  Frontend : http://localhost:3000" -ForegroundColor White
 Write-Host "  Backend  : http://localhost:4000" -ForegroundColor White
 Write-Host ""
 Write-Host "  Commands:" -ForegroundColor White
-Write-Host "    Start:   double-clic sur start.bat"
-Write-Host "    Stop:    double-clic sur stop.bat"
 Write-Host "    Logs:    $COMPOSE_CMD -f $COMPOSE_FILE -f $VOLUMES_FILE logs -f"
 Write-Host ""
-Write-Host "  Si vous branchez un nouveau disque externe," -ForegroundColor Yellow
-Write-Host "  relancez install.bat pour le detecter." -ForegroundColor Yellow
+Write-Host "  If you connect a new external drive," -ForegroundColor Yellow
+Write-Host "  rerun install.bat to detect it." -ForegroundColor Yellow
 Write-Host "==========================================" -ForegroundColor Green
+
+if ($frontendReady) {
+    Write-Host "Opening NMRScout in your default browser..." -ForegroundColor Cyan
+    Start-Process "http://localhost:3000"
+}
+else {
+    Write-Host "[WARN] The frontend is not responding yet. Open http://localhost:3000 when it is ready." -ForegroundColor Yellow
+}

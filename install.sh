@@ -230,6 +230,19 @@ else
     echo -e "${GREEN}[OK] Backend is healthy${NC}"
 fi
 
+# ---- Wait for frontend ----
+echo -e "${YELLOW}Waiting for the frontend to be available...${NC}"
+RETRIES=0
+FRONTEND_READY=false
+while [ $RETRIES -lt $MAX_RETRIES ]; do
+    if curl -fsS http://localhost:3000 > /dev/null 2>&1; then
+        FRONTEND_READY=true
+        break
+    fi
+    RETRIES=$((RETRIES + 1))
+    sleep 3
+done
+
 # ---- Done ----
 echo ""
 echo -e "${GREEN}=========================================="
@@ -240,10 +253,23 @@ echo "  Frontend : http://localhost:3000"
 echo "  Backend  : http://localhost:4000"
 echo ""
 echo "  Commands:"
-echo "    Start:   ./start.sh"
-echo "    Stop:    ./stop.sh"
 echo "    Logs:    $COMPOSE_CMD -f $COMPOSE_FILE -f $VOLUMES_FILE logs -f"
 echo ""
-echo "  Si vous branchez un nouveau disque externe,"
-echo "  relancez ./install.sh pour le detecter."
+echo "  If you connect a new external drive,"
+echo "  rerun ./install.sh to detect it."
 echo -e "==========================================${NC}"
+
+if [ "$FRONTEND_READY" = true ]; then
+    echo -e "${CYAN}Opening NMRScout in your default browser...${NC}"
+    if [[ "$(uname)" == "Darwin" ]] && command -v open >/dev/null 2>&1; then
+        open "http://localhost:3000" >/dev/null 2>&1 || true
+    elif command -v xdg-open >/dev/null 2>&1; then
+        xdg-open "http://localhost:3000" >/dev/null 2>&1 || true
+    elif command -v gio >/dev/null 2>&1; then
+        gio open "http://localhost:3000" >/dev/null 2>&1 || true
+    else
+        echo -e "${YELLOW}[WARN] No supported browser opener found. Open http://localhost:3000 manually.${NC}"
+    fi
+else
+    echo -e "${YELLOW}[WARN] The frontend is not responding yet. Open http://localhost:3000 when it is ready.${NC}"
+fi

@@ -19,10 +19,10 @@ The Docker version runs on Windows, macOS (Intel and Apple Silicon), and Linux.
 
 1. Download the archive for your operating system:
 
-| Operating system | Download |
-| --- | --- |
-| Windows | [NMRScout-Docker-Windows.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Windows.zip) |
-| macOS or Linux | [NMRScout-Docker-Unix.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Unix.zip) |
+| Operating system | Download                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows          | [NMRScout-Docker-Windows.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Windows.zip) |
+| macOS or Linux   | [NMRScout-Docker-Unix.zip](https://github.com/serignebamba398-pixel/annotation-nmr/releases/download/assets/NMRScout-Docker-Unix.zip)       |
 
 2. Extract the archive to a folder of your choice.
 
@@ -30,28 +30,28 @@ The Docker version runs on Windows, macOS (Intel and Apple Silicon), and Linux.
    - **Windows**: double-click `install.bat`.
    - **macOS or Linux**:
      ```bash
-     chmod +x install.sh start.sh stop.sh
+    chmod +x install.sh
      ./install.sh
      ```
 
 The installer detects available internal and external drives, including USB drives, so NMRScout can access Bruker spectra.
 
-Projects are stored in `Documents/NMRScout/` on your computer. After installation, open [http://localhost:3000](http://localhost:3000) in your browser.
+  After installation, NMRScout starts automatically and opens [http://localhost:3000](http://localhost:3000) in your default browser. No separate start or stop script is needed.
+
+  Projects are stored in `Documents/NMRScout/` on your computer.
 
 ### Archive contents
 
-- **Windows**: `install.bat`, `install.ps1`, `docker-compose.shareable.yml`, `start.bat`, `stop.bat`
-- **macOS and Linux**: `install.sh`, `docker-compose.shareable.yml`, `start.sh`, `stop.sh`
+- **Windows**: `install.bat`, `install.ps1`, and Docker Compose configuration files
+- **macOS and Linux**: `install.sh` and Docker Compose configuration files
 
-### Common commands
+### View logs
 
-| Action | Windows | macOS or Linux |
-| --- | --- | --- |
-| Start | Double-click `start.bat` | `./start.sh` |
-| Stop | Double-click `stop.bat` | `./stop.sh` |
-| View logs | `docker compose -f docker-compose.shareable.yml -f docker-compose.volumes.yml logs -f` | Same command |
+```bash
+docker compose -f docker-compose.shareable.yml -f docker-compose.volumes.yml logs -f
+```
 
-To detect a newly connected external drive, run `install.bat` or `./install.sh` again.
+To detect a newly connected external drive, run the installer again (`install.bat` on Windows or `./install.sh` on macOS/Linux).
 
 ## Electron Installation for Windows
 
@@ -110,19 +110,19 @@ npm run build:production
 
 ## GitHub Actions
 
-| Workflow | Trigger | Action |
-| --- | --- | --- |
-| CI (`ci.yml`) | Push or pull request | Run tests, lint, and build the frontend |
-| Release (`release.yml`) | Tag matching `v*` | Build the Windows Electron app and publish a GitHub Release |
+| Workflow                              | Trigger                         | Action                                                      |
+| ------------------------------------- | ------------------------------- | ----------------------------------------------------------- |
+| CI (`ci.yml`)                         | Push or pull request            | Run tests, lint, and build the frontend                     |
+| Release (`release.yml`)               | Tag matching `v*`               | Build the Windows Electron app and publish a GitHub Release |
 | Docker Publish (`docker-publish.yml`) | Manual run or tag matching `v*` | Build multi-architecture images and push them to Docker Hub |
 
 ### Required GitHub secrets
 
-| Secret | Description |
-| --- | --- |
-| `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | Docker Hub access token |
-| `MODELS_ZIP_URL` | URL of the archive containing ML models and data |
+| Secret               | Description                                            |
+| -------------------- | ------------------------------------------------------ |
+| `DOCKERHUB_USERNAME` | Docker Hub username                                    |
+| `DOCKERHUB_TOKEN`    | Docker Hub access token                                |
+| `MODELS_ZIP_URL`     | URL of the archive containing ML models and data       |
 | `R_PORTABLE_ZIP_URL` | URL of the R-Portable archive used for Electron builds |
 
 ### Large files
