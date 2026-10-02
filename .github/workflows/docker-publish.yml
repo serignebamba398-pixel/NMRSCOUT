@@ -96,7 +96,8 @@ jobs:
           }
 
           echo "Files ready for Docker build:"
-          ls -lh backend/models/ backend/ml_dependencies/data/ backend/ml_dependencies/*.jar 2>/dev/null
+          find backend/models backend/ml_dependencies/data -maxdepth 1 -type f -printf '%p (%s bytes)\n'
+          find backend/ml_dependencies -maxdepth 1 -type f -name '*.jar' -printf '%p (%s bytes)\n'
 
       - name: Build & push backend (multi-arch)
         uses: docker/build-push-action@v6
