@@ -53,6 +53,7 @@ import { homonuclearSpectrumRows } from "./utils/homonuclearSpectrumRows";
 import { findBondsInPath } from "./utils/molParser";
 import { tocsyHighlights } from "./utils/tocsyHighlights";
 import { useSpectrumWindowSettings } from "./hooks/useSpectrumWindowSettings";
+import { useMeasureWidth } from "./hooks/useMeasureWidth";
 import { 
   loadRDKitFromCDN, 
   load3DmolFromCDN, 
@@ -300,6 +301,7 @@ function MoleculePane({
   compact = false,                 // Thumbnail mode renders only the SVG.
 }) {
   const [svg, setSvg] = useState(null);
+  const [drawingRef, drawingWidth] = useMeasureWidth(compact ? 180 : 600);
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -701,12 +703,13 @@ function MoleculePane({
         highlightBonds = Array.from(new Set(highlightBonds));
       }
 
-      const base = show3D ? 350 : 420;
-      const sizePx = Math.round(base * Math.max(0.6, molZoom));
-      const pad = Math.max(0.04, 0.24 / Math.max(1, molZoom));
+      const renderScale = 3 * Math.max(0.6, molZoom);
+      const drawingHeight = compact ? molHeight : Math.max(1, molHeight - 42);
+      const pad = compact ? 0.035 : Math.max(0.02, 0.04 / Math.max(1, molZoom));
 
       const opts = {
-        width: sizePx, height: sizePx,
+        width: Math.round(drawingWidth * renderScale),
+        height: Math.round(drawingHeight * renderScale),
         useMolBlockCoords: false,
         padding: pad, bondLineWidth: 1.5, atomLabelFontSize: 11,
         addStereoAnnotation: false,
@@ -732,8 +735,8 @@ function MoleculePane({
       }
 
       svgStr = svgStr
-        .replace(/width="[^"]+"/, 'width="100%"')
-        .replace(/height="[^"]+"/, 'height="100%"')
+        .replace(/\bwidth=(["'])[^"']+\1/, 'width="100%"')
+        .replace(/\bheight=(["'])[^"']+\1/, 'height="100%"')
         .replace('<svg ', '<svg preserveAspectRatio="xMidYMid meet" ');
 
       setSvg(svgStr);
@@ -744,7 +747,7 @@ function MoleculePane({
     } finally {
       setLoading(false);
     }
-  }, [multi, computeMultiHighlights, COLORS_RDK, molZoom, show3D, flags]);
+  }, [multi, computeMultiHighlights, COLORS_RDK, molZoom, flags, compact, drawingWidth, molHeight]);
 
   const render3D = useCallback(async (resolved) => {
     setLoading(true);
@@ -1016,7 +1019,7 @@ function MoleculePane({
 
   if (compact) {
     return (
-      <div style={{ position:"relative", width:"100%", height: molHeight, overflow:"hidden" }}>
+      <div ref={drawingRef} style={{ position:"relative", width:"100%", height: molHeight, overflow:"hidden" }}>
         {!err && svg && (
           <div
             style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center" }}
@@ -1043,7 +1046,7 @@ function MoleculePane({
     <div style={{ border:"1px solid #e5e7eb", borderRadius:8, background:"#fff", overflow:"visible", padding:8 }}>
       <div style={{ display:"grid", gridTemplateColumns: show3D?"1fr 1fr":"1fr", gap:12, height: molHeight }}>
         {/* 2D */}
-        <div style={{ border:"1px solid #e5e7eb", borderRadius:8, background:"#fff", overflow:"hidden", position:"relative" }}>
+        <div ref={drawingRef} style={{ border:"1px solid #e5e7eb", borderRadius:8, background:"#fff", overflow:"hidden", position:"relative", minWidth:0 }}>
           <div style={{ fontWeight:600, padding:8, borderBottom:"1px solid #e5e7eb", fontSize:12 }}>2D</div>
           {!err && svg && (
             <div style={{ position:"absolute", top:40,left:0,right:0,bottom:0, display:"flex",alignItems:"center",justifyContent:"center" }}
@@ -1518,11 +1521,9 @@ function ShowAllMoleculesModal({
           }}>
             {pageSources.map((source, idx) => {
               return (
-                <div key={source} data-mol-source={source} style={{
-                  border:"1px solid #e5e7eb",
+                <div key={source} data-mol-source={source} className="nmr-molecule-card" style={{
                   borderRadius:8,
                   padding:8,
-                  background:"#fff",
                   boxShadow:"0 1px 3px rgba(0,0,0,0.1)",
                   transition:"transform 0.2s ease, box-shadow 0.2s ease",
                   transformOrigin:"center",
@@ -1542,7 +1543,7 @@ function ShowAllMoleculesModal({
                 }}>
                   
                   {/* Real molecule with MoleculePane */}
-                  <div style={{ height:140, marginBottom:8 }}>
+                  <div className="nmr-molecule-card__structure" style={{ height:140, marginBottom:8 }}>
                     <MoleculePane
                       csvUrl={csvUrl}
                       selectedRow={{ Source: source }}

@@ -1,0 +1,26 @@
+.nmr-molecule-card {
+  border: 1px solid #0070c0;
+  background: #c1e5f5;
+  color: #123a4a;
+}
+
+.nmr-molecule-card__structure {
+  background: #fff;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.molecule-score-summary {
+  border-top: 1px solid #0070c0;
+  padding: 8px 2px 2px;
+  font-size: 11px;
+  color: #123a4a;
+}
+
+.molecule-score-summary__name {
+  color: #005b9e;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+  margin-bottom: 8px;
+}

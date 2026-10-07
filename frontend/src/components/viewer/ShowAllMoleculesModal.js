@@ -291,10 +291,19 @@ function ShowAllMoleculesModal({
                       background: "#fff",
                       borderRadius: 8,
                       marginBottom: 8,
+                      overflow: "hidden",
                     }}
                   >
                     {svg ? (
-                      <div dangerouslySetInnerHTML={{ __html: svg }} />
+                      <div
+                        style={{ width: "100%", height: "100%" }}
+                        dangerouslySetInnerHTML={{
+                          __html: svg.replace(
+                            "<svg",
+                            '<svg style="width:100%;height:100%;display:block;"'
+                          ),
+                        }}
+                      />
                     ) : (
                       <span style={{ color: "#94a3b8", fontSize: 12 }}>
                         {loading ? "..." : "No structure"}

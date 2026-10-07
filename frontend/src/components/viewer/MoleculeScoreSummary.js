@@ -1,4 +1,5 @@
 import React from 'react';
+import './MoleculeScoreSummary.css';
 
 export function moleculeScoreSummary(rowsByType = {}, averageScore = null) {
   const number = value => {
@@ -24,8 +25,8 @@ export default function MoleculeScoreSummary({ source, rowsByType, averageScore 
   const summary = moleculeScoreSummary(rowsByType, averageScore);
   const format = (value, digits, suffix = '') => value === null ? 'N/A' : `${value.toFixed(digits)}${suffix}`;
   return (
-    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 8, fontSize: 11 }}>
-      <div title={displaySource} style={{ fontWeight: 600, textAlign: 'center', overflowWrap: 'anywhere', marginBottom: 8 }}>
+    <div className="molecule-score-summary">
+      <div title={displaySource} className="molecule-score-summary__name">
         {displaySource}
       </div>
       <dl style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '4px 8px', margin: 0 }}>
