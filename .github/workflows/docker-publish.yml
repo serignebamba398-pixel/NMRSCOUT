@@ -48,21 +48,21 @@ jobs:
       - name: Download ML data for Docker build
         env:
           GH_TOKEN: ${{ github.token }}
+          MODELS_ZIP_URL: ${{ secrets.MODELS_ZIP_URL }}
         run: |
           set -euo pipefail
 
-          echo "Downloading models.zip from release assets..."
-          asset_id="$(curl --fail --silent --show-error \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/serignebamba398-pixel/annotation-nmr/releases/tags/assets" \
-            | jq -er '.assets[] | select(.name == "models.zip") | .id')"
+          if [ -z "$MODELS_ZIP_URL" ]; then
+            echo "::error::Secret MODELS_ZIP_URL is not set."
+            exit 1
+          fi
 
+          echo "Downloading models.zip from the configured asset URL..."
           curl --fail --location --silent --show-error \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/octet-stream" \
             -o models.zip \
-            "https://api.github.com/repos/serignebamba398-pixel/annotation-nmr/releases/assets/${asset_id}"
+            "$MODELS_ZIP_URL"
 
           if ! unzip -tq models.zip; then
             echo "::error::Downloaded models.zip is not a valid ZIP archive."
