@@ -412,17 +412,6 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
               />
             </div>
             <div className="param-row">
-              <label>Max missing RANSY:</label>
-              <input
-                type="number"
-                step="1"
-                min="0"
-                value={typeParams.max_missing_ransy ?? 50}
-                onChange={(e) => updateParameter(type, 'max_missing_ransy', e.target.value)}
-                disabled={allRunning}
-              />
-            </div>
-            <div className="param-row">
               <label>Coverage threshold group:</label>
               <input
                 type="number"

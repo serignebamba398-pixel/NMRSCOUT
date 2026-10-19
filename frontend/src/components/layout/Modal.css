@@ -55,10 +55,10 @@
 }
 
 .modal-fullscreen {
-  width: 98vw;
-  height: 96vh;
-  max-width: 98vw;
-  max-height: 96vh;
+  width: 99vw;
+  height: 99vh;
+  max-width: 99vw;
+  max-height: 99vh;
   border-radius: 4px;
 }
 
@@ -149,7 +149,8 @@
 }
 
 .modal-fullscreen .modal-content {
-  padding: 16px;
+  padding: 6px 10px;
+  overflow: hidden;
 }
 
 /* Permettre aux enfants de remplir l'espace */

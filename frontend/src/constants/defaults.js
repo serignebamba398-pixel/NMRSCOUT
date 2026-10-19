@@ -62,8 +62,8 @@ export const DEFAULT_PREDICTION_OPTIONS = {
   nb_cores: 2,
   extractors: {
     h1: { keep_exchangeable: false },
-    c13: { carbon_mode: "nonquaternary" },
-    hsqc: { fold: true, fold_low: 4.8618, fold_high: 69.8395 },
+    c13: { carbon_mode: "all" },
+    hsqc: { fold: false, fold_low: 4.8618, fold_high: 69.8395 },
   },
   cosy: { min_bonds: 2, max_bonds: 3 },
   tocsy: { min_bonds: 2, max_bonds: 3, include_diagonal: true },

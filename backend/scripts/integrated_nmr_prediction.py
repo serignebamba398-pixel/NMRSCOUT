@@ -388,13 +388,14 @@ def _params_match(old_params: Dict[str, Any], new_params: Dict[str, Any]) -> boo
     return True
 
 def _copy_sdf_to_output(src_path: str, dest_dir: str) -> str:
-    """Copy an SDF file to the output directory."""
+    """Copy an SDF file and upgrade legacy 2D coordinates for the 3D viewer."""
     if not os.path.exists(src_path):
         return ""
     dest_path = os.path.join(dest_dir, os.path.basename(src_path))
     try:
         import shutil
         shutil.copy2(src_path, dest_path)
+        _upgrade_sdf_coordinates_to_3d(dest_path)
         return dest_path
     except Exception as e:
         send_log(f"[RESUME] [WARN] Erreur copie SDF {src_path}: {e}")
@@ -1011,18 +1012,13 @@ def generate_sdf_with_shifts(
     x_h_connectivity: Dict[int, List[int]],
     output_dir: str,
     outfile_name: Optional[str] = None,
-    sdf_property_key: str = "(1)"
+    sdf_property_key: str = "(1)",
+    mol_with_h: Optional[Chem.Mol] = None,
 ) -> str:
-    molH = Chem.AddHs(mol_original)
-
-    try:
-        from rdkit.Chem import rdCoordGen
-        rdCoordGen.AddCoords(molH)
-    except Exception:
-        try:
-            AllChem.Compute2DCoords(molH)
-        except Exception:
-            pass
+    # Reuse the prediction molecule so the simulation can use this same
+    # conformer. Coordinates change; atom order, graph and shifts do not.
+    molH = mol_with_h if mol_with_h is not None else Chem.AddHs(mol_original)
+    _ensure_3d_conformer(molH)
 
     list_H = create_shift_list_1H(molH, x_h_connectivity, shifts_1h)
     list_C = create_shift_list_13C(molH, shifts_13c)
@@ -1033,16 +1029,121 @@ def generate_sdf_with_shifts(
         outfile_name = f"nmr_prediction_{ts}.sdf"
     sdf_path = os.path.join(output_dir, outfile_name)
 
-    writer = rdMolFiles.SDWriter(sdf_path)
     molH.SetProp('SMILES', smiles)
     molH.SetProp('Method', 'ML_Prediction_1H_13C_SDF_Only')
     molH.SetProp('Timestamp', str(ts))
     shifts_str = " ".join(f"{x:.3f}" for x in all_shifts)
     molH.SetProp(sdf_property_key, shifts_str)
+    _write_2d_mol_sidecar(molH, sdf_path)
+    writer = rdMolFiles.SDWriter(sdf_path)
     writer.write(molH)
     writer.close()
 
     return sdf_path
+
+
+def _has_3d_conformer(mol: Chem.Mol) -> bool:
+    if mol is None or mol.GetNumConformers() == 0:
+        return False
+    conf = mol.GetConformer()
+    if conf.Is3D():
+        return True
+    z_values = [conf.GetAtomPosition(i).z for i in range(mol.GetNumAtoms())]
+    return bool(z_values) and (max(z_values) - min(z_values) > 1e-3)
+
+
+def _ensure_3d_conformer(mol: Chem.Mol) -> bool:
+    """Generate a reproducible 3D conformer; keep a 2D fallback on failure."""
+    if _has_3d_conformer(mol):
+        return True
+
+    mol.RemoveAllConformers()
+    embedded = False
+    try:
+        # Legacy SDFs are read with sanitize=False so their stored properties
+        # remain untouched; ETKDG still needs a populated valence cache.
+        mol.UpdatePropertyCache(strict=False)
+        params = AllChem.ETKDGv3()
+        params.randomSeed = 42
+        params.maxIterations = 200
+        params.numThreads = 1
+        embedded = AllChem.EmbedMolecule(mol, params) == 0
+    except Exception as exc:
+        send_log(f"[3D] ETKDG conformer generation failed: {exc}")
+
+    if embedded:
+        try:
+            if AllChem.MMFFHasAllMoleculeParams(mol):
+                AllChem.MMFFOptimizeMolecule(mol, maxIters=200)
+            elif AllChem.UFFHasAllMoleculeParams(mol):
+                AllChem.UFFOptimizeMolecule(mol, maxIters=200)
+        except Exception as exc:
+            # ETKDG coordinates remain usable if force-field optimization fails.
+            send_log(f"[3D] Force-field optimization skipped: {exc}")
+        return _has_3d_conformer(mol)
+
+    send_log("[3D] Conformer generation failed; retaining a 2D layout as fallback")
+    try:
+        from rdkit.Chem import rdCoordGen
+        rdCoordGen.AddCoords(mol)
+    except Exception:
+        try:
+            AllChem.Compute2DCoords(mol)
+        except Exception:
+            pass
+    return False
+
+
+def _make_2d_molblock(mol: Chem.Mol) -> str:
+    """Create an independent 2D depiction with the exact same atom ordering."""
+    depiction = Chem.Mol(mol)
+    depiction.RemoveAllConformers()
+    depiction.UpdatePropertyCache(strict=False)
+    try:
+        from rdkit.Chem import rdCoordGen
+        rdCoordGen.AddCoords(depiction)
+    except Exception:
+        AllChem.Compute2DCoords(depiction)
+    return rdMolFiles.MolToMolBlock(depiction)
+
+
+def _write_2d_mol_sidecar(mol: Chem.Mol, sdf_path: str) -> str:
+    """Write a same-index 2D MOL beside the 3D prediction SDF."""
+    mol_path = os.path.splitext(sdf_path)[0] + ".mol"
+    with open(mol_path, "w", encoding="ascii", newline="\n") as handle:
+        handle.write(_make_2d_molblock(mol))
+    return mol_path
+
+
+def _upgrade_sdf_coordinates_to_3d(sdf_path: str) -> bool:
+    """Upgrade a legacy prediction SDF and regenerate its 2D MOL sidecar."""
+    suppl = rdMolFiles.SDMolSupplier(sdf_path, removeHs=False, sanitize=False)
+    mols = [mol for mol in suppl if mol is not None]
+    if len(mols) != 1:
+        send_log(f"[RESUME] [WARN] SDF 3D upgrade skipped: expected one molecule in {sdf_path}")
+        return False
+    mol = mols[0]
+    has_3d = _has_3d_conformer(mol)
+    if not has_3d and not _ensure_3d_conformer(mol):
+        return False
+    needs_write = not has_3d
+    if mol.HasProp("NMRScout_2D_MolBlock_Base64"):
+        mol.ClearProp("NMRScout_2D_MolBlock_Base64")
+        needs_write = True
+    try:
+        _write_2d_mol_sidecar(mol, sdf_path)
+    except Exception as exc:
+        send_log(f"[RESUME] [WARN] 2D MOL sidecar generation failed: {exc}")
+        return False
+    if not needs_write:
+        return True
+    writer = rdMolFiles.SDWriter(sdf_path)
+    try:
+        writer.write(mol)
+    finally:
+        writer.close()
+    send_log(f"[RESUME] Legacy SDF upgraded with 3D coordinates: {os.path.basename(sdf_path)}")
+    return True
 
 # Simulation helpers
 def _build_x_h_connectivity_from_mol_with_H(molH: Chem.Mol, solvent: str = "CDCl3") -> Dict[int, List[int]]:
@@ -1483,7 +1584,8 @@ def process_one_smiles(
         x_h_connectivity=x_h_conn,
         output_dir=out_dir,
         outfile_name=final_name,
-        sdf_property_key=property_key
+        sdf_property_key=property_key,
+        mol_with_h=mol_with_h
     )
 
     sidecar_path = None

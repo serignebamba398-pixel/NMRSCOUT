@@ -632,8 +632,14 @@ function MoleculePane({
     try {
       const RDKit = await loadRDKitFromCDN();
 
-      // Keep explicit hydrogens: backend matched_atom_indices refer to the original molblock.
-      const mol = RDKit.get_mol(resolved.molblock);
+      // Keep explicit hydrogens: backend matched_atom_indices refer to this
+      // exact atom ordering. The paired MOL sidecar contains its 2D layout.
+      const molSidecarUrl = resolved.url?.replace(/\.sdf(?=([?#]|$))/i, ".mol");
+      const molSidecarText = molSidecarUrl && molSidecarUrl !== resolved.url
+        ? await tryFetchText(molSidecarUrl)
+        : null;
+      const mol2DBlock = extractFirstMolBlockPreserving(molSidecarText);
+      const mol = RDKit.get_mol(mol2DBlock || resolved.molblock);
 
       let highlightAtoms=[], atomColorsMap={}, highlightBonds=[], bondColorsMap={};
 

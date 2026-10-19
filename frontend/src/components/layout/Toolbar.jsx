@@ -75,7 +75,6 @@ export const Toolbar = ({
   onSaveProject,
   onSaveAs,
   onPrediction,
-  onTolerance,
   onAnnotation,
   onComputePrediction,
   onComputeAnnotation,
@@ -102,7 +101,7 @@ export const Toolbar = ({
           data-action="new"
           onClick={onNewProject}
           disabled={loading || anyRunning}
-          title="Nouveau projet"
+          title="New project"
         >
           <span className="toolbar-icon">{Icons.newFile}</span>
           <span className="toolbar-label">New</span>
@@ -113,7 +112,7 @@ export const Toolbar = ({
           data-action="open"
           onClick={onOpenProject}
           disabled={loading || anyRunning}
-          title="Ouvrir un projet"
+          title="Open project"
         >
           <span className="toolbar-icon">{Icons.openFolder}</span>
           <span className="toolbar-label">Open</span>
@@ -166,17 +165,6 @@ export const Toolbar = ({
         >
           <span className="toolbar-icon">{Icons.annotation}</span>
           <span className="toolbar-label">Annotation</span>
-        </button>
-        
-        <button 
-          className="toolbar-btn" 
-          data-action="tolerance"
-          onClick={onTolerance}
-          disabled={loading || anyRunning}
-          title="Paramètres d'optimisation"
-        >
-          <span className="toolbar-icon">{Icons.settings}</span>
-          <span className="toolbar-label">Tolerance</span>
         </button>
       </div>
 

@@ -11,21 +11,21 @@ export const LogControls = () => {
 
   const handleExportLogs = async () => {
     if (!isElectron || !window.electronAPI?.exportLogs) {
-      addLog("Export logs indisponible (mode navigateur)", "error");
+      addLog("Export logs unavailable (browser mode)", "error");
       return;
     }
-    addLog("Export des logs en cours…", "info");
+    addLog("Exporting logs...", "info");
     try {
       const res = await window.electronAPI.exportLogs(logs);
       if (res?.success && res?.filePath) {
-        addLog(`Logs exportés: ${res.filePath}`, "success");
+        addLog(`Logs exported: ${res.filePath}`, "success");
       } else if (res?.canceled) {
-        addLog("Export des logs annulé.", "info");
+        addLog("Log export canceled.", "info");
       } else {
-        addLog(`Export logs: échec (${res?.error || 'raison inconnue'})`, "error");
+        addLog(`Export logs failed (${res?.error || 'unknown reason'})`, "error");
       }
     } catch (e) {
-      addLog(`Export logs: erreur (${e?.message || e})`, "error");
+      addLog(`Export logs error (${e?.message || e})`, "error");
     }
   };
 
@@ -37,13 +37,13 @@ export const LogControls = () => {
         aria-expanded={showLogs}
         aria-controls="log-console"
       >
-        {showLogs ? "Masquer logs" : "Voir logs"} ({logs.length})
+        {showLogs ? "Hide logs" : "View logs"} ({logs.length})
       </button>
       <button
         onClick={handleExportLogs}
         className="btn btn-secondary"
         disabled={!isElectron}
-        title={isElectron ? "Exporter les logs (zip)" : "Disponible uniquement dans l'app installée"}
+        title={isElectron ? "Export logs (zip)" : "Available only in the installed app"}
       >
         Export logs
       </button>
@@ -51,9 +51,9 @@ export const LogControls = () => {
         <button 
           className="btn btn-secondary" 
           onClick={clearLogs}
-          aria-label="Vider tous les logs"
+          aria-label="Clear all logs"
         >
-          Vider logs
+          Clear logs
         </button>
       )}
     </div>

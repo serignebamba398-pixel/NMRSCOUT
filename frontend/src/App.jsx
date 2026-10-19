@@ -231,6 +231,11 @@ const AppContent = () => {
 
   // ========== HANDLERS COMPUTE ==========
   const handleComputePrediction = useCallback(() => {
+    if (prediction?.running) {
+      window.dispatchEvent(new Event('nmrscout:show-progress'));
+      return;
+    }
+
     if (!prediction?.runPrediction) {
       addLog("Prediction not available. Configure parameters first.", "error");
       return;
@@ -266,7 +271,6 @@ const AppContent = () => {
         onSaveAs={handleSaveAs}
         onPrediction={() => setShowPrediction(true)}
         onAnnotation={() => setShowAnnotation(true)}
-        onTolerance={() => setShowTolerance(true)}
         onComputePrediction={handleComputePrediction}
         onComputeAnnotation={handleComputeAnnotation}
         onComputeOptimization={handleComputeOptimization}
@@ -282,7 +286,7 @@ const AppContent = () => {
         isOpen={showPrediction}
         onClose={() => setShowPrediction(false)}
         title="Prediction Parameters"
-        size="large"
+        size="fullscreen"
       >
         <TabbedPredictionInterface inModal onClose={() => setShowPrediction(false)} />
       </Modal>

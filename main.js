@@ -437,8 +437,8 @@ ipcMain.handle('create-project', async () => {
   console.log('[Main] IPC create-project called');
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
-    title: 'Créer un nouveau projet - Sélectionner un dossier',
-    buttonLabel: 'Créer le projet ici',
+    title: 'Create a new project - Select a folder',
+    buttonLabel: 'Create project here',
   });
   
   if (result.canceled || !result.filePaths[0]) return null;
@@ -483,8 +483,8 @@ ipcMain.handle('open-project', async () => {
   console.log('[Main] IPC open-project called');
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
-    title: 'Ouvrir un projet NMR',
-    buttonLabel: 'Ouvrir le projet',
+    title: 'Open an NMR project',
+    buttonLabel: 'Open project',
   });
   
   if (result.canceled || !result.filePaths[0]) return null;
@@ -589,8 +589,8 @@ ipcMain.handle('save-project-as', async (event, state) => {
 
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory', 'createDirectory'],
-    title: 'Sauvegarder le projet sous - Sélectionner un dossier',
-    buttonLabel: 'Sauvegarder ici',
+    title: 'Save project as - Select a folder',
+    buttonLabel: 'Save here',
   });
 
   if (result.canceled || !result.filePaths[0]) {

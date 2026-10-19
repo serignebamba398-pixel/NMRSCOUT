@@ -396,9 +396,9 @@ export const AppStateProvider = ({ children }) => {
         newC13.carbon_mode ??
         legacyC13.carbon_mode ??
         legacyC13.carbonMode ??
-        "nonquaternary";
+        "all";
 
-      const fold = newHSQC.fold ?? legacyHSQC.fold ?? true;
+      const fold = newHSQC.fold ?? legacyHSQC.fold ?? false;
       const fold_low = Number.isFinite(+newHSQC.fold_low)
         ? +newHSQC.fold_low
         : Number.isFinite(+legacyHSQC.fold_low)

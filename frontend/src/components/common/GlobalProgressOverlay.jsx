@@ -18,6 +18,7 @@ export const GlobalProgressOverlay = () => {
 
   // State for minimize/maximize
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   
   // State for drag
   const [position, setPosition] = useState({ x: null, y: null });
@@ -56,8 +57,18 @@ export const GlobalProgressOverlay = () => {
       // New operation: reset
       setPosition({ x: null, y: null });
       setIsMinimized(false);
+      setIsDismissed(false);
     }
   }, [anyRunning]);
+
+  useEffect(() => {
+    const showProgress = () => {
+      setIsDismissed(false);
+      setIsMinimized(false);
+    };
+    window.addEventListener('nmrscout:show-progress', showProgress);
+    return () => window.removeEventListener('nmrscout:show-progress', showProgress);
+  }, []);
 
   // Drag handling
   const handleMouseDown = useCallback((e) => {
@@ -127,7 +138,7 @@ export const GlobalProgressOverlay = () => {
     title = 'Optimization in progress...'
   }
 
-  if (!isVisible) return null;
+  if (!isVisible || isDismissed) return null;
 
   // Dynamic style for position
   const cardStyle = {
@@ -464,13 +475,19 @@ export const GlobalProgressOverlay = () => {
           <span className="global-progress-message">{displayMessage}</span>
         </div>
 
-        <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 8 }}>
           <button
             className="btn btn-danger"
             onClick={prediction?.handleCancel}
             disabled={!predictionRunning}
           >
             Cancel
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setIsDismissed(true)}
+          >
+            Close
           </button>
         </div>
         

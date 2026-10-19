@@ -231,11 +231,11 @@ export const CARBON_MODES = {
   ALL: 'all',
 };
 
-// Normalize free value -> 'all' or 'nonquaternary' (default)
+// Normalize free value -> 'all' (default) or 'nonquaternary'
 
 // === HSQC fold helpers =======================================================
 export const HSQC_FOLD_DEFAULTS = {
-  fold: true,           // fold ON by default (backend: without --no-fold)
+  fold: false,          // fold OFF by default
   fold_low: 4.8618,     // ppm (C) low by default
   fold_high: 69.8395,   // ppm (C) high by default
 };

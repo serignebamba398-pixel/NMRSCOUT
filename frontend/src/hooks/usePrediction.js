@@ -189,8 +189,8 @@ export const usePrediction = ({
     const normalizedMin = Math.min(minB, maxB);
     const normalizedMax = Math.max(minB, maxB);
 
-    const carbonModeUI = options.extractors?.c13?.carbon_mode || "nonquaternary";
-    const hsqcFoldUI = options.extractors?.hsqc?.fold ?? true;
+    const carbonModeUI = options.extractors?.c13?.carbon_mode || "all";
+    const hsqcFoldUI = options.extractors?.hsqc?.fold ?? false;
     const hsqcLowUI = options.extractors?.hsqc?.fold_low ?? 4.8618;
     const hsqcHighUI = options.extractors?.hsqc?.fold_high ?? 69.8395;
 
@@ -414,8 +414,8 @@ export const usePrediction = ({
     const normalizedMin = Math.min(minB, maxB);
     const normalizedMax = Math.max(minB, maxB);
 
-    const carbonModeUI = options.extractors?.c13?.carbon_mode || "nonquaternary";
-    const hsqcFoldUI = options.extractors?.hsqc?.fold ?? true;
+    const carbonModeUI = options.extractors?.c13?.carbon_mode || "all";
+    const hsqcFoldUI = options.extractors?.hsqc?.fold ?? false;
     const hsqcLowUI = options.extractors?.hsqc?.fold_low ?? 4.8618;
     const hsqcHighUI = options.extractors?.hsqc?.fold_high ?? 69.8395;
 

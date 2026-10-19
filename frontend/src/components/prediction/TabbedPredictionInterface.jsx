@@ -61,7 +61,7 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
   const c13 = ex.c13 || {};
   const hsqc = ex.hsqc || {};
   const keepExchangeableUI = !!h1.keep_exchangeable;
-  const carbonModeUI = c13.carbon_mode || "nonquaternary";
+  const carbonModeUI = c13.carbon_mode || "all";
   const hsqcFoldUI = !!hsqc.fold;
   const hsqcLowUI = Number.isFinite(+hsqc.fold_low) ? +hsqc.fold_low : 4.8618;
   const hsqcHighUI = Number.isFinite(+hsqc.fold_high) ? +hsqc.fold_high : 69.8395;
