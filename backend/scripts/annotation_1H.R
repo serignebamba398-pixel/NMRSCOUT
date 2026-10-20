@@ -25,6 +25,8 @@ params <- list(
   tol_match = 0.1,
   correlation_threshold = 0.80,
   correlation_method = "pearson",
+  use_stocsy = TRUE,
+  use_ransy = TRUE,
   coverage_threshold_group = 0,
   coverage_threshold_subchain = 0,
   ratio_min = 0.01,
@@ -275,16 +277,29 @@ tryCatch(
     mode_info <- detect_annotation_mode(spectrum_matrix)
     log_message(mode_info$warning)
 
-    USE_STOCSY <<- mode_info$use_stocsy
-    USE_RANSY <<- mode_info$use_ransy
+    USE_STOCSY <<- isTRUE(mode_info$use_stocsy) && isTRUE(params$use_stocsy)
+
+    USE_RANSY <<- isTRUE(mode_info$use_ransy) && isTRUE(params$use_ransy)
     N_SAMPLES <<- mode_info$n_samples
-    ANNOTATION_MODE <<- mode_info$mode
+    ANNOTATION_MODE <<- if (!USE_STOCSY && !USE_RANSY) {
+      "ratio_only"
+    } else if (!USE_STOCSY) {
+      "ransy_only"
+    } else if (!USE_RANSY) {
+      "stocsy_only"
+    } else {
+      mode_info$mode
+    }
+    log_message(sprintf("Filtering options: STOCSY=%s, RANSY=%s", USE_STOCSY, USE_RANSY))
 
     if (!USE_STOCSY) {
-      log_message(sprintf(
-        "DEGRADED MODE: Only %d sample(s) - STOCSY/RANSY disabled, using intensity ratios only",
-        N_SAMPLES
-      ))
+      if (N_SAMPLES < 5) {
+        log_message(sprintf("DEGRADED MODE: Only %d sample(s); statistical filters disabled", N_SAMPLES))
+      } else {
+        log_message(sprintf("STOCSY disabled by user; RANSY=%s", USE_RANSY))
+      }
+    } else if (!USE_RANSY) {
+      log_message("RANSY disabled by user; using STOCSY and intensity ratios")
     }
 
     spectrum_matrix <<- spectrum_matrix
@@ -651,9 +666,14 @@ run_single_pivot_pipeline <- function(pivot_ppm, anchor_ppm, group_index,
   if (!is.finite(coverage_sub_final)) coverage_sub_final <- 0
   if (coverage_sub_final < coverage_threshold_subchain) return(NULL)
 
-  # RANSY
-  dt_ransy <- calculer_RANSY(sub_chain_vec, intensity_columns, ransy_cv_threshold, pivot_ppm)
-  if (is.null(dt_ransy) || !nrow(dt_ransy)) return(NULL)
+  # RANSY is optional. When disabled, keep the STOCSY/ratio candidates
+  # without computing coefficients of variation.
+  if (exists("USE_RANSY") && isTRUE(USE_RANSY)) {
+    dt_ransy <- calculer_RANSY(sub_chain_vec, intensity_columns, ransy_cv_threshold, pivot_ppm)
+    if (is.null(dt_ransy) || !nrow(dt_ransy)) return(NULL)
+  } else {
+    dt_ransy <- data.table(ppm = sub_chain_vec, cv = 0)
+  }
   ransy_pass <- sort(unique(dt_ransy$ppm))
 
   # RANSY pairings (per signal, no grouping)

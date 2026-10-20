@@ -116,6 +116,19 @@ intensity_ratio_annotation <- function(matched_ppms, molecule_ppm, tol_match = 0
 
   sub_chain_vec <- sort(unique(ppms_desc[idx_valide]))
 
+  ratio_ransy <- NULL
+  if (exists("USE_RANSY") && isTRUE(USE_RANSY)) {
+    if ("ppm_matrix" %in% names(spectrum_matrix) && exists("calculer_RANSY_2D")) {
+      ratio_ransy <- calculer_RANSY_2D(sub_chain_vec, intensity_columns, ransy_cv_threshold, pivot)
+      if (is.null(ratio_ransy) || !nrow(ratio_ransy)) return(NULL)
+      sub_chain_vec <- sort(unique(ratio_ransy$ppm_matrix))
+    } else if (exists("calculer_RANSY")) {
+      ratio_ransy <- calculer_RANSY(sub_chain_vec, intensity_columns, ransy_cv_threshold, pivot)
+      if (is.null(ratio_ransy) || !nrow(ratio_ransy)) return(NULL)
+      sub_chain_vec <- sort(unique(ratio_ransy$ppm))
+    }
+  }
+
   # Step 4: Match sub_chain to molecule (EXACT SAME LOGIC AS MODE NORMAL)
   # Detect if 2D by checking column types in molecule_ppm input
   is_2D_mol <- any(grepl("\\|", as.character(molecule_ppm)))
@@ -216,11 +229,14 @@ intensity_ratio_annotation <- function(matched_ppms, molecule_ppm, tol_match = 0
     matched_for_cov   = if (is_2D_mol) unique(pairs_dt$ppm_ransy) else pairs_dt$ppm_ransy,
     matched_pairs     = pairs_dt, # SAME FORMAT AS MODE NORMAL
     coverage_ransy    = coverage_ratio,
-    RANSY_variabilite = "N/A (ratio mode)",
-    avg_variabilite   = NA_real_,
+    RANSY_variabilite = if (!is.null(ratio_ransy)) {
+      ratio_ppm <- if ("ppm_matrix" %in% names(ratio_ransy)) ratio_ransy$ppm_matrix else ratio_ransy$ppm
+      paste(paste(ratio_ppm, round(ratio_ransy$cv, 4), sep = ":"), collapse = "|")
+    } else "N/A (RANSY disabled)",
+    avg_variabilite   = if (!is.null(ratio_ransy)) mean(ratio_ransy$cv, na.rm = TRUE) else NA_real_,
     avg_error_ppm     = NA_real_, # Calculated later in CSV generation code
     groupe_ppms       = matched_ppms_clean,
-    annotation_mode   = "intensity_ratio_only"
+    annotation_mode   = if (exists("USE_RANSY") && isTRUE(USE_RANSY)) "ransy_only" else "intensity_ratio_only"
   )))
 }
 
@@ -276,6 +292,13 @@ intensity_ratio_annotation_2D <- function(matched_ppms, molecule_shifts, tol_mat
   }
 
   sub_chain_vec <- sort(unique(ppms_desc[idx_valide]))
+
+  ratio_ransy <- NULL
+  if (exists("USE_RANSY") && isTRUE(USE_RANSY) && exists("calculer_RANSY_2D")) {
+    ratio_ransy <- calculer_RANSY_2D(sub_chain_vec, intensity_columns, ransy_cv_threshold, pivot)
+    if (is.null(ratio_ransy) || !nrow(ratio_ransy)) return(NULL)
+    sub_chain_vec <- sort(unique(ratio_ransy$ppm_matrix))
+  }
 
   # Step 4: Build unique_mppm from molecule_shifts (EXACT SAME AS MODE NORMAL)
   unique_mppm <- unique(molecule_shifts[, .(shift_value_F1, shift_value_F2)])
@@ -337,11 +360,11 @@ intensity_ratio_annotation_2D <- function(matched_ppms, molecule_shifts, tol_mat
     matched_for_cov   = matched_unique,
     matched_pairs     = pairs_dt, # SAME FORMAT: mol_F1, mol_F2, ppm_ransy
     coverage_ransy    = coverage_ratio,
-    RANSY_variabilite = "N/A (ratio mode)",
-    avg_variabilite   = NA_real_,
+    RANSY_variabilite = if (!is.null(ratio_ransy)) paste(paste(ratio_ransy$ppm_matrix, round(ratio_ransy$cv, 4), sep = ":"), collapse = "|") else "N/A (RANSY disabled)",
+    avg_variabilite   = if (!is.null(ratio_ransy)) mean(ratio_ransy$cv, na.rm = TRUE) else NA_real_,
     avg_error_ppm_2D  = NA_real_,
     groupe_ppms       = matched_ppms_clean,
-    annotation_mode   = "intensity_ratio_only"
+    annotation_mode   = if (exists("USE_RANSY") && isTRUE(USE_RANSY)) "ransy_only" else "intensity_ratio_only"
   )))
 }
 

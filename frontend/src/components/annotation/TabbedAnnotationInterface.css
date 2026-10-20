@@ -372,6 +372,14 @@
   border-color: #4a90d9;
 }
 
+.param-row input.filter-toggle {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  flex: 0 0 auto;
+  accent-color: #1687df;
+}
+
 /* Zone upload */
 .upload-zone {
   margin-top: 8px;

@@ -367,6 +367,26 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
           <h4 className="section-title">Advanced Parameters</h4>
           <div className="params-grid">
             <div className="param-row">
+              <label>Use STOCSY filtering:</label>
+              <input
+                type="checkbox"
+                className="filter-toggle"
+                checked={typeParams.use_stocsy !== false}
+                onChange={(e) => updateParameter(type, 'use_stocsy', e.target.checked)}
+                disabled={allRunning}
+              />
+            </div>
+            <div className="param-row">
+              <label>Use RANSY filtering:</label>
+              <input
+                type="checkbox"
+                className="filter-toggle"
+                checked={typeParams.use_ransy !== false}
+                onChange={(e) => updateParameter(type, 'use_ransy', e.target.checked)}
+                disabled={allRunning}
+              />
+            </div>
+            <div className="param-row">
               <label>Correlation threshold:</label>
               <input
                 type="number"
@@ -375,7 +395,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
                 max="1"
                 value={typeParams.correlation_threshold ?? (is1D ? 0.9 : 0.8)}
                 onChange={(e) => updateParameter(type, 'correlation_threshold', e.target.value)}
-                disabled={allRunning}
+                disabled={allRunning || typeParams.use_stocsy === false}
               />
             </div>
             <div className="param-row">
@@ -383,7 +403,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
               <select
                 value={typeParams.correlation_method ?? "pearson"}
                 onChange={(e) => updateParameter(type, 'correlation_method', e.target.value)}
-                disabled={allRunning}
+                disabled={allRunning || typeParams.use_stocsy === false}
               >
                 <option value="pearson">Pearson</option>
                 <option value="spearman">Spearman</option>
@@ -408,7 +428,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
                 min="0"
                 value={typeParams.ransy_cv_threshold ?? (type === "1H" ? 0.05 : type === "13C" ? 0.1 : 0.15)}
                 onChange={(e) => updateParameter(type, 'ransy_cv_threshold', e.target.value)}
-                disabled={allRunning}
+                disabled={allRunning || typeParams.use_ransy === false}
               />
             </div>
             <div className="param-row">
@@ -419,7 +439,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
                 min="0"
                 value={typeParams.coverage_threshold_group ?? 0}
                 onChange={(e) => updateParameter(type, 'coverage_threshold_group', e.target.value)}
-                disabled={allRunning}
+                disabled={allRunning || typeParams.use_stocsy === false}
               />
             </div>
             <div className="param-row">
@@ -441,7 +461,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
                 min="0"
                 value={typeParams.coverage_threshold_ransy ?? 0}
                 onChange={(e) => updateParameter(type, 'coverage_threshold_ransy', e.target.value)}
-                disabled={allRunning}
+                disabled={allRunning || typeParams.use_ransy === false}
               />
             </div>
             <div className="param-row">

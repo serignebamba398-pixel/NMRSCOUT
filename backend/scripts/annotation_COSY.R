@@ -29,6 +29,8 @@ params <- list(
     tol_match_F2 = 0.2,
     correlation_threshold = 0.80, # |r| threshold for STOCSY
     correlation_method = "pearson", # "pearson" or "spearman"
+    use_stocsy = TRUE,
+    use_ransy = TRUE,
     coverage_threshold_group = 0,
     coverage_threshold_subchain = 0,
     ratio_min = 0.01,
@@ -288,17 +290,29 @@ tryCatch(
         log_message(mode_info$warning)
 
         # Global flags
-        USE_STOCSY <<- mode_info$use_stocsy
-        USE_RANSY <<- mode_info$use_ransy
+        USE_STOCSY <<- isTRUE(mode_info$use_stocsy) && isTRUE(params$use_stocsy)
+        USE_RANSY <<- isTRUE(mode_info$use_ransy) && isTRUE(params$use_ransy)
         N_SAMPLES <<- mode_info$n_samples
-        ANNOTATION_MODE <<- mode_info$mode
+        ANNOTATION_MODE <<- if (!USE_STOCSY && !USE_RANSY) {
+          "ratio_only"
+        } else if (!USE_STOCSY) {
+          "ransy_only"
+        } else if (!USE_RANSY) {
+          "stocsy_only"
+        } else {
+          mode_info$mode
+        }
+        log_message(sprintf("Filtering options: STOCSY=%s, RANSY=%s", USE_STOCSY, USE_RANSY))
 
         if (!USE_STOCSY) {
-            log_message(sprintf(
-                "DEGRADED MODE: Only %d sample(s) - STOCSY/RANSY disabled, using intensity ratios only",
-                N_SAMPLES
-            ))
-        }
+      if (N_SAMPLES < 5) {
+        log_message(sprintf("DEGRADED MODE: Only %d sample(s); statistical filters disabled", N_SAMPLES))
+      } else {
+        log_message(sprintf("STOCSY disabled by user; RANSY=%s", USE_RANSY))
+      }
+    } else if (!USE_RANSY) {
+      log_message("RANSY disabled by user; using STOCSY and intensity ratios")
+    }
 
         # Global matrices for intensity_ratio_annotation_2D() when n < 5
         spectrum_matrix <<- spectrum_matrix # Make accessible globally
@@ -733,9 +747,14 @@ former_groupes_stocsy_2D <- function(matched_ppms, molecule_shifts, tol_match_F1
         if (!is.finite(coverage_sub_final)) coverage_sub_final <- 0
         if (coverage_sub_final < coverage_threshold_subchain) next
 
-        # RANSY
-        dt_ransy <- calculer_RANSY_2D(sub_chain_vec, intensity_columns, ransy_cv_threshold, pivot)
-        if (is.null(dt_ransy) || !nrow(dt_ransy)) next
+        # RANSY is optional. When disabled, keep the STOCSY/ratio candidates
+        # without computing coefficients of variation.
+        if (exists("USE_RANSY") && isTRUE(USE_RANSY)) {
+            dt_ransy <- calculer_RANSY_2D(sub_chain_vec, intensity_columns, ransy_cv_threshold, pivot)
+            if (is.null(dt_ransy) || !nrow(dt_ransy)) next
+        } else {
+            dt_ransy <- data.table(ppm_matrix = sub_chain_vec, cv = 0)
+        }
 
         avail <- merge(dt_ransy, spectrum_matrix[, .(ppm_matrix, ppm_F1, ppm_F2)], by = "ppm_matrix")
         if (!nrow(avail)) next
@@ -1151,12 +1170,18 @@ tryCatch(
         log_memory("before assembly")
         if (length(results_list) > 0) {
             resultats <- data.table::rbindlist(results_list, fill = TRUE)
-            # Calculate ransy_score: 75% coverage + 25% stability (inverse of CV variability)
-            # Stability = 1 - (avg_variabilite / ransy_cv_threshold) bounded between 0 and 1
-            resultats[, stability := 1 - pmin(1, pmax(0, ifelse(is.na(avg_variabilite), 1, avg_variabilite / ransy_cv_threshold)))]
-            resultats[, ransy_score := 0.75 * ifelse(is.na(coverage_ransy), 0, coverage_ransy) + 0.25 * stability * 100]
+            if (exists("USE_RANSY") && isTRUE(USE_RANSY)) {
+                # Calculate ransy_score: 75% coverage + 25% stability (inverse of CV variability)
+                safe_cv_threshold <- if (is.finite(ransy_cv_threshold) && ransy_cv_threshold > 0) ransy_cv_threshold else 1
+                resultats[, stability := 1 - pmin(1, pmax(0, ifelse(is.na(avg_variabilite), 1, avg_variabilite / safe_cv_threshold)))]
+                resultats[, ransy_score := 0.75 * ifelse(is.na(coverage_ransy), 0, coverage_ransy) + 0.25 * stability * 100]
+                log_message("Ranking by RANSY coverage and stability")
+            } else {
+                resultats[, stability := NA_real_]
+                resultats[, ransy_score := ifelse(is.na(coverage_sub), 0, coverage_sub)]
+                log_message("RANSY disabled: ranking by sub-chain coverage")
+            }
             data.table::setorder(resultats, Source, -ransy_score)
-            log_message("Ranking by ransy_score (75% coverage + 25% stability)")
             best_per_sourceCOSY <- resultats[, .SD[1], by = Source]
             best_per_sourceCOSY[, Source := sub("^NMR_", "", Source)]
             best_per_sourceCOSY[, Source := sub("\\.sdf$", "", Source)]
