@@ -2175,9 +2175,10 @@ class FingerprintPredictor:
         solvent_norm = normalize_solvent(solvent)
         import numpy as np
 
-        # Legacy exact 1H entries are indexed by explicit-H position and are
-        # unsafe until the group-preserving v14 cache is rebuilt.
-        if FingerprintPredictor._exact_db and nucleus != '1H':
+        # Exact entries are keyed by InChIKey.  Map the query atom through
+        # canonical explicit-H structures so SMILES atom order cannot change
+        # the assignment, while preserving distinct diastereotopic CH2 H's.
+        if FingerprintPredictor._exact_db:
             try:
                 from rdkit.Chem import inchi as rdkit_inchi
                 mol_no_h = Chem.RemoveHs(mol_with_h)
@@ -2188,13 +2189,21 @@ class FingerprintPredictor:
                     canon_smiles = Chem.MolToSmiles(mol_no_h)
                     mol_canon_no_h = Chem.MolFromSmiles(canon_smiles)
                     if mol_canon_no_h is not None:
-                        match_no_h = _substruct_match_with_timeout(mol_no_h, mol_canon_no_h, timeout=1.0)
-                        sdf_to_canon = {sdf_i: canon_i for canon_i, sdf_i in enumerate(match_no_h)}
-                        heavy_idx_in_noh = sum(
-                            1 for i in range(atom_idx)
-                            if mol_with_h.GetAtomWithIdx(i).GetAtomicNum() > 1
-                        )
-                        canon_idx = sdf_to_canon.get(heavy_idx_in_noh)
+                        canon_idx = None
+                        if nucleus == '1H':
+                            query_explicit = Chem.AddHs(mol_no_h)
+                            canon_explicit = Chem.AddHs(mol_canon_no_h)
+                            match_h = _substruct_match_with_timeout(query_explicit, canon_explicit, timeout=1.0)
+                            if match_h and atom_idx < len(match_h):
+                                canon_idx = match_h[atom_idx]
+                        else:
+                            match_no_h = _substruct_match_with_timeout(mol_no_h, mol_canon_no_h, timeout=1.0)
+                            sdf_to_canon = {sdf_i: canon_i for canon_i, sdf_i in enumerate(match_no_h)}
+                            heavy_idx_in_noh = sum(
+                                1 for i in range(atom_idx)
+                                if mol_with_h.GetAtomWithIdx(i).GetAtomicNum() > 1
+                            )
+                            canon_idx = sdf_to_canon.get(heavy_idx_in_noh)
                         if canon_idx is not None:
                             for sol_key in get_solvent_variants(solvent_norm):
                                 nuc_dict = exact_entry.get(sol_key, {}).get(nucleus, {})

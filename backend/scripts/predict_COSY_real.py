@@ -715,6 +715,12 @@ def dataframe_for_sdf(
                 inplace=True,
                 errors='ignore'
             )
+            # Internal ordering metadata; not needed by annotation or viewer.
+            df.drop(
+                columns=['RelaySteps', 'SpinSystem'],
+                inplace=True,
+                errors='ignore'
+            )
         return df
     except Exception as e:
         log(
