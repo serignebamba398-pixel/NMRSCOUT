@@ -285,6 +285,10 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
             </div>
           </div>
 
+          <p className="hint" style={{ marginTop: 10 }}>
+            Experimental Conditions below apply to this CSV prediction and are stored in the generated spectra metadata.
+          </p>
+
           {/* Incremental prediction - resume from existing task */}
           <div className="settings-section" style={{ marginTop: 16, padding: '12px', backgroundColor: '#f0f7ff', borderRadius: '6px', border: '1px solid #cce0ff' }}>
             <h4 className="section-title" style={{ fontSize: '13px', marginBottom: 8, color: '#1a73e8' }}>
@@ -372,7 +376,7 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
       </div>
 
       <div className="settings-section">
-        <h4 className="section-title" style={{ fontSize: '13px', marginTop: 16 }}>Experimental Conditions</h4>
+        <h4 className="section-title" style={{ fontSize: '13px', marginTop: 16 }}>Experimental Conditions (SMILES and CSV)</h4>
         <p className="hint" style={{ marginBottom: 12 }}>
           These parameters are used during prediction to generate the multiplicity JSON with accurate shifts and J-couplings.
         </p>
