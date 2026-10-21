@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AppStateProvider, useAppState } from './contexts/AppStateContext';
 import { Toolbar, Modal, LogControls } from './components/layout';
 import { LogConsole, GlobalProgressOverlay, PendingTasksNotification } from './components/common';
@@ -28,6 +28,16 @@ const AppContent = () => {
     setShowLogs,
   } = useAppState();
   const [loading, setLoading] = useState(false);
+  // Synchronous guard for rapid clicks before React exposes running=true.
+  const taskLaunchLockRef = useRef(null);
+
+  // Cancellation can close the progress streams before their promises settle.
+  // Release the click guard as soon as both task states report idle.
+  useEffect(() => {
+    if (!prediction?.running && !annotationState?.allRunning) {
+      taskLaunchLockRef.current = null;
+    }
+  }, [prediction?.running, annotationState?.allRunning]);
 
   // Modal states
   const [showPrediction, setShowPrediction] = useState(false);
@@ -236,27 +246,37 @@ const AppContent = () => {
       return;
     }
 
+    if (annotationState?.allRunning || taskLaunchLockRef.current) return;
+
     if (!prediction?.runPrediction) {
       addLog("Prediction not available. Configure parameters first.", "error");
       return;
     }
+    taskLaunchLockRef.current = 'prediction';
     setShowLogs(true);
-    prediction.runPrediction();
-  }, [prediction, addLog, setShowLogs]);
+    Promise.resolve(prediction.runPrediction()).finally(() => {
+      if (taskLaunchLockRef.current === 'prediction') taskLaunchLockRef.current = null;
+    });
+  }, [prediction, annotationState?.allRunning, addLog, setShowLogs]);
 
   const handleComputeAnnotation = useCallback(() => {
+    if (annotationState?.allRunning) {
+      window.dispatchEvent(new Event('nmrscout:show-progress'));
+      return;
+    }
+
+    if (prediction?.running || taskLaunchLockRef.current) return;
+
     if (!annotation?.runSelectedIntegrated) {
       addLog("Annotation not available. Configure parameters first.", "error");
       return;
     }
+    taskLaunchLockRef.current = 'annotation';
     setShowLogs(true);
-    annotation.runSelectedIntegrated();
-  }, [annotation, addLog, setShowLogs]);
-
-  const handleComputeOptimization = useCallback(() => {
-    // TODO: Implement when optimization hook is ready
-    addLog("Optimization - To be implemented", "info");
-  }, [addLog]);
+    Promise.resolve(annotation.runSelectedIntegrated()).finally(() => {
+      if (taskLaunchLockRef.current === 'annotation') taskLaunchLockRef.current = null;
+    });
+  }, [annotation, annotationState?.allRunning, prediction?.running, addLog, setShowLogs]);
 
   return (
     <div className="app sirius-layout">
@@ -273,7 +293,6 @@ const AppContent = () => {
         onAnnotation={() => setShowAnnotation(true)}
         onComputePrediction={handleComputePrediction}
         onComputeAnnotation={handleComputeAnnotation}
-        onComputeOptimization={handleComputeOptimization}
         currentProject={currentProject}
         loading={loading}
       />

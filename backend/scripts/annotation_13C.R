@@ -1469,7 +1469,7 @@ tryCatch(
                     RANSY_mean_intensities = sanitize_for_csv(paste(round(ransy_means, 6), collapse = ";")),
                     coverage_ransy = best$coverage_ransy,
                     RANSY_variabilite = sanitize_for_csv(best$RANSY_variabilite),
-                    avg_variabilite = best$avg_cv,
+                    avg_variabilite = if (!is.null(best$avg_cv)) best$avg_cv else if (!is.null(best$avg_variabilite)) best$avg_variabilite else NA_real_,
                     avg_error_ppm = ifelse(is.null(best$avg_error_ppm) || is.na(best$avg_error_ppm), NA_real_, best$avg_error_ppm),
                     intensity_ratios = sanitize_for_csv(best$intensity_ratios),
                     confidence_level = conf_level,
@@ -1606,10 +1606,10 @@ tryCatch(
       ransy_enabled = if (exists("USE_RANSY")) USE_RANSY else TRUE,
       normalization_applied = if (exists("normalization_applied")) normalization_applied else "none",
       summary = list(
-        avg_coverage_ransy = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$coverage_ransy, na.rm = TRUE), 2) else 0,
-        avg_coverage_sub   = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$coverage_sub, na.rm = TRUE), 2) else 0,
-        avg_variabilite    = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$avg_variabilite, na.rm = TRUE), 4) else 0,
-        avg_error_ppm      = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$avg_error_ppm, na.rm = TRUE), 4) else 0
+        avg_coverage_ransy = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$coverage_ransy, 2) else 0,
+        avg_coverage_sub   = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$coverage_sub, 2) else 0,
+        avg_variabilite    = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$avg_variabilite, 4) else 0,
+        avg_error_ppm      = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$avg_error_ppm, 4) else 0
       )
     ))
 

@@ -666,6 +666,9 @@ router.post('/api/simulate-spectrum-batch', async (req, res) => {
   // Mode batch seulement si c'est all_multiplicities.json
   if (!isSingleMode) {
     args.push('--all');
+    // Read conditions per molecule; a consolidated file may contain spectra
+    // imported under different solvents or spectrometer frequencies.
+    args.push('--use_json_conditions');
   }
 
   if (enable_dynamics) {

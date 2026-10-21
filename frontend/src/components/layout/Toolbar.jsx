@@ -78,7 +78,6 @@ export const Toolbar = ({
   onAnnotation,
   onComputePrediction,
   onComputeAnnotation,
-  onComputeOptimization,
   currentProject,
   loading = false,
 }) => {
@@ -87,10 +86,7 @@ export const Toolbar = ({
   
   const predictionRunning = prediction?.running || false;
   const annotationRunning = annotationState?.allRunning || false;
-  // TODO: Connect optimizationRunning when the hook exposes it.
-  const optimizationRunning = false;
-
-  const anyRunning = predictionRunning || annotationRunning || optimizationRunning;
+  const anyRunning = predictionRunning || annotationRunning;
 
   return (
     <div className="sirius-toolbar">
@@ -175,9 +171,11 @@ export const Toolbar = ({
         <button 
           className={`toolbar-btn compute-btn ${predictionRunning ? 'running' : ''}`}
           data-action="compute-prediction"
-          onClick={onComputePrediction}
-          disabled={loading || annotationRunning || optimizationRunning}
-          title="Lancer la prédiction"
+          onClick={() => predictionRunning
+            ? window.dispatchEvent(new Event('nmrscout:show-progress'))
+            : onComputePrediction?.()}
+          disabled={loading || annotationRunning}
+          title={predictionRunning ? "Show prediction progress" : "Start prediction"}
         >
           <span className={`toolbar-icon compute-icon ${predictionRunning ? 'spinning' : ''}`}>
             {predictionRunning ? Icons.spinner : Icons.play}
@@ -190,9 +188,11 @@ export const Toolbar = ({
         <button 
           className={`toolbar-btn compute-btn ${annotationRunning ? 'running' : ''}`}
           data-action="compute-annotation"
-          onClick={onComputeAnnotation}
-          disabled={loading || predictionRunning || optimizationRunning}
-          title="Lancer l'annotation"
+          onClick={() => annotationRunning
+            ? window.dispatchEvent(new Event('nmrscout:show-progress'))
+            : onComputeAnnotation?.()}
+          disabled={loading || predictionRunning}
+          title={annotationRunning ? "Show annotation progress" : "Start annotation"}
         >
           <span className={`toolbar-icon compute-icon ${annotationRunning ? 'spinning' : ''}`}>
             {annotationRunning ? Icons.spinner : Icons.play}
@@ -202,20 +202,6 @@ export const Toolbar = ({
           </span>
         </button>
         
-        <button 
-          className={`toolbar-btn compute-btn ${optimizationRunning ? 'running' : ''}`}
-          data-action="compute-optimization"
-          onClick={onComputeOptimization}
-          disabled={loading || predictionRunning || annotationRunning}
-          title="Lancer l'optimisation"
-        >
-          <span className={`toolbar-icon compute-icon ${optimizationRunning ? 'spinning' : ''}`}>
-            {optimizationRunning ? Icons.spinner : Icons.play}
-          </span>
-          <span className="toolbar-label">
-            {optimizationRunning ? 'Running...' : 'Compute Optim.'}
-          </span>
-        </button>
       </div>
 
       <div className="toolbar-spacer" />

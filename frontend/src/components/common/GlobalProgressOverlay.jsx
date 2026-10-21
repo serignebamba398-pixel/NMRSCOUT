@@ -275,13 +275,19 @@ export const GlobalProgressOverlay = () => {
             {message}
           </div>
 
-          <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "center", gap: 8 }}>
             <button
               className="btn btn-danger"
               onClick={annotation?.handleCancelAll}
               disabled={!annotationRunning || annotation?.cancelRequested}
             >
               {annotation?.cancelRequested ? "Canceling..." : "Cancel"}
+            </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => setIsDismissed(true)}
+            >
+              Close
             </button>
           </div>
           

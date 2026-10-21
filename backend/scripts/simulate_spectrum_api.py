@@ -36,6 +36,11 @@ def main():
     parser.add_argument("--ph", type=float, default=7.4, help="pH for dynamics post-processor (1.0-14.0)")
     
     parser.add_argument("--all", action="store_true", help="Process ALL molecules in a consolidated JSON (batch mode)")
+    parser.add_argument(
+        "--use_json_conditions",
+        action="store_true",
+        help="Use each molecule's frequency, solvent and temperature from the multiplicity JSON",
+    )
     
     args = parser.parse_args()
     
@@ -85,18 +90,22 @@ def main():
             for mol in molecules:
                 try:
                     mol_id = mol.get("mol_id", "unknown")
+                    molecule_freq = (mol.get("freq_MHz") or args.freq_mhz) if args.use_json_conditions else args.freq_mhz
+                    molecule_solvent = (mol.get("solvent") or args.solvent) if args.use_json_conditions else args.solvent
+                    molecule_temperature = (mol.get("temperature_K") or args.temperature_k) if args.use_json_conditions else args.temperature_k
+                    molecule_ph = (mol.get("pH") or mol.get("ph") or args.ph) if args.use_json_conditions else args.ph
                     result = generate_spectrum_from_multiplicity_json(
                         mol,
-                        freq_mhz=args.freq_mhz,
+                        freq_mhz=molecule_freq,
                         line_shape=args.line_shape,
                         ppm_min=args.ppm_min,
                         ppm_max=args.ppm_max,
                         digital_resolution_hz=args.digital_resolution_hz,
                         line_width_hz=args.line_width_hz,
                         enable_dynamics=args.enable_dynamics,
-                        temperature_k=args.temperature_k,
-                        ph=args.ph,
-                        solvent=args.solvent,
+                        temperature_k=molecule_temperature,
+                        ph=molecule_ph,
+                        solvent=molecule_solvent,
                     )
                     result["mol_id"] = mol_id
                     result["smiles"] = mol.get("smiles", "")

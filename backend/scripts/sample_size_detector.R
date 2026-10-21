@@ -370,4 +370,16 @@ intensity_ratio_annotation_2D <- function(matched_ppms, molecule_shifts, tol_mat
 
 
 #' NULL coalescing operator (for default parameters)
+# Safe numeric mean for optional annotation metrics. Disabled filters can
+# legitimately leave a metric absent (NULL) or entirely NA.
+safe_mean_or_zero <- function(x, digits = NULL) {
+  if (is.null(x) || length(x) == 0) return(0)
+  values <- suppressWarnings(as.numeric(x))
+  values <- values[is.finite(values)]
+  if (length(values) == 0) return(0)
+  value <- mean(values)
+  if (!is.null(digits)) value <- round(value, digits)
+  value
+}
+
 `%||%` <- function(a, b) if (is.null(a)) b else a

@@ -40,6 +40,8 @@ import {
   DEFAULT_COLORS,
   METHOD_LABELS_SHORT,
   TYPE_LABELS,
+  COLOR_THEORY,
+  COLOR_EXP,
   PLOT_HEIGHT,
   MOL_HEIGHT,
   SIDEBAR_W,
@@ -2408,6 +2410,13 @@ export default function Viewer({
   // Track whether batch simulation has started for this task.
   const batchLoadedForTask = useRef(null);
 
+  const getMultiplicityConditions = useCallback((multData) => ({
+    freq_mhz: Number(multData?.freq_MHz) || 700,
+    solvent: multData?.solvent || 'CDCl3',
+    temperature_k: Number(multData?.temperature_K) || 298,
+    ph: Number(multData?.pH ?? multData?.ph) || 7.4,
+  }), []);
+
   // Load simulated spectra in a batch when taskId changes.
   useEffect(() => {
     if (!taskId || batchLoadedForTask.current === taskId) {
@@ -2508,13 +2517,10 @@ export default function Viewer({
         return simulateSpectrum({
           multiplicity_json: multData,
           mol_id: molId,
-          freq_mhz: 700,
+          ...getMultiplicityConditions(multData),
           line_shape: 'lorentzian',
           line_width_hz: 1.5,
           enable_dynamics: true,
-          solvent: 'CDCl3',
-          temperature_k: 298,
-          ph: 7.4,
         });
       })
       .then(specData => {
@@ -2531,7 +2537,7 @@ export default function Viewer({
       .finally(() => {
         setPreloadingMultiplicity(false);
       });
-  }, [taskId, selectedSource]);
+  }, [taskId, selectedSource, getMultiplicityConditions]);
 
   // Adjust spectrum intensity with the mouse wheel.
   // A factor of 1.1 gives gradual scaling: about 100 wheel steps from 1 to 10,000.
@@ -2895,6 +2901,30 @@ export default function Viewer({
                   {type === "all" ? "All spectra" : TYPE_LABELS[type] || type}
                 </button>
               ))}
+              {availableSpectrumTypes.length > 0 && (
+                <div
+                  aria-label="Spectrum signal legend"
+                  style={{
+                    marginLeft: "auto",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 16,
+                    padding: "4px 2px",
+                    color: "#334155",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span aria-hidden="true" style={{ width: 18, height: 4, borderRadius: 2, background: COLOR_EXP }} />
+                    Matched experimental signals
+                  </span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    <span aria-hidden="true" style={{ width: 18, height: 4, borderRadius: 2, background: COLOR_THEORY }} />
+                    Predicted signals
+                  </span>
+                </div>
+              )}
             </div>
             {(() => {
               let blocks = [];

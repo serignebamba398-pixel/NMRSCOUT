@@ -619,6 +619,7 @@ def get_atom_fingerprint(mol, atom_idx: int, radius: int = RADIUS_VERY_EXACT, he
     raw_fp = get_atom_fingerprint_raw(mol, atom_idx, radius, heavy_only=heavy_only)
     return (radius << 62) | raw_fp
 
+
 def get_atom_env_string(mol, atom_idx: int) -> str:
     """Return a compact atom-environment description."""
     atom = mol.GetAtomWithIdx(atom_idx)
@@ -1211,6 +1212,7 @@ class FingerprintPredictor:
     _db_composite = None
     _db_mtime = None
     _exact_db = None
+    _exact_1h_groups = None
 
     def __new__(cls):
         """Return the singleton instance."""
@@ -1246,8 +1248,8 @@ class FingerprintPredictor:
             with open(DB_CACHE_FILE, 'rb') as f:
                 data = pickle.load(f)
 
-            if data.get('version') not in ('13.0',):
-                print(f"[FingerprintPredictor] Cache version mismatch ({data.get('version')} != 13.0), rebuilding...")
+            if data.get('version') not in ('14.0',):
+                print(f"[FingerprintPredictor] Cache version mismatch ({data.get('version')} != 14.0), rebuilding...")
                 self._build_database()
                 return
 
@@ -1258,6 +1260,7 @@ class FingerprintPredictor:
                 FingerprintPredictor._db[radius] = data['indexes'].get(radius, {})
             FingerprintPredictor._fp_to_env = data.get('fp_to_env', {})
             FingerprintPredictor._exact_db = data.get('exact_db', {})
+            FingerprintPredictor._exact_1h_groups = data.get('exact_1h_groups', {})
 
             FingerprintPredictor._db_composite = {}
             composite_indexes = data.get('indexes_composite', {})
@@ -1298,8 +1301,14 @@ class FingerprintPredictor:
 
         exact_db = {}
         FingerprintPredictor._exact_db = exact_db
+        exact_1h_groups = {}
+        FingerprintPredictor._exact_1h_groups = exact_1h_groups
 
-        count_bmrb = self._load_bmrb(db_by_radius, fp_to_env, exact_db, db_composite=db_composite_by_radius)
+        count_bmrb = self._load_bmrb(
+            db_by_radius, fp_to_env, exact_db,
+            db_composite=db_composite_by_radius,
+            exact_1h_groups=exact_1h_groups,
+        )
 
         count_nmrdb = self._load_nmrshiftdb(db_by_radius, fp_to_env, exact_db=exact_db, db_composite=db_composite_by_radius)
 
@@ -1414,11 +1423,12 @@ class FingerprintPredictor:
 
             data = {
                 'bmrb_ambiguity_revision': REVISION,
-                'version': '13.0',
+                'version': '14.0',
                 'indexes': indexes_serializable,
                 'indexes_composite': composite_serializable,
                 'fp_to_env': FingerprintPredictor._fp_to_env,
                 'exact_db': FingerprintPredictor._exact_db or {},
+                'exact_1h_groups': FingerprintPredictor._exact_1h_groups or {},
                 'total_records': sum(stats.values()),
                 'stats': {'fps_by_radius': stats, 'composite_by_radius': composite_stats}
             }
@@ -1501,7 +1511,8 @@ class FingerprintPredictor:
 
         return count
 
-    def _load_bmrb(self, db, fp_to_env, exact_db=None, db_composite=None) -> int:
+    def _load_bmrb(self, db, fp_to_env, exact_db=None, db_composite=None,
+                   exact_1h_groups=None) -> int:
         """Load BMRB records."""
         from rdkit.Chem import inchi as rdkit_inchi
 
@@ -1575,6 +1586,8 @@ class FingerprintPredictor:
                         except Exception:
                             inchikey = None
 
+                    proton_groups = defaultdict(lambda: defaultdict(list))
+
                     for line in shift_lines:
                         parts = line.split()
                         if len(parts) != 4:
@@ -1593,6 +1606,15 @@ class FingerprintPredictor:
 
                         if shift_1h != 0.0 and atom_symbol == 'H' and (atom_idx, '1H') not in unresolved:
 
+                            h_atom = mol.GetAtomWithIdx(atom_idx)
+                            heavy_neighbors = [n for n in h_atom.GetNeighbors() if n.GetAtomicNum() > 1]
+                            if inchikey and heavy_neighbors:
+                                heavy_idx = heavy_neighbors[0].GetIdx()
+                                heavy_key = str(get_atom_fingerprint(
+                                    mol, heavy_idx, RADIUS_ULTRA_EXACT, heavy_only=True
+                                ))
+                                proton_groups[heavy_key][heavy_idx].append(float(shift_1h))
+
                             added = self._store_1h_shift(mol, atom_idx, shift_1h, solvent,
                                                          inchikey, canon_map, exact_db, db, fp_to_env,
                                                          db_composite_by_radius=db_composite)
@@ -1608,6 +1630,25 @@ class FingerprintPredictor:
                                 canon_idx = canon_map[atom_idx]
                                 exact_db.setdefault(inchikey, {}).setdefault(solvent, {}).setdefault('13C', {})[canon_idx] = shift_13c
                                 exact_count += 1
+
+                    if inchikey and exact_1h_groups is not None and proton_groups:
+                        solvent_groups = exact_1h_groups.setdefault(inchikey, {}).setdefault(solvent, {})
+                        for heavy_key, instances in proton_groups.items():
+                            records = solvent_groups.setdefault(heavy_key, [])
+                            for heavy_idx, shifts in instances.items():
+                                attached_h = sum(
+                                    1 for n in mol.GetAtomWithIdx(heavy_idx).GetNeighbors()
+                                    if n.GetAtomicNum() == 1
+                                )
+                                record = {
+                                    'n_h': attached_h,
+                                    'shifts': sorted(float(v) for v in shifts),
+                                }
+                                # Preserve multiplicity of structurally identical
+                                # groups (for example the two methyl groups of a
+                                # symmetric molecule).  They are matched as a
+                                # multiset at prediction time.
+                                records.append(record)
 
                 except Exception:
 
@@ -2062,6 +2103,66 @@ class FingerprintPredictor:
 
         return False
 
+    def predict_exact_proton_groups(self, mol_with_h, solvent: str) -> Dict[int, float]:
+        """Return exact 1H shifts mapped by heavy-atom groups.
+
+        Values are matched as a multiset per invariant heavy-atom fingerprint.
+        This preserves two distinct shifts for a diastereotopic CH2 without
+        relying on explicit-H indices or SMILES atom order.
+        """
+        if not FingerprintPredictor._exact_1h_groups:
+            return {}
+
+        try:
+            from rdkit.Chem import inchi as rdkit_inchi
+            mol_no_h = Chem.RemoveHs(mol_with_h)
+            inchikey = rdkit_inchi.MolToInchiKey(mol_no_h)
+            molecule_entry = FingerprintPredictor._exact_1h_groups.get(inchikey, {})
+            solvent_entry = None
+            for sol_key in get_solvent_variants(normalize_solvent(solvent)):
+                if sol_key in molecule_entry:
+                    solvent_entry = molecule_entry[sol_key]
+                    break
+            if not solvent_entry:
+                return {}
+
+            query_groups = defaultdict(list)
+            for heavy in mol_with_h.GetAtoms():
+                if heavy.GetAtomicNum() == 1:
+                    continue
+                h_indices = sorted(n.GetIdx() for n in heavy.GetNeighbors() if n.GetAtomicNum() == 1)
+                if not h_indices:
+                    continue
+                heavy_key = str(get_atom_fingerprint(
+                    mol_with_h, heavy.GetIdx(), RADIUS_ULTRA_EXACT, heavy_only=True
+                ))
+                query_groups[heavy_key].append((heavy.GetIdx(), h_indices))
+
+            assignments = {}
+            for heavy_key, groups in query_groups.items():
+                records = solvent_entry.get(heavy_key, [])
+                compatible = [r for r in records if int(r.get('n_h', 0)) == len(groups[0][1])]
+                if len(compatible) != len(groups):
+                    continue
+
+                groups_sorted = sorted(groups, key=lambda item: item[0])
+                records_sorted = sorted(
+                    compatible,
+                    key=lambda r: tuple(float(v) for v in r.get('shifts', [])),
+                )
+                for (_, h_indices), record in zip(groups_sorted, records_sorted):
+                    shifts = [float(v) for v in record.get('shifts', [])]
+                    if len(shifts) == 1 and len(h_indices) > 1:
+                        shifts = shifts * len(h_indices)
+                    if len(shifts) != len(h_indices):
+                        continue
+                    for h_idx, shift in zip(h_indices, sorted(shifts)):
+                        assignments[h_idx] = shift
+            return assignments
+        except Exception as exc:
+            logger.debug(f"Exact 1H group-match error: {exc}")
+            return {}
+
     def predict_atom(self, mol_with_h, atom_idx: int, solvent: str, nucleus: str) -> Optional[Tuple[float, float, int, int]]:
         """Predict the shift for one atom."""
         if FingerprintPredictor._db is None:
@@ -2074,7 +2175,9 @@ class FingerprintPredictor:
         solvent_norm = normalize_solvent(solvent)
         import numpy as np
 
-        if FingerprintPredictor._exact_db:
+        # Legacy exact 1H entries are indexed by explicit-H position and are
+        # unsafe until the group-preserving v14 cache is rebuilt.
+        if FingerprintPredictor._exact_db and nucleus != '1H':
             try:
                 from rdkit.Chem import inchi as rdkit_inchi
                 mol_no_h = Chem.RemoveHs(mol_with_h)
@@ -2085,33 +2188,19 @@ class FingerprintPredictor:
                     canon_smiles = Chem.MolToSmiles(mol_no_h)
                     mol_canon_no_h = Chem.MolFromSmiles(canon_smiles)
                     if mol_canon_no_h is not None:
-                        atom = mol_with_h.GetAtomWithIdx(atom_idx)
-                        canon_idx = None
-
-                        if atom.GetSymbol() != 'H':
-
-                            match_no_h = _substruct_match_with_timeout(mol_no_h, mol_canon_no_h, timeout=1.0)
-                            sdf_to_canon = {sdf_i: canon_i for canon_i, sdf_i in enumerate(match_no_h)}
-
-                            heavy_idx_in_noh = sum(
-                                1 for i in range(atom_idx)
-                                if mol_with_h.GetAtomWithIdx(i).GetAtomicNum() > 1
-                            )
-                            canon_idx = sdf_to_canon.get(heavy_idx_in_noh)
-                        else:
-
-                            mol_canon_with_h = Chem.AddHs(mol_canon_no_h)
-                            match_with_h = _substruct_match_with_timeout(mol_with_h, mol_canon_with_h, timeout=1.0)
-                            if match_with_h:
-
-                                sdf_to_canon_wh = {sdf_i: canon_i for canon_i, sdf_i in enumerate(match_with_h)}
-                                canon_idx = sdf_to_canon_wh.get(atom_idx)
+                        match_no_h = _substruct_match_with_timeout(mol_no_h, mol_canon_no_h, timeout=1.0)
+                        sdf_to_canon = {sdf_i: canon_i for canon_i, sdf_i in enumerate(match_no_h)}
+                        heavy_idx_in_noh = sum(
+                            1 for i in range(atom_idx)
+                            if mol_with_h.GetAtomWithIdx(i).GetAtomicNum() > 1
+                        )
+                        canon_idx = sdf_to_canon.get(heavy_idx_in_noh)
                         if canon_idx is not None:
-
                             for sol_key in get_solvent_variants(solvent_norm):
                                 nuc_dict = exact_entry.get(sol_key, {}).get(nucleus, {})
-
-                                shift = nuc_dict.get(canon_idx) or nuc_dict.get(str(canon_idx))
+                                shift = nuc_dict.get(canon_idx)
+                                if shift is None:
+                                    shift = nuc_dict.get(str(canon_idx))
                                 if shift is not None:
                                     logger.debug(f"Atom {atom_idx}: Exact-match InChIKey {inchikey}, shift={shift}")
                                     return shift, 0.0, 99, 0

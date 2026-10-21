@@ -277,8 +277,8 @@ CH3_DIASTEREOTOPIC_DELTA = {
 
     "gem_dimethyl_chiral": (0.05, 0.10, "C(CH₃)₂ près d'un chiral (pinane, camphre)"),
 
-    "valine_CH3": (0.01, 0.03, "Valine γ-CH₃ BMRB bmse000860: 0.80 vs 0.79 ppm"),
-    "leucine_CH3": (0.04, 0.07, "Leucine δ-CH₃ BMRB bmse000052: médiane 0.04 ppm"),
+    "valine_CH3": (0.01, 0.03, "Valine γ-CH₃ BMRB bmse000052: 0.981 vs 1.034 ppm"),
+    "leucine_CH3": (0.04, 0.07, "Representative leucine δ-CH₃ values: median 0.04 ppm"),
     "isoleucine_CH3": (0.07, 0.10, "Isoleucine γ-CH₃ vs δ-CH₃ (séc-butyle, pas iPr)"),
 
     "terpene_gem": (0.04, 0.08, "géraniol, menthol, etc."),

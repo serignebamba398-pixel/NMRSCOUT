@@ -1351,6 +1351,11 @@ def process_one_smiles(
     prediction_source_1h = ['ML'] * len(new_pred_1h)
 
     individual_h_shifts: Dict[int, float] = {}
+    exact_group_shifts = (
+        fp_predictor.predict_exact_proton_groups(mol_with_h, solvent_for_db)
+        if fp_predictor is not None and fp_predictor.is_available()
+        else {}
+    )
 
     for gi, (heavy_idx, h_list) in enumerate(sorted_groups):
         if gi >= len(new_pred_1h):
@@ -1361,37 +1366,64 @@ def process_one_smiles(
             continue
 
         group_fp_found = False
-        for hi, h_idx in enumerate(h_list):
-            found = False
+        group_fp_results = []
+        if exact_group_shifts and all(h_idx in exact_group_shifts for h_idx in h_list):
+            group_fp_results = [
+                (h_idx, float(exact_group_shifts[h_idx]), 99, 0)
+                for h_idx in h_list
+            ]
+        else:
+            for h_idx in h_list:
+                if fp_predictor is not None and fp_predictor.is_available():
+                    result_fp = fp_predictor.predict_atom(mol_with_h, h_idx, solvent_for_db, '1H')
+                    if result_fp is not None:
+                        shift_fp, std_fp, count_fp, radius_used = result_fp
+                        group_fp_results.append((h_idx, float(shift_fp), count_fp, radius_used))
 
-            if fp_predictor is not None and fp_predictor.is_available():
-                result_fp = fp_predictor.predict_atom(mol_with_h, h_idx, solvent_for_db, '1H')
-                if result_fp is not None:
-                    shift_fp, std_fp, count_fp, radius_used = result_fp
+        # The three protons of a methyl group are equivalent on the NMR time
+        # scale.  Per-hydrogen fingerprint keys can become unstable when atom
+        # ordering or unspecified stereochemistry differs from the database.
+        # Reject an incoherent fingerprint assignment for the complete methyl
+        # group instead of mixing unrelated shifts (for example 10.14, 3.55,
+        # and 3.46 ppm in one CH3 group).
+        heavy_atom = mol_with_h.GetAtomWithIdx(heavy_idx)
+        is_methyl = heavy_atom.GetSymbol() == 'C' and len(h_list) == 3
+        if is_methyl and group_fp_results:
+            methyl_values = [item[1] for item in group_fp_results]
+            if len(group_fp_results) != 3 or max(methyl_values) - min(methyl_values) > 0.15:
+                send_log(
+                    f"[{mol_id}] [WARN] Rejected incoherent fingerprint CH3 assignment "
+                    f"at atom {heavy_idx}: {methyl_values}; using the ML group prediction"
+                )
+                group_fp_results = []
 
-                    individual_h_shifts[h_idx] = shift_fp
+        if group_fp_results:
+            group_shift = float(np.median([item[1] for item in group_fp_results]))
+            new_pred_1h[gi] = group_shift
+            group_fp_found = True
 
-                    fp_1h_used += 1
-                    is_exact = (radius_used == 0 and count_fp == 99)
-                    if is_exact:
-                        fp_1h_exact += 1
-                    elif radius_used == 6:
-                        fp_1h_r6 += 1
-                    elif radius_used == 5:
-                        fp_1h_r5 += 1
-                    elif radius_used == 4:
-                        fp_1h_r4 += 1
-                    elif radius_used == 3:
-                        fp_1h_r3 += 1
-                    else:
-                        fp_1h_r2 += 1
+            for h_idx, shift_fp, count_fp, radius_used in group_fp_results:
+                # All methyl protons receive the same robust group value.
+                individual_h_shifts[h_idx] = group_shift if is_methyl else shift_fp
+                fp_1h_used += 1
+                is_exact = (radius_used == 0 and count_fp == 99)
+                if is_exact:
+                    fp_1h_exact += 1
+                elif radius_used == 6:
+                    fp_1h_r6 += 1
+                elif radius_used == 5:
+                    fp_1h_r5 += 1
+                elif radius_used == 4:
+                    fp_1h_r4 += 1
+                elif radius_used == 3:
+                    fp_1h_r3 += 1
+                else:
+                    fp_1h_r2 += 1
 
-                    if hi == 0:
-                        new_pred_1h[gi] = shift_fp
-                        group_fp_found = True
-                        if gi < len(prediction_source_1h):
-                            prediction_source_1h[gi] = 'FP-EXACT' if is_exact else f'FP-R{radius_used}'
-                    found = True
+            if gi < len(prediction_source_1h):
+                radii = {item[3] for item in group_fp_results}
+                exact_group = all(item[3] == 0 and item[2] == 99 for item in group_fp_results)
+                prediction_source_1h[gi] = 'FP-EXACT' if exact_group else f"FP-R{min(radii)}"
 
         if not group_fp_found:
             ml_1h_used += 1
@@ -2359,8 +2391,30 @@ def main(argv: Optional[List[str]] = None) -> None:
         send_error("Validation des modèles échouée", error=str(e))
         sys.exit(1)
 
+    # Always retain the conditions selected in Prediction Parameters.  The
+    # fingerprint lookup needs the selected solvent even if the optional
+    # multiplicity simulator cannot be loaded.
+    ph_value = float(getattr(args, 'sim_ph', getattr(args, 'ph', 7.4)))
+    if ph_value < 0.0 or ph_value > 14.0:
+        send_log(f"[WARNING] pH invalide: {ph_value}, fallback vers 7.4")
+        ph_value = 7.4
+
+    sim_params = {
+        "solvent": args.sim_solvent,
+        "freq_mhz": args.sim_freq_mhz,
+        "temperature_k": args.sim_temperature_k,
+        "use_3d": bool(args.sim_use_3d),
+        "debug": bool(args.sim_debug),
+        "enable_dynamics": bool(getattr(args, 'sim_enable_dynamics', False)),
+        "ph": ph_value,
+    }
+    send_log(
+        f"[PARAMETERS] solvent={sim_params['solvent']}, "
+        f"frequency={sim_params['freq_mhz']} MHz, "
+        f"temperature={sim_params['temperature_k']} K, pH={sim_params['ph']}"
+    )
+
     multiplicity_mod = None
-    sim_params = None
     if getattr(args, "simulate_multiplicity", False):
         if args.simulator_path:
             try:
@@ -2370,24 +2424,6 @@ def main(argv: Optional[List[str]] = None) -> None:
                 send_log(f"[WARN] Échec chargement simulateur: {e}")
         else:
             send_log("[WARN] --simulate_multiplicity activé mais --simulator_path non fourni")
-
-        if multiplicity_mod:
-
-            ph_value = float(getattr(args, 'sim_ph', getattr(args, 'ph', 7.4)))
-
-            if not isinstance(ph_value, (int, float)) or ph_value < 0.0 or ph_value > 14.0:
-                send_log(f"[WARNING] pH invalide: {ph_value}, fallback vers 7.4")
-                ph_value = 7.4
-
-            sim_params = {
-                "solvent": args.sim_solvent,
-                "freq_mhz": args.sim_freq_mhz,
-                "temperature_k": args.sim_temperature_k,
-                "use_3d": bool(args.sim_use_3d),
-                "debug": bool(args.sim_debug),
-                "enable_dynamics": bool(getattr(args, 'sim_enable_dynamics', False)),
-                "ph": ph_value,
-            }
 
     try:
         if args.smiles:

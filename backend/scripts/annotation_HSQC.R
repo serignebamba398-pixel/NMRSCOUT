@@ -1253,10 +1253,10 @@ tryCatch(
             ransy_enabled = if (exists("USE_RANSY")) USE_RANSY else TRUE,
             normalization_applied = if (exists("normalization_applied")) normalization_applied else "none",
             summary = list(
-                avg_coverage_ransy = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$coverage_ransy, na.rm = TRUE), 2) else 0,
-                avg_coverage_sub   = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$coverage_sub, na.rm = TRUE), 2) else 0,
-                avg_variabilite    = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$avg_variabilite, na.rm = TRUE), 4) else 0,
-                avg_error_ppm_2D   = if (nrow(resultats_valides) > 0) round(mean(resultats_valides$avg_error_ppm_2D, na.rm = TRUE), 4) else 0
+                avg_coverage_ransy = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$coverage_ransy, 2) else 0,
+                avg_coverage_sub   = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$coverage_sub, 2) else 0,
+                avg_variabilite    = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$avg_variabilite, 4) else 0,
+                avg_error_ppm_2D   = if (nrow(resultats_valides) > 0) safe_mean_or_zero(resultats_valides$avg_error_ppm_2D, 4) else 0
             )
         ))
 
