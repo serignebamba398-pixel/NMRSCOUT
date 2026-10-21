@@ -2178,7 +2178,14 @@ class FingerprintPredictor:
         # Exact entries are keyed by InChIKey.  Map the query atom through
         # canonical explicit-H structures so SMILES atom order cannot change
         # the assignment, while preserving distinct diastereotopic CH2 H's.
-        if FingerprintPredictor._exact_db:
+        if nucleus == '1H':
+            exact_proton_shifts = self.predict_exact_proton_groups(mol_with_h, solvent_norm)
+            exact_shift = exact_proton_shifts.get(atom_idx)
+            if exact_shift is not None:
+                logger.debug(f"Atom {atom_idx}: Exact 1H group-match, shift={exact_shift}")
+                return exact_shift, 0.0, 99, 0
+
+        if FingerprintPredictor._exact_db and nucleus != '1H':
             try:
                 from rdkit.Chem import inchi as rdkit_inchi
                 mol_no_h = Chem.RemoveHs(mol_with_h)
