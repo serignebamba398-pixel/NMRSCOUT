@@ -1,11 +1,12 @@
 import { isMethodAvailable } from '../constants/releaseFeatures';
 import { useState, useRef, useCallback } from 'react';
-import { 
-  getPredictionTasks, 
-  uploadFile, 
+import {
+  getPredictionTasks,
+  uploadFile,
   listUploads,
   isValidCsvForType,
   cancelTask,
+  getTasks,
   normalizeServerPath,
   exportAllSpectralBackgroundsWithRetry
 } from '../api';
@@ -26,8 +27,9 @@ export const useAnnotation = ({
   const [matrixUploads, setMatrixUploads] = useState([]);
   const [loadingMatrixUploads, setLoadingMatrixUploads] = useState(false);
   const [cancelRequested, setCancelRequested] = useState(false);
-  
+
   const runningSSERef = useRef(new Map());
+  const canceledRef = useRef(false);
 
   /**
    * Refreshes the list of uploaded matrices
@@ -128,6 +130,8 @@ export const useAnnotation = ({
       addLog("No method selected or ready.", "error");
       return;
     }
+
+    canceledRef.current = false;
 
     setAnnotationState((prev) => ({
       ...prev,
@@ -465,10 +469,10 @@ export const useAnnotation = ({
 
     setAnnotationState((prev) => ({
       ...prev,
-      readyToView: true,
+      readyToView: !canceledRef.current,
       allRunning: false,
-      globalProgress: 100,
-      globalProgressMessage: 'Completed',
+      globalProgress: canceledRef.current ? 0 : 100,
+      globalProgressMessage: canceledRef.current ? 'Cancelled' : 'Completed',
     }));
 
     // Clear UI lock set by annotation modal (important when modal is closed during run)
@@ -496,53 +500,71 @@ export const useAnnotation = ({
    * Cancels all running annotations
    */
   const handleCancelAll = useCallback(async () => {
+    canceledRef.current = true;
     setCancelRequested(true);
     addLog("Cancelling all running annotations...", "error");
 
     const entries = Array.from(runningSSERef.current.entries());
+    const failedCancellations = [];
 
-    if (entries.length === 0) {
-      addLog("No running annotation to cancel", "error");
-      setAnnotationState((prev) => ({
-        ...prev,
-        allRunning: false,
-        globalProgressMessage: "No running task",
-        globalProgress: 0,
-      }));
-      setCancelRequested(false);
-      return;
-    }
-
-    addLog(`Cancelling ${entries.length} annotation(s)...`, "error");
-
-    for (const [type, sse] of entries) {
-      try {
-        addLog(`Cancelling ${type}...`, "error");
-        const taskId = sse.getTaskId?.();
-        if (taskId) {
-          await cancelTask(taskId);
-          addLog(`${type}: task stopped (taskId: ${taskId})`, "error");
+    // 1. Cancel tasks tracked by the frontend SSE refs
+    if (entries.length > 0) {
+      addLog(`Cancelling ${entries.length} tracked annotation(s)...`, "error");
+      for (const [type, sse] of entries) {
+        try {
+          addLog(`Cancelling ${type}...`, "error");
+          const result = typeof sse.cancelTask === "function"
+            ? await sse.cancelTask()
+            : await cancelTask(sse.getTaskId?.());
+          const taskId = sse.getTaskId?.();
+          if (result?.canceled === false && result?.error) throw new Error(result.error);
+          addLog(`${type}: process stopped${taskId ? ` (taskId: ${taskId})` : ""}`, "error");
+          if (typeof sse.cancel === "function") sse.cancel();
+          runningSSERef.current.delete(type);
+        } catch (e) {
+          failedCancellations.push(type);
+          addLog(`Could not confirm ${type} cancellation: ${e.message}`, "error");
         }
-
-        if (typeof sse.cancel === "function") {
-          sse.cancel();
-        }
-      } catch (e) {
-        addLog(`Error cancelling ${type}: ${e.message}`, "error");
       }
     }
 
-    runningSSERef.current.clear();
+    // 2. Also cancel orphaned backend tasks the frontend lost track of
+    //    (e.g. SSE disconnected due to stderr, network blip, etc.)
+    try {
+      const backendTasks = await getTasks();
+      const orphans = (backendTasks || []).filter(
+        (t) => t.pid && !entries.some(([, sse]) => sse.getTaskId?.() === t.id)
+      );
+      if (orphans.length > 0) {
+        addLog(`Found ${orphans.length} orphaned backend task(s) — cancelling...`, "error");
+        for (const t of orphans) {
+          try {
+            await cancelTask(t.id);
+            addLog(`Orphaned task ${t.id} (${t.type}) cancelled`, "error");
+          } catch (e) {
+            failedCancellations.push(t.id);
+            addLog(`Could not cancel orphaned task ${t.id}: ${e.message}`, "error");
+          }
+        }
+      }
+    } catch (e) {
+      addLog(`Could not check backend for orphaned tasks: ${e.message}`, "error");
+    }
 
-    setAnnotationState((prev) => ({
-      ...prev,
-      allRunning: false,
-      globalProgressMessage: `Cancelled (${entries.length} task(s) stopped)`,
-      globalProgress: 0,
-    }));
-
-    if (setUiLock) {
-      setUiLock({ lockedBy: null, message: "" });
+    if (failedCancellations.length === 0) {
+      setAnnotationState((prev) => ({
+        ...prev,
+        allRunning: false,
+        globalProgressMessage: `Cancelled (${entries.length} task(s) stopped)`,
+        globalProgress: 0,
+      }));
+      if (setUiLock) setUiLock({ lockedBy: null, message: "" });
+    } else {
+      setAnnotationState((prev) => ({
+        ...prev,
+        allRunning: true,
+        globalProgressMessage: `Cancellation not confirmed for: ${failedCancellations.join(", ")}`,
+      }));
     }
 
     setCancelRequested(false);

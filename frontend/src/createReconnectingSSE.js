@@ -40,9 +40,10 @@ export function createReconnectingSSE({
   };
 
   const cancel = () => {
-    hasCompleted = true;
+    if (!hasCompleted) {
+      finalizeError("Canceled");
+    }
     abortController.abort();
-    stopAllTimers();
   };
 
   const getTaskId = () => taskId;
@@ -99,9 +100,14 @@ export function createReconnectingSSE({
           const { done, value } = await reader.read();
 
           if (done) {
-            // Stream closed server-side → retry reconnection (fallback)
-            if (!hasCompleted) {
+            // Stream closed server-side.
+            // If we already have a taskId, do NOT reconnect via POST (that would
+            // start a duplicate annotation). Instead, rely on the status polling
+            // interval to detect completion.
+            if (!hasCompleted && !taskId) {
               reconnectTimeout = setTimeout(() => connect(), RECONNECT_DELAY);
+            } else if (!hasCompleted && taskId) {
+              checkTaskStatus(true);
             }
             return;
           }
@@ -134,8 +140,10 @@ export function createReconnectingSSE({
                   break;
 
                 case "error":
-                  finalizeError(data.message || "Unknown error");
-                  return;
+                  // Stderr messages from R are non-fatal — log them but keep listening.
+                  // Only type:"completed" with success:false is a real termination signal.
+                  onLog && onLog(`[R stderr] ${data.message || "Unknown error"}`);
+                  break;
 
                 case "completed":
                   finalizeSuccess(data);
@@ -153,8 +161,12 @@ export function createReconnectingSSE({
           return pump();
         } catch (e) {
           if (e.name !== "AbortError" && !hasCompleted) {
-            // Network issue → retry
-            reconnectTimeout = setTimeout(() => connect(), RECONNECT_DELAY);
+            // Network issue — only reconnect via POST if we don't have a taskId yet.
+            if (!taskId) {
+              reconnectTimeout = setTimeout(() => connect(), RECONNECT_DELAY);
+            } else {
+              checkTaskStatus(true);
+            }
           }
         }
       };
@@ -162,7 +174,11 @@ export function createReconnectingSSE({
       await pump();
     } catch (e) {
       if (e.name === "AbortError" || hasCompleted) return;
-      reconnectTimeout = setTimeout(() => connect(), RECONNECT_DELAY);
+      if (!taskId) {
+        reconnectTimeout = setTimeout(() => connect(), RECONNECT_DELAY);
+      } else {
+        checkTaskStatus(true);
+      }
     }
   };
 
@@ -211,12 +227,15 @@ export function createReconnectingSSE({
   return {
     cancel: () => cancel(),
     cancelTask: async () => {
-      if (!taskId) return;
+      if (!taskId) return { canceled: false, error: "No taskId" };
       try {
         const { cancelTask } = await import("./api");
-        await cancelTask(taskId);
+        const result = await cancelTask(taskId);
+        cancel(); // Also stop the SSE connection client-side
+        return result;
       } catch (e) {
         console.error("Error cancelTask:", e);
+        throw e; // Let handleCancelAll detect the failure
       }
     },
     getTaskId,

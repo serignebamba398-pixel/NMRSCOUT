@@ -533,6 +533,8 @@ const createPostSSEConnection = (
   const { signal } = controller;
 
   let currentTaskId = null;
+  let resolveTaskId;
+  const taskIdAvailable = new Promise((resolve) => { resolveTaskId = resolve; });
 
   const p = new Promise(async (resolve, reject) => {
     try {
@@ -609,6 +611,7 @@ const createPostSSEConnection = (
             switch (data.type) {
               case "taskId":
                 currentTaskId = data.taskId;
+                resolveTaskId?.(currentTaskId);
                 onLog && onLog(`[OK] Task started: ${currentTaskId}`);
                 onTaskId && onTaskId(currentTaskId);
                 // Expose taskId immediately
@@ -674,18 +677,19 @@ const createPostSSEConnection = (
 
   // Server-side cancel method (calls /tasks/:taskId/cancel)
   p.cancelTask = async () => {
-    const taskId = p._taskId;
+    let taskId = p._taskId || currentTaskId;
     if (!taskId) {
-      console.warn("[WARN] No taskId available for server-side cancellation");
-      return;
+      taskId = await new Promise((resolve) => {
+        const timer = setTimeout(() => resolve(null), 10000);
+        taskIdAvailable.then((id) => {
+          clearTimeout(timer);
+          resolve(id);
+        });
+      });
     }
-    try {
-      await cancelTask(taskId);
-    } catch (e) {
-      console.error("[ERROR] Server cancellation error:", e);
-    }
+    if (!taskId) throw new Error("Server task ID was not received; the annotation was not released for relaunch.");
+    return cancelTask(taskId);
   };
-
   // Method to get taskId
   p.getTaskId = () => p._taskId;
 

@@ -63,57 +63,54 @@ router.post('/api/tasks/:taskId/cancel', async (req, res) => {
     task.canceled = true;
 
     if (task.process && task.process.pid) {
-      await new Promise(resolve => {
-        const pid = task.process.pid;
-        try {
-          process.kill(pid, 0);
-        } catch {
-          logWithMemory(`[${taskId}] Process ${pid} already exited`, 'INFO');
-          resolve();
-          return;
-        }
-
-        logWithMemory(`[${taskId}] Sending SIGTERM to PID ${pid}`, 'INFO');
-
-        const onExit = () => {
-          logWithMemory(`[${taskId}] Process ${pid} exited`, 'INFO');
-          resolve();
+      const child = task.process;
+      const pid = child.pid;
+      const waitForExit = (timeoutMs) => new Promise(resolve => {
+        if (child.exitCode !== null || child.signalCode !== null) return resolve(true);
+        let settled = false;
+        const finish = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          child.removeListener('exit', finish);
+          child.removeListener('close', finish);
+          resolve(true);
         };
-
-        task.process.once('exit', onExit);
-        task.process.once('close', onExit);
-
-        try {
-          if (isWin) {
-            const { killProcessTree } = require('../services/processManager');
-            killProcessTree(pid, 'SIGTERM', taskId);
-          } else {
-            task.process.kill('SIGTERM');
-          }
-        } catch (e) {
-          logWithMemory(`[${taskId}] SIGTERM error: ${e.message}`, 'WARN');
-          resolve();
-          return;
-        }
-
-        setTimeout(() => {
-          try {
-            process.kill(pid, 0);
-            logWithMemory(`[${taskId}] Process still running, escalating`, 'WARN');
-            if (isWin) {
-              const { killProcessTree } = require('../services/processManager');
-              killProcessTree(pid, 'SIGKILL', taskId);
-            } else {
-              task.process.kill('SIGKILL');
-            }
-            setTimeout(resolve, 1000);
-          } catch {
-            resolve();
-          }
-        }, 3000);
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          child.removeListener('exit', finish);
+          child.removeListener('close', finish);
+          resolve(child.exitCode !== null || child.signalCode !== null);
+        }, timeoutMs);
+        timer.unref?.();
+        child.once('exit', finish);
+        child.once('close', finish);
       });
-    }
 
+      logWithMemory(`[${taskId}] Terminating process tree for PID ${pid}`, 'INFO');
+      if (isWin) {
+        // Wait for taskkill; do not release the task slot while R workers are alive.
+        await new Promise((resolve, reject) => {
+          const { execFile } = require('child_process');
+          execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, (error, stdout, stderr) => {
+            if (error && child.exitCode === null && child.signalCode === null) {
+              reject(new Error((stderr || error.message || 'taskkill failed').trim()));
+              return;
+            }
+            resolve();
+          });
+        });
+        if (!(await waitForExit(5000))) throw new Error(`Process ${pid} did not exit after taskkill`);
+      } else {
+        try { process.kill(-pid, 'SIGTERM'); } catch { child.kill('SIGTERM'); }
+        if (!(await waitForExit(3000))) {
+          try { process.kill(-pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
+          if (!(await waitForExit(3000))) throw new Error(`Process ${pid} did not exit after SIGKILL`);
+        }
+      }
+      logWithMemory(`[${taskId}] Process tree stopped`, 'INFO');
+    }
     if (task.safetyTimeout) {
       clearTimeout(task.safetyTimeout);
       task.safetyTimeout = null;

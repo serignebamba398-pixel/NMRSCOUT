@@ -195,29 +195,23 @@ export const MainView = ({ onMoleculeSelect }) => {
             console.log(`[MainView] ${type} sourceIdx:`, sourceIdx);
             
             const lowerHeaders = headers.map(h => h.toLowerCase());
-            // Use intersection_coverage for 1H and 13C.
-            // Use coverage_ransy for COSY and HSQC.
-            const is1D = type === '1H' || type === '13C';
-            let ransyIdx = -1;
-
-            if (is1D) {
-              // 1H and 13C require intersection_coverage; do not substitute another metric.
-              ransyIdx = lowerHeaders.indexOf('intersection_coverage');
-            } else {
-              // Use coverage_ransy for COSY and HSQC.
-              const ransyCandidates = [
-                'coverage_ransy',
-                'coverage_ransy_mean',
-                'coverage_ransy_avg',
-                'coverage_ransy_percent',
-              ];
-              ransyIdx = ransyCandidates
-                .map(k => lowerHeaders.indexOf(k))
-                .find(i => i >= 0) ?? -1;
-              if (ransyIdx < 0) {
-                // fallback: any column that contains both "ransy" and "coverage"
-                ransyIdx = lowerHeaders.findIndex(h => h.includes('ransy') && h.includes('coverage'));
-              }
+            // Use coverage_ransy for all methods (1H, 13C, COSY, TOCSY, HSQC).
+            // For 1H/13C, intersection_coverage is STOCSY-based and is often NA
+            // when STOCSY is disabled or finds no intersections — coverage_ransy
+            // is always populated (default 0) in all annotation modes.
+            const ransyCandidates = [
+              'coverage_ransy',
+              'coverage_ransy_mean',
+              'coverage_ransy_avg',
+              'coverage_ransy_percent',
+              'intersection_coverage', // fallback if coverage_ransy absent
+            ];
+            let ransyIdx = ransyCandidates
+              .map(k => lowerHeaders.indexOf(k))
+              .find(i => i >= 0) ?? -1;
+            if (ransyIdx < 0) {
+              // last resort: any column containing both "ransy" and "coverage"
+              ransyIdx = lowerHeaders.findIndex(h => h.includes('ransy') && h.includes('coverage'));
             }
 
             // Chercher coverage_sub (plusieurs variantes)

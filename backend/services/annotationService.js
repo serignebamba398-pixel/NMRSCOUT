@@ -5,7 +5,7 @@ const os = require('os');
 const { v4: uuidv4 } = require('uuid');
 const { Semaphore } = require('async-mutex');
 
-const { DEFAULT_LIGHT_PARAMS, MEMORY_LIMIT_MB, PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE, ENABLE_TASK_PERSISTENCE } = require('../config');
+const { DEFAULT_LIGHT_PARAMS, MEMORY_LIMIT_MB, PROCESS_TIMEOUT_HOURS, KILL_ON_CLIENT_CLOSE, ENABLE_TASK_PERSISTENCE, isWin } = require('../config');
 const { scriptsDir, outputsDir, uploadsDir, scriptMap, legacyOut, getActiveOutputsDir } = require('../config/paths');
 const { ensureDir, safeResolve } = require('../utils/filesystem');
 const { getRscript, buildREnv } = require('../utils/spawn');
@@ -146,7 +146,7 @@ async function handleAnnotation(req, res, method) {
       cwd: workDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
-      detached: false,
+      detached: !isWin,
       env: childEnv,
     });
 
@@ -524,7 +524,7 @@ async function handleAnnotationFromPrediction(req, res, method) {
       cwd: tempAnnotDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
-      detached: false,
+      detached: !isWin,
       env: childEnv,
     });
 
