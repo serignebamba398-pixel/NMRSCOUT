@@ -1675,6 +1675,7 @@ export default function Viewer({
     () => annotationResults || {}
   );
   const [busyByType, setBusyByType] = useState({});
+  const [rawLoadErrorByType, setRawLoadErrorByType] = useState({});
 
   // State for raw spectrum data (for direct canvas rendering without PNG)
   const [rawDataByType, setRawDataByType] = useState({
@@ -1783,6 +1784,7 @@ export default function Viewer({
         const pathChanged = pd && loadedRawDataRef.current[type] !== pd;
         if (pd && pathChanged) {
           loadedRawDataRef.current[type] = pd; // Store the loaded path
+          setRawLoadErrorByType(prev => ({ ...prev, [type]: null })); // Clear previous error
           try {
             setBusyByType(prev => ({ ...prev, [type]: true }));
             const data = await extractBrukerSpectrum(pd);
@@ -1799,7 +1801,7 @@ export default function Viewer({
               const opts = bgOptions?.[type] || {};
               const userPpmMin = Number(opts.ppm_min);
               const userPpmMax = Number(opts.ppm_max);
-              
+
               if (Number.isFinite(userPpmMin) && Number.isFinite(userPpmMax)) {
                 // Use user-defined bounds from annotation parameters
                 setZoomRangeByType(prev => ({
@@ -1821,8 +1823,12 @@ export default function Viewer({
                   }
                 }));
               }
+            } else if (data?.status === "error") {
+              setRawLoadErrorByType(prev => ({ ...prev, [type]: data.error || "Extraction failed" }));
+              console.error(`[Viewer] Raw spectrum error for ${type}:`, data.error);
             }
           } catch (err) {
+            setRawLoadErrorByType(prev => ({ ...prev, [type]: err.message || "Network error" }));
             console.error(`Error loading raw ${type} data:`, err);
           } finally {
             setBusyByType(prev => ({ ...prev, [type]: false }));
@@ -2125,8 +2131,8 @@ export default function Viewer({
   );
 
   const availableSpectrumTypes = useMemo(
-    () => ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).filter(type => rowFor(type) != null),
-    [rowFor]
+    () => ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).filter(type => mapsByType[type]?.size > 0),
+    [mapsByType]
   );
   const displayedSpectrum = availableSpectrumTypes.includes(activeSpectrum) ? activeSpectrum : "all";
 
@@ -2933,6 +2939,7 @@ export default function Viewer({
                 const raw1H = rawDataByType?.["1H"];
                 const zoom1H = zoomRangeByType?.["1H"];
                 const hasData1H = raw1H && raw1H.ppm?.length > 0;
+                const rawError1H = rawLoadErrorByType?.["1H"];
 
                 blocks.push({
                   key: "b-1H",
@@ -2961,6 +2968,19 @@ export default function Viewer({
                             }}
                           >
                             ✓
+                          </span>
+                        )}
+                        {rawError1H && !hasData1H && (
+                          <span
+                            title={rawError1H}
+                            style={{
+                              fontSize: 9, color: "#dc2626",
+                              background: "#fee2e2",
+                              padding: "1px 4px", borderRadius: 3,
+                              cursor: "help",
+                            }}
+                          >
+                            ⚠ spectrum error
                           </span>
                         )}
                       </div>
@@ -3052,6 +3072,7 @@ export default function Viewer({
                 const raw13C = rawDataByType?.["13C"];
                 const zoom13C = zoomRangeByType?.["13C"];
                 const hasData13C = raw13C && raw13C.ppm?.length > 0;
+                const rawError13C = rawLoadErrorByType?.["13C"];
 
                 blocks.push({
                   key: "b-13C",
@@ -3080,6 +3101,19 @@ export default function Viewer({
                             }}
                           >
                             ✓
+                          </span>
+                        )}
+                        {rawError13C && !hasData13C && (
+                          <span
+                            title={rawError13C}
+                            style={{
+                              fontSize: 9, color: "#dc2626",
+                              background: "#fee2e2",
+                              padding: "1px 4px", borderRadius: 3,
+                              cursor: "help",
+                            }}
+                          >
+                            ⚠ spectrum error
                           </span>
                         )}
                       </div>
@@ -3416,7 +3450,13 @@ export default function Viewer({
                 blocks = blocks.filter(block => block.key === `b-${displayedSpectrum}`);
               }
               const n = blocks.length;
-              if (n === 0) return <div>No spectrum available</div>;
+              if (n === 0) return (
+                <div style={{ padding: "16px 8px", color: "#64748b", fontSize: 13, textAlign: "center" }}>
+                  {displayedSpectrum !== "all"
+                    ? `No result for this molecule in ${TYPE_LABELS[displayedSpectrum] || displayedSpectrum}`
+                    : "No spectrum available"}
+                </div>
+              );
               if (n === 1) return <div style={{ marginBottom: 12 }}>{blocks[0].el}</div>;
               if (n === 2)
                 return (
