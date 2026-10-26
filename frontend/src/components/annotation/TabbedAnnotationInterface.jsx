@@ -37,6 +37,7 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
     allRunning,
     globalProgress,
     globalProgressMessage,
+    progressByMethod,
     readyToView,
     selectedMethods,
     uploadedMatrixNames,
@@ -713,8 +714,24 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
       <div className="action-bar">
         {allRunning ? (
           <>
-            <div className="progress-inline">
-              <ProgressBar progress={globalProgress} message={globalProgressMessage} />
+            <div className="progress-inline" style={{ flex: 1 }}>
+              {selectedMethods.map((method) => (
+                <div key={method} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, minWidth: 40, color: '#555' }}>{method}</span>
+                  <div style={{ flex: 1, height: 8, background: '#e0e0e0', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%',
+                      width: `${progressByMethod?.[method] ?? 0}%`,
+                      background: method === '1H' ? '#4a90d9' : method === '13C' ? '#7b68ee' : method === 'COSY' ? '#e07b39' : method === 'TOCSY' ? '#9b59b6' : '#27ae60',
+                      borderRadius: 4,
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                  <span style={{ fontSize: 10, color: '#888', minWidth: 30, textAlign: 'right' }}>
+                    {Math.round(progressByMethod?.[method] ?? 0)}%
+                  </span>
+                </div>
+              ))}
             </div>
             <button
               onClick={handleCancelAll}

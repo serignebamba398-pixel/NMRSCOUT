@@ -1532,12 +1532,10 @@ tryCatch(
 
       resultats[, ransy_score := ifelse(is.na(coverage_ransy), 0, coverage_ransy)]
 
-      # Penalize molecules with only 1 matched signal — trivial match, unreliable
       resultats[, n_matched := sapply(ppm_molecule_matched, function(x) {
         if (is.na(x) || x == "") return(0L)
         length(strsplit(as.character(x), "\\|")[[1]])
       })]
-      resultats[n_matched <= 1, ransy_score := 0]
 
       # Multi-criteria sort: confidence > ransy_score (= coverage_ransy)
       confidence_order <- c("HIGH" = 4, "MEDIUM_HIGH" = 3, "MEDIUM" = 2, "LOW" = 1)

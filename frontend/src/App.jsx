@@ -158,8 +158,15 @@ const AppContent = () => {
       if (IS_ELECTRON) {
         const state = { predictionState, annotationState, viewerData, customColors };
         const r = await window.electronAPI.saveProjectState(state);
-        if (!r?.success) console.warn('Project save: failed', r?.error);
-        else console.log('Project saved');
+        if (!r?.success) {
+          console.warn('Project save: failed', r?.error);
+          addLog(`Save failed: ${r?.error || 'Unknown error'}`, 'error');
+        } else {
+          console.log('Project saved');
+          addLog('Project saved', 'info');
+          // Keep currentProject in sync with the saved state
+          setCurrentProject(prev => prev ? { ...prev, state, updatedAt: new Date().toISOString() } : prev);
+        }
       } else {
         // Web/Docker mode: save state via API
         const stateKeys = { predictionState, annotationState, viewerData, customColors };
@@ -315,7 +322,7 @@ const AppContent = () => {
         isOpen={showAnnotation}
         onClose={() => setShowAnnotation(false)}
         title="Annotation Parameters"
-        size="large"
+        size="fullscreen"
       >
         <TabbedAnnotationInterface inModal onClose={() => setShowAnnotation(false)} />
       </Modal>

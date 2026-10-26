@@ -374,6 +374,38 @@ export const AppStateProvider = ({ children }) => {
     loadCurrentProject();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ========== ELECTRON: auto-load last project on startup ==========
+  // The backend starts with the last project path, but the frontend
+  // needs to explicitly call getCurrentProject() to hydrate the state.
+  // We do this once backend-ready fires (to avoid race conditions).
+  useEffect(() => {
+    if (!IS_ELECTRON) return;
+    let loaded = false;
+
+    const loadCurrentProject = async () => {
+      if (loaded) return;
+      try {
+        const project = await window.electronAPI.getCurrentProject();
+        if (project) {
+          loaded = true;
+          setCurrentProject(project);
+        }
+      } catch (err) {
+        console.error('[AppState] Electron auto-load project error:', err);
+      }
+    };
+
+    // Try immediately (backend may already be ready)
+    loadCurrentProject();
+
+    // Also listen for backend-ready in case the backend wasn't ready yet
+    if (window.electronAPI?.onBackendReady) {
+      window.electronAPI.onBackendReady(() => {
+        loadCurrentProject();
+      });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ========== PERSISTENCE PROJET (Electron) ==========
   // Do not overwrite `project.nmrproj` unless the user explicitly
   // clicks Save / Save As. Annotation/prediction updates must not auto-persist

@@ -119,7 +119,7 @@ export const Toolbar = ({
           data-action="save"
           onClick={onSaveProject}
           disabled={loading || !currentProject || anyRunning}
-          title="Sauvegarder le projet"
+          title="Save project"
         >
           <span className="toolbar-icon">{Icons.save}</span>
           <span className="toolbar-label">Save</span>
@@ -130,7 +130,7 @@ export const Toolbar = ({
           data-action="saveas"
           onClick={onSaveAs}
           disabled={loading || !currentProject || anyRunning}
-          title="Sauvegarder sous..."
+          title="Save as..."
         >
           <span className="toolbar-icon">{Icons.saveAs}</span>
           <span className="toolbar-label">Save As</span>
@@ -146,7 +146,7 @@ export const Toolbar = ({
           data-action="prediction"
           onClick={onPrediction}
           disabled={loading || anyRunning}
-          title="Paramètres de prédiction"
+          title="Prediction settings"
         >
           <span className="toolbar-icon">{Icons.prediction}</span>
           <span className="toolbar-label">Prediction</span>
@@ -157,7 +157,7 @@ export const Toolbar = ({
           data-action="annotation"
           onClick={onAnnotation}
           disabled={loading || anyRunning}
-          title="Paramètres d'annotation"
+          title="Annotation settings"
         >
           <span className="toolbar-icon">{Icons.annotation}</span>
           <span className="toolbar-label">Annotation</span>
@@ -210,10 +210,10 @@ export const Toolbar = ({
       <div className="toolbar-project-info">
         {currentProject ? (
           <span className="project-name" title={currentProject.name || currentProject.workDir}>
-            {currentProject.name || 'Projet sans nom'}
+            {currentProject.name || 'Unnamed project'}
           </span>
         ) : (
-          <span className="no-project">Aucun projet ouvert</span>
+          <span className="no-project">No project open</span>
         )}
       </div>
     </div>

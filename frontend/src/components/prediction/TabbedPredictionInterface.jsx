@@ -285,10 +285,6 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
             </div>
           </div>
 
-          <p className="hint" style={{ marginTop: 10 }}>
-            Experimental Conditions below apply to this CSV prediction and are stored in the generated spectra metadata.
-          </p>
-
           {/* Incremental prediction - resume from existing task */}
           <div className="settings-section" style={{ marginTop: 16, padding: '12px', backgroundColor: '#f0f7ff', borderRadius: '6px', border: '1px solid #cce0ff' }}>
             <h4 className="section-title" style={{ fontSize: '13px', marginBottom: 8, color: '#1a73e8' }}>
@@ -317,66 +313,86 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
               </div>
             )}
           </div>
+
+          {/* Experimental Conditions (CSV) */}
+          <div className="settings-section" style={{ marginTop: 16 }}>
+            <h4 className="section-title">Experimental Conditions</h4>
+            <p className="hint" style={{ marginBottom: 12 }}>
+              These parameters are used during prediction to generate the multiplicity JSON with accurate shifts and J-couplings.
+            </p>
+            <div className="form-grid">
+              <div className="form-field">
+                <label>Spectrometer Frequency (MHz)</label>
+                <input
+                  type="number"
+                  value={freqMhz}
+                  onChange={(e) => updateOption('freq_mhz', parseFloat(e.target.value) || 700)}
+                  disabled={running}
+                  min={100}
+                  max={1200}
+                  step={50}
+                  style={{ width: 100 }}
+                />
+              </div>
+              <div className="form-field">
+                <label>Solvent</label>
+                <select
+                  value={solvent}
+                  onChange={(e) => updateOption('solvent', e.target.value)}
+                  disabled={running}
+                >
+                  <option value="CDCl3">CDCl3 (Chloroform-d)</option>
+                  <option value="DMSO-d6">DMSO-d6 (Dimethylsulfoxide-d6)</option>
+                  <option value="D2O">D2O (Deuterium oxide)</option>
+                  <option value="CD3OD">CD3OD (Methanol-d4)</option>
+                  <option value="acetone-d6">Acetone-d6</option>
+                  <option value="C6D6">C6D6 (Benzene-d6)</option>
+                  <option value="pyridine-d5">Pyridine-d5</option>
+                  <option value="CD3CN">CD3CN (Acetonitrile-d3)</option>
+                  <option value="THF-d8">THF-d8</option>
+                </select>
+                <p className="hint">
+                  Exchangeable protons (OH, NH, SH) will be included/excluded based on the solvent.
+                  In protic solvents (D2O, CD3OD), they exchange rapidly and are typically not visible.
+                </p>
+              </div>
+            </div>
+            <div className="form-grid">
+              <div className="form-field">
+                <label>Temperature (K)</label>
+                <input
+                  type="number"
+                  value={temperatureK}
+                  onChange={(e) => updateOption('temperature_k', parseFloat(e.target.value) || 298)}
+                  disabled={running}
+                  min={200}
+                  max={400}
+                  step={1}
+                  style={{ width: 80 }}
+                />
+              </div>
+              <div className="form-field">
+                <label>pH</label>
+                <input
+                  type="number"
+                  value={pH}
+                  onChange={(e) => updateOption('ph', parseFloat(e.target.value) || 7.4)}
+                  disabled={running}
+                  min={0}
+                  max={14}
+                  step={0.1}
+                  style={{ width: 80 }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Prediction methods */}
+      {/* Experimental Conditions (SMILES only) */}
+      {mode === "SMILES" && (
       <div className="settings-section">
-        <h4 className="section-title">Prediction Methods</h4>
-        <p className="section-hint">Check the methods then configure each tab if needed.</p>
-        <div className="methods-list">
-          { ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((m) => {
-            const checked = selectedPredMethods.includes(m);
-            const hasParams = m === "13C" || m === "COSY" || m === "TOCSY" || m === "HSQC";
-            
-            return (
-              <div key={m} className={`method-row ${checked ? 'selected' : ''}`}>
-                <label className="method-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleMethod(m)}
-                    disabled={running}
-                  />
-                  <span className="method-name">{m}</span>
-                </label>
-                <div className="method-info">
-                  {hasParams && (
-                    <span className="has-params">Parameters available</span>
-                  )}
-                </div>
-                {hasParams && (
-                  <button
-                    className="btn-configure"
-                    onClick={() => setActiveTab(m)}
-                    disabled={running}
-                    title={`Configure ${m}`}
-                  >
-                    Configure
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* nb_cores global */}
-        <div className="form-field" style={{ marginTop: 12 }}>
-          <label>Number of cores (nb_cores)</label>
-          <input
-            type="number"
-            value={options.nb_cores || 4}
-            onChange={(e) => updateOption('nb_cores', parseInt(e.target.value) || 4)}
-            disabled={running}
-            min={1}
-            max={32}
-            style={{ width: 80 }}
-          />
-        </div>
-      </div>
-
-      <div className="settings-section">
-        <h4 className="section-title" style={{ fontSize: '13px', marginTop: 16 }}>Experimental Conditions (SMILES and CSV)</h4>
+        <h4 className="section-title">Experimental Conditions</h4>
         <p className="hint" style={{ marginBottom: 12 }}>
           These parameters are used during prediction to generate the multiplicity JSON with accurate shifts and J-couplings.
         </p>
@@ -448,6 +464,62 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
               style={{ width: 80 }}
             />
           </div>
+        </div>
+      </div>
+      )}
+
+      {/* Prediction methods */}
+      <div className="settings-section">
+        <h4 className="section-title">Prediction Methods</h4>
+        <p className="section-hint">Check the methods then configure each tab if needed.</p>
+        <div className="methods-list">
+          { ["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map((m) => {
+            const checked = selectedPredMethods.includes(m);
+            const hasParams = m === "13C" || m === "COSY" || m === "TOCSY" || m === "HSQC";
+
+            return (
+              <div key={m} className={`method-row ${checked ? 'selected' : ''}`}>
+                <label className="method-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleMethod(m)}
+                    disabled={running}
+                  />
+                  <span className="method-name">{m}</span>
+                </label>
+                <div className="method-info">
+                  {hasParams && (
+                    <span className="has-params">Parameters available</span>
+                  )}
+                </div>
+                {hasParams && (
+                  <button
+                    className="btn-configure"
+                    onClick={() => setActiveTab(m)}
+                    disabled={running}
+                    title={`Configure ${m}`}
+                  >
+                    Configure
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* nb_cores global */}
+        <div className="form-field" style={{ marginTop: 12 }}>
+          <label>Number of cores (nb_cores)</label>
+          <input
+            type="number"
+            value={options.nb_cores || 4}
+            onChange={(e) => updateOption('nb_cores', parseInt(e.target.value) || 4)}
+            disabled={running}
+            min={1}
+            max={32}
+            style={{ width: 80 }}
+          />
         </div>
       </div>
 
@@ -551,6 +623,15 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
             />
           </div>
         </div>
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={options.cosy?.include_diagonal ?? true}
+            onChange={(e) => updateCosyOption('include_diagonal', e.target.checked)}
+            disabled={running}
+          />
+          <span>Include diagonal peaks</span>
+        </label>
         <p className="hint">
           The number of bonds determines which H-H correlations are predicted.
           Typically 2-3 for standard COSY.{isMethodAvailable('TOCSY') && ' TOCSY uses its own spin-system settings.'}
@@ -638,7 +719,7 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
   ].filter(tab => isMethodAvailable(tab.id));
 
   const elapsedMs = startTime ? (endTime || Date.now()) - startTime : 0;
-  const canLaunch = methodCount > 0 && (mode === "SMILES" ? smiles.trim() : csvUploadedName);
+  const canLaunch = methodCount > 0 && (mode === "SMILES" ? smiles.trim() : (csvUploadedName || csvLocalFile));
 
   return (
     <div className="tabbed-prediction" style={{ position: "relative" }}>

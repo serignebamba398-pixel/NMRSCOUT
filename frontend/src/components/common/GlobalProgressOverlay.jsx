@@ -158,7 +158,8 @@ export const GlobalProgressOverlay = () => {
     '1H': '#1d4ed8',    // Blue
     '13C': '#166534',   // Green
     'COSY': '#b45309',  // Orange
-    'HSQC': '#a21caf',  // Purple
+    'TOCSY': '#7c3aed', // Purple
+    'HSQC': '#a21caf',  // Pink
   };
 
   // For annotation, display progress bars by method

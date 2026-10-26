@@ -136,11 +136,23 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
       const jsonContent = fs.readFileSync(allPath, 'utf-8');
       const allMultiplicities = JSON.parse(jsonContent);
 
-      // Find the molecule by ID (also try without _predicted suffix)
-      const molIdClean = molId.replace(/_predicted$/i, '');
-      const molecule = allMultiplicities.molecules?.find(m => 
-        m.mol_id === molId || m.mol_id === molIdClean
-      );
+      // Normalize: strip suffixes, lowercase, replace ALL non-alphanumeric chars with
+      // a single space, then collapse. This handles commas, parentheses, hyphens,
+      // underscores, dots, etc. so that "2,4-dimethyl" == "_2_4-dimethyl".
+      const normalize = (s) => String(s || '')
+        .replace(/_predicted$/i, '')
+        .replace(/_annotated$/i, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const molIdNorm = normalize(molId);
+
+      const molecule = allMultiplicities.molecules?.find(m => {
+        const mNorm = normalize(m.mol_id);
+        return m.mol_id === molId || m.mol_id === molId.replace(/_predicted$/i, '') || mNorm === molIdNorm;
+      });
 
       if (!molecule) {
         return res.status(404).json({
@@ -170,8 +182,14 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
         const jsonContent = fs.readFileSync(filePath, 'utf-8');
         const data = JSON.parse(jsonContent);
 
+        // Same robust normalizer as Try 2
+        const normalizeAlt = (s) => String(s || '')
+          .replace(/_predicted$/i, '').replace(/_annotated$/i, '')
+          .toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+        const molIdNormAlt = normalizeAlt(molId);
+
         // Check if this is a single molecule file
-        if (data.mol_id === molId) {
+        if (data.mol_id === molId || normalizeAlt(data.mol_id) === molIdNormAlt) {
           return res.json({
             status: 'ok',
             mol_id: data.mol_id,
@@ -182,7 +200,7 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
 
         // Check if this is a batch file with molecules array
         if (data.molecules && Array.isArray(data.molecules)) {
-          const molecule = data.molecules.find(m => m.mol_id === molId);
+          const molecule = data.molecules.find(m => m.mol_id === molId || normalizeAlt(m.mol_id) === molIdNormAlt);
           if (molecule) {
             return res.json({
               status: 'ok',

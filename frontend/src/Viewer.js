@@ -2644,7 +2644,7 @@ export default function Viewer({
               width: 60, padding: "2px 4px", fontSize: 10,
               border: "1px solid #cbd5e1", borderRadius: 4,
             }}
-            title="Seuil de contour: 0.001 = bruit visible, 0.1 = signaux forts seulement"
+            title="Contour threshold: 0.001 = noise visible, 0.1 = strong signals only"
           />
         </label>
         <button
@@ -2655,9 +2655,9 @@ export default function Viewer({
             background: "#3b82f6", color: "#fff",
             cursor: "pointer", fontSize: 9, fontWeight: 600,
           }}
-          title="Appliquer le niveau et recharger les contours"
+          title="Apply level and reload contours"
         >
-          Appliquer
+          Apply
         </button>
         <button
           onClick={() => {

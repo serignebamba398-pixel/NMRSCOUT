@@ -1213,6 +1213,7 @@ class FingerprintPredictor:
     _db_mtime = None
     _exact_db = None
     _exact_1h_groups = None
+    _exact_13c_groups = None
 
     def __new__(cls):
         """Return the singleton instance."""
@@ -1248,8 +1249,8 @@ class FingerprintPredictor:
             with open(DB_CACHE_FILE, 'rb') as f:
                 data = pickle.load(f)
 
-            if data.get('version') not in ('14.0',):
-                print(f"[FingerprintPredictor] Cache version mismatch ({data.get('version')} != 14.0), rebuilding...")
+            if data.get('version') not in ('15.0',):
+                print(f"[FingerprintPredictor] Cache version mismatch ({data.get('version')} != 15.0), rebuilding...")
                 self._build_database()
                 return
 
@@ -1261,6 +1262,7 @@ class FingerprintPredictor:
             FingerprintPredictor._fp_to_env = data.get('fp_to_env', {})
             FingerprintPredictor._exact_db = data.get('exact_db', {})
             FingerprintPredictor._exact_1h_groups = data.get('exact_1h_groups', {})
+            FingerprintPredictor._exact_13c_groups = data.get('exact_13c_groups', {})
 
             FingerprintPredictor._db_composite = {}
             composite_indexes = data.get('indexes_composite', {})
@@ -1303,11 +1305,14 @@ class FingerprintPredictor:
         FingerprintPredictor._exact_db = exact_db
         exact_1h_groups = {}
         FingerprintPredictor._exact_1h_groups = exact_1h_groups
+        exact_13c_groups = {}
+        FingerprintPredictor._exact_13c_groups = exact_13c_groups
 
         count_bmrb = self._load_bmrb(
             db_by_radius, fp_to_env, exact_db,
             db_composite=db_composite_by_radius,
             exact_1h_groups=exact_1h_groups,
+            exact_13c_groups=exact_13c_groups,
         )
 
         count_nmrdb = self._load_nmrshiftdb(db_by_radius, fp_to_env, exact_db=exact_db, db_composite=db_composite_by_radius)
@@ -1423,12 +1428,13 @@ class FingerprintPredictor:
 
             data = {
                 'bmrb_ambiguity_revision': REVISION,
-                'version': '14.0',
+                'version': '15.0',
                 'indexes': indexes_serializable,
                 'indexes_composite': composite_serializable,
                 'fp_to_env': FingerprintPredictor._fp_to_env,
                 'exact_db': FingerprintPredictor._exact_db or {},
                 'exact_1h_groups': FingerprintPredictor._exact_1h_groups or {},
+                'exact_13c_groups': FingerprintPredictor._exact_13c_groups or {},
                 'total_records': sum(stats.values()),
                 'stats': {'fps_by_radius': stats, 'composite_by_radius': composite_stats}
             }
@@ -1512,7 +1518,7 @@ class FingerprintPredictor:
         return count
 
     def _load_bmrb(self, db, fp_to_env, exact_db=None, db_composite=None,
-                   exact_1h_groups=None) -> int:
+                   exact_1h_groups=None, exact_13c_groups=None) -> int:
         """Load BMRB records."""
         from rdkit.Chem import inchi as rdkit_inchi
 
@@ -1587,6 +1593,7 @@ class FingerprintPredictor:
                             inchikey = None
 
                     proton_groups = defaultdict(lambda: defaultdict(list))
+                    carbon_groups = defaultdict(lambda: defaultdict(list))
 
                     for line in shift_lines:
                         parts = line.split()
@@ -1630,6 +1637,11 @@ class FingerprintPredictor:
                                 canon_idx = canon_map[atom_idx]
                                 exact_db.setdefault(inchikey, {}).setdefault(solvent, {}).setdefault('13C', {})[canon_idx] = shift_13c
                                 exact_count += 1
+                            if inchikey:
+                                carbon_key = str(get_atom_fingerprint(
+                                    mol, atom_idx, RADIUS_ULTRA_EXACT, heavy_only=True
+                                ))
+                                carbon_groups[carbon_key][atom_idx].append(float(shift_13c))
 
                     if inchikey and exact_1h_groups is not None and proton_groups:
                         solvent_groups = exact_1h_groups.setdefault(inchikey, {}).setdefault(solvent, {})
@@ -1649,6 +1661,13 @@ class FingerprintPredictor:
                                 # symmetric molecule).  They are matched as a
                                 # multiset at prediction time.
                                 records.append(record)
+
+                    if inchikey and exact_13c_groups is not None and carbon_groups:
+                        solvent_groups = exact_13c_groups.setdefault(inchikey, {}).setdefault(solvent, {})
+                        for carbon_key, instances in carbon_groups.items():
+                            records = solvent_groups.setdefault(carbon_key, [])
+                            for _carbon_idx, shifts in instances.items():
+                                records.append({'shifts': sorted(float(v) for v in shifts)})
 
                 except Exception:
 
@@ -2163,6 +2182,56 @@ class FingerprintPredictor:
             logger.debug(f"Exact 1H group-match error: {exc}")
             return {}
 
+    def predict_exact_carbon_groups(self, mol_with_h, solvent: str) -> Dict[int, float]:
+        """Return exact 13C shifts mapped by carbon-atom groups.
+
+        Values are matched as a multiset per invariant carbon-atom fingerprint.
+        This avoids SMILES atom-order fragility for equivalent carbons.
+        """
+        if not FingerprintPredictor._exact_13c_groups:
+            return {}
+
+        try:
+            from rdkit.Chem import inchi as rdkit_inchi
+            mol_no_h = Chem.RemoveHs(mol_with_h)
+            inchikey = rdkit_inchi.MolToInchiKey(mol_no_h)
+            molecule_entry = FingerprintPredictor._exact_13c_groups.get(inchikey, {})
+            solvent_entry = None
+            for sol_key in get_solvent_variants(normalize_solvent(solvent)):
+                if sol_key in molecule_entry:
+                    solvent_entry = molecule_entry[sol_key]
+                    break
+            if not solvent_entry:
+                return {}
+
+            query_groups = defaultdict(list)
+            for atom in mol_with_h.GetAtoms():
+                if atom.GetAtomicNum() != 6:
+                    continue
+                carbon_key = str(get_atom_fingerprint(
+                    mol_with_h, atom.GetIdx(), RADIUS_ULTRA_EXACT, heavy_only=True
+                ))
+                query_groups[carbon_key].append(atom.GetIdx())
+
+            assignments = {}
+            for carbon_key, carbon_indices in query_groups.items():
+                records = solvent_entry.get(carbon_key, [])
+                if len(records) != len(carbon_indices):
+                    continue
+                carbon_sorted = sorted(carbon_indices)
+                records_sorted = sorted(
+                    records,
+                    key=lambda r: float(r['shifts'][0]) if r.get('shifts') else 0.0,
+                )
+                for c_idx, record in zip(carbon_sorted, records_sorted):
+                    shifts = record.get('shifts', [])
+                    if shifts:
+                        assignments[c_idx] = float(shifts[0])
+            return assignments
+        except Exception as exc:
+            logger.debug(f"Exact 13C group-match error: {exc}")
+            return {}
+
     def predict_atom(self, mol_with_h, atom_idx: int, solvent: str, nucleus: str) -> Optional[Tuple[float, float, int, int]]:
         """Predict the shift for one atom."""
         if FingerprintPredictor._db is None:
@@ -2183,6 +2252,13 @@ class FingerprintPredictor:
             exact_shift = exact_proton_shifts.get(atom_idx)
             if exact_shift is not None:
                 logger.debug(f"Atom {atom_idx}: Exact 1H group-match, shift={exact_shift}")
+                return exact_shift, 0.0, 99, 0
+
+        if nucleus == '13C':
+            exact_carbon_shifts = self.predict_exact_carbon_groups(mol_with_h, solvent_norm)
+            exact_shift = exact_carbon_shifts.get(atom_idx)
+            if exact_shift is not None:
+                logger.debug(f"Atom {atom_idx}: Exact 13C group-match, shift={exact_shift}")
                 return exact_shift, 0.0, 99, 0
 
         if FingerprintPredictor._exact_db and nucleus != '1H':

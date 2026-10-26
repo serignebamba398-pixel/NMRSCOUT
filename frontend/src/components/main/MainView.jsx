@@ -5,10 +5,7 @@ import Viewer from '../../Viewer';
 import { normalizeStaticUrl } from '../../utils';
 import './MainView.css';
 
-/**
- * SIRIUS-style main view
- * Displays the list of annotated molecules on the left and the viewer on the right
- */
+
 export const MainView = ({ onMoleculeSelect }) => {
   const { viewerData, customColors, setCustomColors } = useAppState();
   const [moleculesRaw, setMoleculesRaw] = useState([]);
@@ -17,6 +14,8 @@ export const MainView = ({ onMoleculeSelect }) => {
   const [filterQuery, setFilterQuery] = useState('');
   const [coverageMin, setCoverageMin] = useState('');
   const [coverageMax, setCoverageMax] = useState('');
+  const [signalPerMethod, setSignalPerMethod] = useState({});
+  const [signalModalOpen, setSignalModalOpen] = useState(false);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [selectedMethodsForCoverage, setSelectedMethodsForCoverage] = useState(["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable));
 
@@ -112,20 +111,19 @@ export const MainView = ({ onMoleculeSelect }) => {
     return list;
   }, [moleculesRaw, selectedMethodsForCoverage]);
 
-  // Filter molecules based on search and coverage range
+  // Filter molecules based on search, coverage range and signal count
   const filteredMolecules = useMemo(() => {
     let filtered = molecules;
-    
+
     // Text filter
     if (filterQuery.trim()) {
       const q = filterQuery.toLowerCase();
       filtered = filtered.filter(m => m.source.toLowerCase().includes(q));
     }
-    
+
     // Coverage filter (uses avgRansy as the coverage value)
     const minCov = parseFloat(coverageMin);
     const maxCov = parseFloat(coverageMax);
-    
     if (!isNaN(minCov) || !isNaN(maxCov)) {
       filtered = filtered.filter(m => {
         const coverage = m.avgRansy ?? 0;
@@ -134,9 +132,22 @@ export const MainView = ({ onMoleculeSelect }) => {
         return true;
       });
     }
-    
+
+    // Per-method signal count filter
+    const activeSignalFilters = Object.entries(signalPerMethod).filter(([, v]) => v !== '' && !isNaN(parseInt(v, 10)));
+    if (activeSignalFilters.length > 0) {
+      filtered = filtered.filter(m => {
+        for (const [method, minVal] of activeSignalFilters) {
+          const min = parseInt(minVal, 10);
+          const count = m.signals?.[method] ?? 0;
+          if (count < min) return false;
+        }
+        return true;
+      });
+    }
+
     return filtered;
-  }, [molecules, filterQuery, coverageMin, coverageMax]);
+  }, [molecules, filterQuery, coverageMin, coverageMax, signalPerMethod]);
 
   // Load molecules from annotation CSVs
   useEffect(() => {
@@ -230,6 +241,10 @@ export const MainView = ({ onMoleculeSelect }) => {
             }
             console.log(`[MainView] ${type} ransyIdx:`, ransyIdx, 'subIdx:', subIdx);
 
+            // ppm_molecule column: count number of signals
+            const ppmMolIdx = lowerHeaders.indexOf('ppm_molecule');
+            const is2D = type === 'COSY' || type === 'TOCSY' || type === 'HSQC';
+
             for (let i = 1; i < lines.length; i++) {
               const values = splitDelimitedLine(lines[i], delimiter);
               // Remove quotes from values.
@@ -256,22 +271,34 @@ export const MainView = ({ onMoleculeSelect }) => {
                   types: {},
                   ransy: {},
                   sub: {},
+                  signals: {},
                 });
               }
 
               const mol = allMolecules.get(cleanSource);
               mol.types[type] = true;
-              
+
               if (ransyIdx >= 0) {
                 const raw = cleanValues[ransyIdx];
                 const ransy = parseFloat(String(raw ?? '').replace(',', '.'));
                 if (!isNaN(ransy)) mol.ransy[type] = ransy;
               }
-              
+
               if (subIdx >= 0) {
                 const raw = cleanValues[subIdx];
                 const sub = parseFloat(String(raw ?? '').replace(',', '.'));
                 if (!isNaN(sub)) mol.sub[type] = sub;
+              }
+
+              // Count predicted signals from ppm_molecule
+              if (ppmMolIdx >= 0) {
+                const pmol = cleanValues[ppmMolIdx] ?? '';
+                if (pmol && pmol !== 'NA') {
+                  const count = is2D
+                    ? pmol.split('||').filter(Boolean).length
+                    : pmol.split('|').filter(Boolean).length;
+                  if (count > 0) mol.signals[type] = count;
+                }
               }
             }
             
@@ -378,6 +405,38 @@ export const MainView = ({ onMoleculeSelect }) => {
           </div>
         </div>
         
+        {/* Signal count filter */}
+        <div className="coverage-filter-container">
+          <label className="coverage-filter-label">Nb signals</label>
+          <div className="coverage-inputs">
+            <button
+              type="button"
+              onClick={() => setSignalModalOpen(true)}
+              style={{
+                fontSize: 11, padding: "2px 10px", borderRadius: 4,
+                border: `1px solid ${Object.values(signalPerMethod).some(v => v !== '') ? '#1d4ed8' : '#cbd5e1'}`,
+                background: Object.values(signalPerMethod).some(v => v !== '') ? '#1d4ed8' : '#f8fafc',
+                color: Object.values(signalPerMethod).some(v => v !== '') ? '#fff' : '#475569',
+                cursor: 'pointer', fontWeight: 600,
+              }}
+            >
+              {Object.values(signalPerMethod).filter(v => v !== '').length > 0
+                ? `${Object.values(signalPerMethod).filter(v => v !== '').length} filter(s)`
+                : 'Configure'}
+            </button>
+            {Object.values(signalPerMethod).some(v => v !== '') && (
+              <button
+                className="coverage-clear"
+                type="button"
+                onClick={() => setSignalPerMethod({})}
+                title="Clear signal filter"
+              >
+                ×
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Method filter for molecule ranking. */}
         <div style={{ display: "flex", alignItems: "center", padding: "4px 8px 2px", gap: 6 }}>
           <span style={{ fontSize: 10, color: "#64748b", flex: 1 }}>
@@ -471,10 +530,10 @@ export const MainView = ({ onMoleculeSelect }) => {
             onClick={e => e.stopPropagation()}
           >
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#1e293b" }}>
-              Tri par coverage combiné
+              Sort by combined coverage
             </div>
             <div style={{ fontSize: 11, color: "#64748b", marginBottom: 16 }}>
-              Sélectionner les méthodes à inclure dans le calcul
+              Select the methods to include in the calculation
             </div>
             {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map(method => {
               const hasData = moleculesRaw.some(m => m.ransy[method] != null);
@@ -502,7 +561,7 @@ export const MainView = ({ onMoleculeSelect }) => {
                   />
                   <span style={{ fontWeight: 600 }}>{method}</span>
                   {!hasData && (
-                    <span style={{ fontSize: 10, color: "#94a3b8" }}>(non disponible)</span>
+                    <span style={{ fontSize: 10, color: "#94a3b8" }}>(not available)</span>
                   )}
                 </label>
               );
@@ -526,7 +585,94 @@ export const MainView = ({ onMoleculeSelect }) => {
                   cursor: "pointer", color: "#fff", fontWeight: 600,
                 }}
               >
-                Appliquer
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-method signal count filter modal */}
+      {signalModalOpen && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 11000,
+            background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={() => setSignalModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 12, padding: 24,
+              width: 320, boxShadow: "0 8px 40px rgba(0,0,0,0.25)",
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4, color: "#1e293b" }}>
+              Minimum signals per method
+            </div>
+            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 16 }}>
+              A molecule must satisfy all active conditions to be displayed.
+            </div>
+            {["1H", "13C", "COSY", "TOCSY", "HSQC"].filter(isMethodAvailable).map(method => {
+              const hasData = moleculesRaw.some(m => (m.signals?.[method] ?? 0) > 0);
+              return (
+                <div key={method} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "8px 0", borderBottom: "1px solid #f1f5f9",
+                }}>
+                  <span style={{
+                    fontWeight: 600, fontSize: 13, width: 60,
+                    color: hasData ? "#1e293b" : "#94a3b8",
+                  }}>{method}</span>
+                  {!hasData && (
+                    <span style={{ fontSize: 10, color: "#94a3b8", flex: 1 }}>(not available)</span>
+                  )}
+                  {hasData && (
+                    <>
+                      <span style={{ fontSize: 11, color: "#64748b" }}>min ≥</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        placeholder="—"
+                        value={signalPerMethod[method] ?? ''}
+                        onChange={e => setSignalPerMethod(prev => ({
+                          ...prev,
+                          [method]: e.target.value,
+                        }))}
+                        style={{
+                          width: 60, padding: "3px 6px", borderRadius: 4,
+                          border: "1px solid #cbd5e1", fontSize: 12,
+                          textAlign: "center",
+                        }}
+                      />
+                    </>
+                  )}
+                </div>
+              );
+            })}
+            <div style={{ marginTop: 16, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                onClick={() => setSignalPerMethod({})}
+                style={{
+                  padding: "5px 14px", borderRadius: 6, fontSize: 12,
+                  border: "1px solid #cbd5e1", background: "#f8fafc",
+                  cursor: "pointer", color: "#475569",
+                }}
+              >
+                Reset
+              </button>
+              <button
+                onClick={() => setSignalModalOpen(false)}
+                style={{
+                  padding: "5px 14px", borderRadius: 6, fontSize: 12,
+                  border: "1px solid #1d4ed8", background: "#1d4ed8",
+                  cursor: "pointer", color: "#fff", fontWeight: 600,
+                }}
+              >
+                Apply
               </button>
             </div>
           </div>
