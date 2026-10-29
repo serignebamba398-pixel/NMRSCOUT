@@ -6,7 +6,17 @@ Two versions are available:
 
 - **Docker**: a browser-based web application. Recommended for most users.
 - **Electron**: a Windows desktop application.
+## Tutorials
 
+The following video tutorials guide users through the main NMRScout features, from installation to result visualization.
+
+1. **[Part 1 – Download and run NMRScout](https://mediaserver.univ-nantes.fr/lti/v126d637166d4ooeprg7/)**
+
+2. **[Part 2 – Prediction](https://mediaserver.univ-nantes.fr/lti/v126d637166dax0tgggb/)**
+
+3. **[Part 3 – Annotation](https://mediaserver.univ-nantes.fr/lti/v126d637166e0ew7wvke/)**
+
+4. **[Part 4 – Results visualization](https://mediaserver.univ-nantes.fr/edit/v126d637166cfzi37gw2/)**
 ## Docker Installation
 
 The Docker version runs on Windows, macOS (Intel and Apple Silicon), and Linux.
