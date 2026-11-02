@@ -1933,7 +1933,18 @@ export default function Viewer({
             const data = homonuclearSpectrumRows(parsed.data || [], t);
             const map = new Map();
             for (const row of data || []) {
-              if (row?.Source) map.set(row.Source, row);
+              if (row?.Source) {
+                map.set(row.Source, row);
+                // Also index by normalized key so externalSource mismatches
+                // (e.g. "mol_predicted" vs "mol_predicted.sdf") still resolve.
+                const normKey = row.Source
+                  .replace(/\.sdf$/i, '')
+                  .replace(/_predicted$/i, '')
+                  .replace(/^NMR_/i, '');
+                if (normKey !== row.Source && !map.has(normKey)) {
+                  map.set(normKey, row);
+                }
+              }
             }
             return [t, data || [], map, null];
           } catch (error) {

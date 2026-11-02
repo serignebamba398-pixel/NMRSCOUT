@@ -272,6 +272,7 @@ function startBackend(projectPath = null) {
     backendProcess = fork(backendPath, [], {
       env,
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      execArgv: ['--max-old-space-size=4096'],
     });
 
     logMain('INFO', 'Backend started', { pid: backendProcess.pid, backendPath });

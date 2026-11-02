@@ -539,6 +539,7 @@ function handlePrediction(req, res) {
       if (options.device) args.push('--device', String(options.device));
       if (options.batch_size) args.push('--batch_size', String(options.batch_size));
       if (options.mol_id) args.push('--mol_id', String(options.mol_id));
+      if (options.nb_cores && parseInt(options.nb_cores) > 1) args.push('--workers', String(parseInt(options.nb_cores)));
 
       // Experimental parameters for multiplicity JSON generation
       const freqMhz = Number(options.freq_mhz) || 700;

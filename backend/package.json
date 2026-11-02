@@ -4,7 +4,7 @@
   "description": "NMR Annotation Backend Server",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --max-old-space-size=4096 server.js",
     "test": "node --test"
   },
   "dependencies": {

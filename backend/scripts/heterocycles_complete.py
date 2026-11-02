@@ -26,8 +26,8 @@ def validate_input(mol: Chem.Mol, heavy_idx: int, h_list: List[int]) -> None:
         raise ValueError(f"No protons found on atom {heavy_idx}")
 
     heavy_atom = mol.GetAtomWithIdx(heavy_idx)
-    if heavy_atom.GetSymbol() not in ('C', 'N', 'O'):
-        raise ValueError(f"Atom {heavy_idx} ({heavy_atom.GetSymbol()}) not supported - use C, N or O")
+    if heavy_atom.GetAtomicNum() == 1:
+        raise ValueError(f"Atom {heavy_idx} is a hydrogen, expected a heavy atom")
 
     for h_idx in h_list:
         if not (0 <= h_idx < mol.GetNumAtoms()):

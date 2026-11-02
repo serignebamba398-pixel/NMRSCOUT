@@ -394,7 +394,9 @@ def _copy_sdf_to_output(src_path: str, dest_dir: str) -> str:
     dest_path = os.path.join(dest_dir, os.path.basename(src_path))
     try:
         import shutil
-        shutil.copy2(src_path, dest_path)
+        # When resume_from_dir == out_dir the file is already in place; skip the copy.
+        if os.path.abspath(src_path) != os.path.abspath(dest_path):
+            shutil.copy2(src_path, dest_path)
         _upgrade_sdf_coordinates_to_3d(dest_path)
         return dest_path
     except Exception as e:
@@ -1998,6 +2000,80 @@ def run_single(
         send_error(f"Prediction failed for '{mol_id}'", error=str(e), traceback=tb)
         send_completed(False, mol_id=mol_id, error=str(e))
 
+def _run_csv_threaded(
+    molecules: List[dict],
+    out_dir: str,
+    models,
+    model_1h_path: str,
+    model_13c_path: str,
+    property_key: str,
+    sim_params: Optional[dict],
+    multiplicity_mod,
+    num_workers: int,
+    manifest_rows: List[dict],
+    all_multiplicity_payloads: List[dict],
+    total: int,
+) -> None:
+    """Process CSV molecules with a thread pool (Windows-compatible).
+    Threads share the same model bundle — a lock serializes model inference
+    since GNN forward passes are not thread-safe."""
+
+    lock = threading.Lock()
+    completed_count = [0]
+
+    def process_one(mol_data):
+        mol_id = mol_data['mol_id']
+        smi = mol_data['smiles']
+        try:
+            with lock:
+                sdf_path, nH, nC, updated_models, _, payload = process_one_smiles(
+                    smiles=smi, mol_id=mol_id, out_dir=out_dir, models=models,
+                    model_1h_path=model_1h_path, model_13c_path=model_13c_path,
+                    property_key=property_key,
+                    multiplicity_mod=multiplicity_mod,
+                    sim_params=sim_params,
+                    return_payload=True,
+                )
+                models.net_1h = updated_models.net_1h
+                models.net_13c = updated_models.net_13c
+                models.mean_std_1h = updated_models.mean_std_1h
+                models.mean_std_13c = updated_models.mean_std_13c
+
+            with lock:
+                completed_count[0] += 1
+                current_done = completed_count[0]
+                _GLOBAL_MOLECULE_COUNTER["done"] += 1
+
+            if payload is not None:
+                with lock:
+                    all_multiplicity_payloads.append(payload)
+
+            send_log(f"[OK] Molecule {current_done}/{total} processed: {os.path.basename(sdf_path)}")
+            progress_pct = (current_done / total) * 98
+            send_progress(progress_pct, f"Molecule {current_done}/{total} (SDF)", completed=current_done, total=total)
+
+            return {"mol_id": mol_id, "smiles": smi, "sdf": sdf_path,
+                    "nb_predicted_H": nH, "nb_predicted_C": nC, "error": ""}
+        except Exception as e:
+            with lock:
+                completed_count[0] += 1
+                current_done = completed_count[0]
+                _GLOBAL_MOLECULE_COUNTER["done"] += 1
+
+            send_log(f"[{mol_id}] Error: {e}")
+            progress_pct = (current_done / total) * 98
+            send_progress(progress_pct, f"Molecule {current_done}/{total} (Error)", completed=current_done, total=total)
+
+            return {"mol_id": mol_id, "smiles": smi, "sdf": "",
+                    "nb_predicted_H": 0, "nb_predicted_C": 0, "error": str(e)}
+
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = {executor.submit(process_one, mol): mol for mol in molecules}
+        for future in as_completed(futures):
+            result = future.result()
+            manifest_rows.append(result)
+
+
 def _run_csv_parallel(
     molecules: List[dict],
     out_dir: str,
@@ -2192,6 +2268,10 @@ def run_csv(
                     skipped_count += 1
                     ok += 1
                     _GLOBAL_MOLECULE_COUNTER["done"] += 1
+                    current_done = _GLOBAL_MOLECULE_COUNTER["done"]
+                    if current_done % 50 == 0 or current_done == total:
+                        progress_pct = (current_done / total) * 98
+                        send_progress(progress_pct, f"Molecule {current_done}/{total} (reused)", completed=current_done, total=total)
 
                     reused_manifest_rows.append({
                         "mol_id": mol_id,
@@ -2209,6 +2289,37 @@ def run_csv(
                     send_log(f"[RESUME] [OK] {mol_id}: réutilisé (paramètres identiques)")
                     continue
 
+        # Disk-scan fallback: even if the manifest had an error (e.g. parallel crash),
+        # if the SDF file physically exists on disk, reuse it directly.
+        if params_match and resume_from_dir:
+            sdf_filename = f"{sanitize_filename(mol_id)}_predicted.sdf"
+            sdf_candidate = os.path.join(resume_from_dir, sdf_filename)
+            if os.path.exists(sdf_candidate):
+                new_sdf_path = _copy_sdf_to_output(sdf_candidate, out_dir)
+                if new_sdf_path:
+                    skipped_count += 1
+                    ok += 1
+                    _GLOBAL_MOLECULE_COUNTER["done"] += 1
+                    current_done = _GLOBAL_MOLECULE_COUNTER["done"]
+                    if current_done % 50 == 0 or current_done == total:
+                        progress_pct = (current_done / total) * 98
+                        send_progress(progress_pct, f"Molecule {current_done}/{total} (reused)", completed=current_done, total=total)
+                    reused_manifest_rows.append({
+                        "mol_id": mol_id,
+                        "smiles": mol_data["smiles"],
+                        "sdf": new_sdf_path,
+                        "nb_predicted_H": 0,
+                        "nb_predicted_C": 0,
+                        "error": "",
+                        "reused": True,
+                    })
+                    # Try to recover payload from all_multiplicities.json
+                    existing_fallback = existing_mol_data.get(mol_id, {})
+                    if "payload" in existing_fallback and existing_fallback["payload"]:
+                        reused_payloads.append(existing_fallback["payload"])
+                    send_log(f"[RESUME] [OK] {mol_id}: réutilisé depuis disque (SDF existant)")
+                    continue
+
         molecules_to_process.append(mol_data)
 
     if skipped_count > 0:
@@ -2217,58 +2328,108 @@ def run_csv(
     manifest_rows.extend(reused_manifest_rows)
     all_multiplicity_payloads.extend(reused_payloads)
 
-    for mol_data in molecules_to_process:
-        mol_id = mol_data['mol_id']
-        smi = mol_data['smiles']
+    import platform
+    is_windows = platform.system() == 'Windows'
 
-        send_log(f"[{mol_id}] Starting prediction...")
+    use_parallel = num_workers > 1 and len(molecules_to_process) > 1
+    parallel_ok = False
+
+    if use_parallel:
+        if is_windows:
+            send_log(f"[PARALLEL] Windows détecté — utilisation de ThreadPoolExecutor ({num_workers} threads, modèles partagés)")
+        else:
+            send_log(f"[PARALLEL] Linux/Mac — utilisation de ProcessPoolExecutor ({num_workers} workers)")
+        prev_manifest_len = len(manifest_rows)
         try:
-            sdf_path, nH, nC, models, _, payload = process_one_smiles(
-                smiles=smi, mol_id=mol_id, out_dir=out_dir, models=models,
-                model_1h_path=model_1h_path, model_13c_path=model_13c_path,
-                property_key=property_key,
-                multiplicity_mod=multiplicity_mod,
-                sim_params=sim_params,
-                return_payload=True,
-            )
-            ok += 1
-
-            if payload is not None:
-                all_multiplicity_payloads.append(payload)
-
-            _GLOBAL_MOLECULE_COUNTER["done"] += 1
-            current_done = _GLOBAL_MOLECULE_COUNTER["done"]
-            send_log(f"[OK] Molecule {current_done}/{total} processed: {os.path.basename(sdf_path)}")
-            progress_pct = (current_done / total) * 98
-            send_progress(
-                progress_pct,
-                f"Molecule {current_done}/{total} (SDF)",
-                completed=current_done,
-                total=total
-            )
-
-            manifest_rows.append({
-                "mol_id": mol_id, "smiles": smi, "sdf": sdf_path,
-                "nb_predicted_H": nH, "nb_predicted_C": nC, "error": ""
-            })
+            if is_windows:
+                _run_csv_threaded(
+                    molecules=molecules_to_process,
+                    out_dir=out_dir,
+                    models=models,
+                    model_1h_path=model_1h_path,
+                    model_13c_path=model_13c_path,
+                    property_key=property_key,
+                    sim_params=sim_params,
+                    multiplicity_mod=multiplicity_mod,
+                    num_workers=num_workers,
+                    manifest_rows=manifest_rows,
+                    all_multiplicity_payloads=all_multiplicity_payloads,
+                    total=total,
+                )
+            else:
+                _run_csv_parallel(
+                    molecules=molecules_to_process,
+                    out_dir=out_dir,
+                    model_1h_path=model_1h_path,
+                    model_13c_path=model_13c_path,
+                    property_key=property_key,
+                    sim_params=sim_params,
+                    num_workers=num_workers,
+                    manifest_rows=manifest_rows,
+                    all_multiplicity_payloads=all_multiplicity_payloads,
+                )
+            for row in manifest_rows[prev_manifest_len:]:
+                if row.get('sdf'):
+                    ok += 1
+                else:
+                    ko += 1
+            parallel_ok = True
         except Exception as e:
-            ko += 1
-            _GLOBAL_MOLECULE_COUNTER["done"] += 1
-            current_done = _GLOBAL_MOLECULE_COUNTER["done"]
+            send_log(f"[WARN] Mode parallèle échoué ({e}) — passage en mode séquentiel")
 
-            send_log(f"[{mol_id}] Error: {e}")
-            progress_pct = (current_done / total) * 98
-            send_progress(
-                progress_pct,
-                f"Molecule {current_done}/{total} (Error)",
-                completed=current_done,
-                total=total
-            )
+    if not use_parallel or not parallel_ok:
+        for mol_data in molecules_to_process:
+            mol_id = mol_data['mol_id']
+            smi = mol_data['smiles']
 
-            manifest_rows.append({
-                "mol_id": mol_id, "smiles": smi, "sdf": "",
-                "nb_predicted_H": 0, "nb_predicted_C": 0, "error": str(e)
-            })
+            send_log(f"[{mol_id}] Starting prediction...")
+            try:
+                sdf_path, nH, nC, models, _, payload = process_one_smiles(
+                    smiles=smi, mol_id=mol_id, out_dir=out_dir, models=models,
+                    model_1h_path=model_1h_path, model_13c_path=model_13c_path,
+                    property_key=property_key,
+                    multiplicity_mod=multiplicity_mod,
+                    sim_params=sim_params,
+                    return_payload=True,
+                )
+                ok += 1
+
+                if payload is not None:
+                    all_multiplicity_payloads.append(payload)
+
+                _GLOBAL_MOLECULE_COUNTER["done"] += 1
+                current_done = _GLOBAL_MOLECULE_COUNTER["done"]
+                send_log(f"[OK] Molecule {current_done}/{total} processed: {os.path.basename(sdf_path)}")
+                progress_pct = (current_done / total) * 98
+                send_progress(
+                    progress_pct,
+                    f"Molecule {current_done}/{total} (SDF)",
+                    completed=current_done,
+                    total=total
+                )
+
+                manifest_rows.append({
+                    "mol_id": mol_id, "smiles": smi, "sdf": sdf_path,
+                    "nb_predicted_H": nH, "nb_predicted_C": nC, "error": ""
+                })
+            except Exception as e:
+                ko += 1
+                _GLOBAL_MOLECULE_COUNTER["done"] += 1
+                current_done = _GLOBAL_MOLECULE_COUNTER["done"]
+
+                send_log(f"[{mol_id}] Error: {e}")
+                progress_pct = (current_done / total) * 98
+                send_progress(
+                    progress_pct,
+                    f"Molecule {current_done}/{total} (Error)",
+                    completed=current_done,
+                    total=total
+                )
+
+                manifest_rows.append({
+                    "mol_id": mol_id, "smiles": smi, "sdf": "",
+                    "nb_predicted_H": 0, "nb_predicted_C": 0, "error": str(e)
+                })
 
     consolidated_multiplicity_path = os.path.join(out_dir, "all_multiplicities.json")
     with open(consolidated_multiplicity_path, "w", encoding="utf-8") as mf:
