@@ -8,6 +8,8 @@ import argparse
 import collections
 import traceback
 from typing import List, Dict, Tuple
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 
 import numpy as np
 import pandas as pd
@@ -566,25 +568,45 @@ def main():
         if not files:
             error(f"No SDF found in {args.sdf_path}", code=3)
 
-        log(f"SDF files detected: {len(files)}")
-        all_tables: List[pd.DataFrame] = []
         total = len(files)
+        log(f"SDF files detected: {total}")
 
-        for i, sdf in enumerate(files, 1):
-            pct = int(5 + ((i - 1) / max(total, 1)) * 85)  # [NEW] 5% -> 90%
-            progress(pct, f"Processing {i}/{total}: {os.path.basename(sdf)}")  # [NEW]
-            df = build_hsqc_table_from_sdf(sdf, args.fold, fold_low, fold_high)
-            if not df.empty:
-                all_tables.append(df)
+        num_workers = max(1, min(multiprocessing.cpu_count(), 8))
+        progress(5, f"Starting parallel HSQC extraction ({num_workers} workers, {total} files)...")
+
+        _do_fold = args.fold
+        _fold_low = fold_low
+        _fold_high = fold_high
+
+        def _worker_hsqc(sdf_path):
+            try:
+                return build_hsqc_table_from_sdf(sdf_path, _do_fold, _fold_low, _fold_high)
+            except Exception as e:
+                print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
+                return pd.DataFrame()
+
+        all_tables: List[pd.DataFrame] = []
+        done = 0
+
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            futures = {executor.submit(_worker_hsqc, sdf): sdf for sdf in files}
+            for future in as_completed(futures):
+                done += 1
+                if done % 50 == 0 or done == total:
+                    pct = int(5 + (done / total) * 85)
+                    progress(pct, f"Processing {done}/{total}...")
+                df = future.result()
+                if not df.empty:
+                    all_tables.append(df)
 
         if not all_tables:
             error("No HSQC table generated (missing shift vector?)", code=4)
 
         result = pd.concat(all_tables, ignore_index=True)
-        progress(95, "Writing CSV file...")  # [NEW]
+        progress(95, "Writing CSV file...")
         result.to_csv(out_csv, index=False, encoding='utf-8')
 
-        progress(100, "HSQC extraction completed")  # [NEW]
+        progress(100, "HSQC extraction completed")
         completed(out_csv, len(result), args.fold, fold_low, fold_high)
 
     except SystemExit:

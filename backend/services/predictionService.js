@@ -677,7 +677,7 @@ function handlePrediction(req, res) {
                 // Map 0-100 script percent to 0-SDF_WEIGHT
                 const weightedPercent = Math.min(SDF_WEIGHT, (parsed.percent / 100) * SDF_WEIGHT);
                 lastPercent = Math.max(lastPercent, weightedPercent);
-                
+
                 // Forward with weighted percentage
                 sseSend(res, {
                   ...parsed,
@@ -687,6 +687,12 @@ function handlePrediction(req, res) {
               } else {
                 sseSend(res, parsed);
               }
+              return;
+            }
+            // Suppress Python's 'completed' signal — child.on('close') sends the real
+            // completed after the extractor (CSV) phase. Forwarding it here would cause
+            // the frontend to close the SSE before the extractors run.
+            if (parsed.type === 'completed') {
               return;
             }
             sseSend(res, parsed);

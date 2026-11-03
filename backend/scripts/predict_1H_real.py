@@ -9,6 +9,8 @@ import argparse
 import traceback
 from typing import Dict, List, Tuple, Iterable, Optional
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 
 import pandas as pd
 from rdkit import Chem, RDLogger
@@ -175,6 +177,57 @@ def build_1h_table_for_sdf(
 
 
 # -------------------------------------------------------------------------
+# Worker for parallel processing (no send_progress — runs in subprocess)
+# -------------------------------------------------------------------------
+def _worker_1h(args_tuple):
+    sdf_path, keep_exchangeable = args_tuple
+    try:
+        from ml_sdf_utils import read_molecule_keepH, get_atom_shift_vector, ecfp4_bitstring
+        from rdkit import RDLogger
+        RDLogger.DisableLog('rdApp.*')
+        mol = read_molecule_keepH(sdf_path)
+        if mol is None:
+            return pd.DataFrame()
+        shifts = get_atom_shift_vector(sdf_path)
+        fp_bitstr = ecfp4_bitstring(mol)
+        from collections import defaultdict
+        parent2Hs = defaultdict(list)
+        for atom in mol.GetAtoms():
+            if atom.GetAtomicNum() == 1:
+                for nb in atom.GetNeighbors():
+                    if nb.GetAtomicNum() != 1:
+                        parent2Hs[nb.GetIdx()].append(atom.GetIdx())
+        rows = []
+        for parent_c_idx, h_indices in parent2Hs.items():
+            parent = mol.GetAtomWithIdx(parent_c_idx)
+            if not keep_exchangeable and parent.GetAtomicNum() in (7, 8, 16):
+                continue
+            nb_h = len(h_indices)
+            if nb_h == 3:
+                gtype = 'CH3'
+            elif nb_h == 2:
+                gtype = 'CH2'
+            else:
+                gtype = 'CH'
+            for h_idx in h_indices:
+                shift = shifts[h_idx] if shifts and h_idx < len(shifts) else None
+                rows.append({
+                    'Filename':       os.path.basename(sdf_path),
+                    'Assignment':     str(h_idx),
+                    'H_index':        h_idx,
+                    'Parent_C_index': int(parent_c_idx),
+                    'GroupType':      gtype,
+                    'Delta_ppm':      shift,
+                    'Nb_H':           1,
+                    'ECFP4':          fp_bitstr,
+                })
+        return pd.DataFrame(rows)
+    except Exception as e:
+        print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
+        return pd.DataFrame()
+
+
+# -------------------------------------------------------------------------
 # 4) Batch folder -> CSV
 # -------------------------------------------------------------------------
 def process_folder_to_csv(
@@ -183,26 +236,37 @@ def process_folder_to_csv(
     recursive: bool = False,
     keep_exchangeable: bool = False
 ) -> int:
-    
+
     sdf_files = find_sdf_files(input_folder, recursive=recursive)
     if not sdf_files:
         print("[ERROR] No .sdf file found.")
         return 1
 
+    total = len(sdf_files)
+    num_workers = max(1, min(multiprocessing.cpu_count(), 8))
+    send_progress(5, f"Starting parallel 1H extraction ({num_workers} workers, {total} files)...")
+
     all_dfs: List[pd.DataFrame] = []
-    for i, sdf in enumerate(sdf_files, 1):
-        pct = int(10 + (i / len(sdf_files)) * 80)
-        send_progress(pct, f"Processing {i}/{len(sdf_files)}: {os.path.basename(sdf)}")
-        df = build_1h_table_for_sdf(sdf, keep_exchangeable=keep_exchangeable)
-        if not df.empty:
-            all_dfs.append(df)
+    done = 0
+
+    args_list = [(sdf, keep_exchangeable) for sdf in sdf_files]
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        futures = {executor.submit(_worker_1h, a): a[0] for a in args_list}
+        for future in as_completed(futures):
+            done += 1
+            if done % 50 == 0 or done == total:
+                pct = int(10 + (done / total) * 80)
+                send_progress(pct, f"Processing {done}/{total}...")
+            df = future.result()
+            if not df.empty:
+                all_dfs.append(df)
 
     if not all_dfs:
         print("[ERROR] No rows produced from any SDF (missing shift vector property?).")
         return 1
 
     result = pd.concat(all_dfs, ignore_index=True)
-    send_progress(95, "Writing CSV file...")  # [NEW]
+    send_progress(95, "Writing CSV file...")
     safe_mkdir_for_file(output_csv)
     result.to_csv(output_csv, index=False, encoding='utf-8')
     send_progress(100, "1H extraction finished")

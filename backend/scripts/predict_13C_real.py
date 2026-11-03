@@ -8,6 +8,8 @@ import json
 import argparse
 import traceback
 from typing import List
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 
 import pandas as pd
 from rdkit import RDLogger
@@ -192,26 +194,75 @@ def main():
         if not files:
             error(f"No SDF found in {args.sdf_path}", code=2)
 
-        log(f"SDF files detected: {len(files)}")
-        log(f"Carbon mode: {args.carbon_mode}")
-        all_frames: List[pd.DataFrame] = []
-
         total = len(files)
-        for i, sdf in enumerate(files, 1):
-            pct = int(5 + ((i - 1) / max(total, 1)) * 85)  # [NEW] 5% -> 90%
-            progress(pct, f"Processing {i}/{total}: {os.path.basename(sdf)}")  # [NEW]
-            df = dataframe_for_sdf(sdf, carbon_mode=args.carbon_mode)
-            if not df.empty:
-                all_frames.append(df)
+        log(f"SDF files detected: {total}")
+        log(f"Carbon mode: {args.carbon_mode}")
+
+        num_workers = max(1, min(multiprocessing.cpu_count(), 8))
+        progress(5, f"Starting parallel 13C extraction ({num_workers} workers, {total} files)...")
+
+        all_frames: List[pd.DataFrame] = []
+        done = 0
+
+        carbon_mode = args.carbon_mode
+        def _worker_13c(sdf_path):
+            try:
+                from ml_sdf_utils import read_molecule_keepH, get_atom_shift_vector, ecfp4_bitstring
+                from rdkit import RDLogger
+                RDLogger.DisableLog('rdApp.*')
+                mol = read_molecule_keepH(sdf_path)
+                if mol is None:
+                    return pd.DataFrame()
+                shifts = get_atom_shift_vector(sdf_path)
+                fp = ecfp4_bitstring(mol)
+                if carbon_mode == "all":
+                    c_indices = [a.GetIdx() for a in mol.GetAtoms() if a.GetSymbol() == 'C']
+                else:
+                    c_indices = [a.GetIdx() for a in mol.GetAtoms()
+                                 if a.GetSymbol() == 'C' and
+                                 any(nb.GetSymbol() == 'H' for nb in a.GetNeighbors())]
+                rows = []
+                for c_idx in c_indices:
+                    delta = None
+                    if shifts and 0 <= c_idx < len(shifts):
+                        try:
+                            delta = round(float(shifts[c_idx]), 3)
+                        except Exception:
+                            delta = None
+                    h_idx_list = [nb.GetIdx() for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors()
+                                  if nb.GetSymbol() == 'H']
+                    rows.append({
+                        "Filename":  os.path.basename(sdf_path),
+                        "C_index":   c_idx,
+                        "Nb_H":      len(h_idx_list),
+                        "H_indices": "|".join(map(str, h_idx_list)) if h_idx_list else "",
+                        "Delta_ppm": delta,
+                        "ECFP4":     fp,
+                    })
+                return pd.DataFrame(rows)
+            except Exception as e:
+                print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
+                return pd.DataFrame()
+
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            futures = {executor.submit(_worker_13c, sdf): sdf for sdf in files}
+            for future in as_completed(futures):
+                done += 1
+                if done % 50 == 0 or done == total:
+                    pct = int(5 + (done / total) * 85)
+                    progress(pct, f"Processing {done}/{total}...")
+                df = future.result()
+                if not df.empty:
+                    all_frames.append(df)
 
         if not all_frames:
             error("No 13C data extracted: missing shift vector or invalid SDF(s)?", code=3)
 
         result = pd.concat(all_frames, ignore_index=True)
-        progress(95, "Writing CSV file...")  # [NEW]
+        progress(95, "Writing CSV file...")
         result.to_csv(out_csv, index=False, encoding='utf-8')
 
-        progress(100, "13C extraction completed")  # [NEW]
+        progress(100, "13C extraction completed")
         completed(out_csv, len(result))
 
     except SystemExit:

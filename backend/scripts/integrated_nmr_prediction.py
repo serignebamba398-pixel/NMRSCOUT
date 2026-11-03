@@ -2286,7 +2286,8 @@ def run_csv(
                     if "payload" in existing and existing["payload"]:
                         reused_payloads.append(existing["payload"])
 
-                    send_log(f"[RESUME] [OK] {mol_id}: réutilisé (paramètres identiques)")
+                    if current_done % 100 == 0 or current_done == total:
+                        send_log(f"[RESUME] [OK] {current_done}/{total} molécules réutilisées (paramètres identiques)")
                     continue
 
         # Disk-scan fallback: even if the manifest had an error (e.g. parallel crash),
@@ -2317,7 +2318,8 @@ def run_csv(
                     existing_fallback = existing_mol_data.get(mol_id, {})
                     if "payload" in existing_fallback and existing_fallback["payload"]:
                         reused_payloads.append(existing_fallback["payload"])
-                    send_log(f"[RESUME] [OK] {mol_id}: réutilisé depuis disque (SDF existant)")
+                    if current_done % 100 == 0 or current_done == total:
+                        send_log(f"[RESUME] [OK] {current_done}/{total} molécules réutilisées depuis disque (SDF existant)")
                     continue
 
         molecules_to_process.append(mol_data)

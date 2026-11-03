@@ -8,6 +8,8 @@ import argparse
 import traceback
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict, deque
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import multiprocessing
 import numpy as np
 import pandas as pd
 from rdkit import Chem, RDLogger, rdBase
@@ -867,66 +869,54 @@ def main():
                 "TOCSY spin systems are determined independently "
                 "from max_bonds using structural proton connectivity."
             )
-        frames: List[pd.DataFrame] = []
         total = len(files)
-        for i, sdf in enumerate(
-            files,
-            1
-        ):
-            pct = int(
-                5
-                +
-                (
-                    (i - 1)
-                    /
-                    max(total, 1)
+        num_workers = max(1, min(multiprocessing.cpu_count(), 8))
+        progress(5, f"Starting parallel {experiment} extraction ({num_workers} workers, {total} files)...")
+
+        _exp = experiment
+        _min_bonds = args.min_bonds
+        _max_bonds = args.max_bonds
+        _include_diagonal = args.include_diagonal
+
+        def _worker_cosy(sdf_path):
+            try:
+                df = dataframe_for_sdf(
+                    sdf_path,
+                    experiment=_exp,
+                    min_bonds=_min_bonds,
+                    max_bonds=_max_bonds,
+                    include_diagonal=_include_diagonal,
                 )
-                * 85
-            )
-            progress(
-                pct,
-                f"Processing {i}/{total}: "
-                f"{os.path.basename(sdf)}"
-            )
-            df = dataframe_for_sdf(
-                sdf,
-                experiment=experiment,
-                min_bonds=args.min_bonds,
-                max_bonds=args.max_bonds,
-                include_diagonal=args.include_diagonal
-            )
-            if not df.empty:
-                frames.append(
-                    df
-                )
+                return df
+            except Exception as e:
+                print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
+                return pd.DataFrame()
+
+        frames: List[pd.DataFrame] = []
+        done = 0
+
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            futures = {executor.submit(_worker_cosy, sdf): sdf for sdf in files}
+            for future in as_completed(futures):
+                done += 1
+                if done % 50 == 0 or done == total:
+                    pct = int(5 + (done / total) * 85)
+                    progress(pct, f"Processing {done}/{total}...")
+                df = future.result()
+                if not df.empty:
+                    frames.append(df)
+
         if not frames:
             error(
                 f"No {experiment} table generated "
                 f"(missing shift vector?)",
                 code=3
             )
-        result = pd.concat(
-            frames,
-            ignore_index=True
-        )
-        progress(
-            95,
-            "Writing CSV file..."
-        )
-        result.to_csv(
-            out_csv,
-            index=False,
-            encoding='utf-8'
-        )
-        progress(
-            100,
-            f"{experiment} reconstruction completed"
-        )
-        completed(
-            out_csv,
-            len(result),
-            experiment
-        )
+        result = pd.concat(frames, ignore_index=True)
+        progress(95, "Writing CSV file...")
+        result.to_csv(out_csv, index=False, encoding='utf-8')
+        progress(100, f"{experiment} reconstruction completed")
+        completed(out_csv, len(result), experiment)
     except SystemExit:
         raise
     except Exception as e:
