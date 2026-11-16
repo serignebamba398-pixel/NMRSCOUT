@@ -90,9 +90,15 @@ RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     pyyaml \
     "pydantic<2"
 
-# DGL CPU — conda-forge has multi-arch wheels (amd64 + arm64)
-RUN micromamba install -y -n nmr -c conda-forge "dgl>=2.2,<2.3" && \
-    micromamba clean --all --yes
+# DGL CPU — arch-conditional install
+# amd64: official DGL wheel from new repo URL
+# arm64: latest DGL from PyPI (no arch-specific wheel needed)
+RUN if [ "${TARGETARCH}" = "arm64" ]; then \
+    /opt/conda/envs/nmr/bin/pip install --no-cache-dir dgl; \
+    else \
+    /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+        dgl -f https://data.dgl.ai/wheels/repo.html; \
+    fi
 
 # Outils spectre
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
