@@ -86,7 +86,6 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
     ${TORCH_SPEC}
 
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
-    "torchdata>=0.7,<0.8" \
     pyyaml \
     "pydantic<2"
 
@@ -106,10 +105,9 @@ RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
 
 # Vérif rapide des versions
 RUN /opt/conda/envs/nmr/bin/python - <<'PY'
-import importlib, torch
+import torch
 print("Torch:", torch.__version__)
-dgl = importlib.import_module("dgl"); print("DGL:", dgl.__version__)
-td = importlib.import_module("torchdata"); print("torchdata:", td.__version__)
+import dgl; print("DGL:", dgl.__version__)
 import nmrglue as ng; print("nmrglue:", getattr(ng, "__version__", "ok"))
 PY
 
