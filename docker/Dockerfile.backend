@@ -103,13 +103,6 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     nmrglue matplotlib pillow
 
-# Vérif rapide des versions
-RUN /opt/conda/envs/nmr/bin/python - <<'PY'
-import torch
-print("Torch:", torch.__version__)
-import dgl; print("DGL:", dgl.__version__)
-import nmrglue as ng; print("nmrglue:", getattr(ng, "__version__", "ok"))
-PY
 
 # ------------------------------------------
 # 6) Packages R
