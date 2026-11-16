@@ -139,9 +139,13 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
       // Normalize: strip suffixes, lowercase, replace ALL non-alphanumeric chars with
       // a single space, then collapse. This handles commas, parentheses, hyphens,
       // underscores, dots, etc. so that "2,4-dimethyl" == "_2_4-dimethyl".
+      // Also strip the MD5 hash suffix added by sanitize_filename() when names > 80 chars
+      // e.g. "_alpha-D-mannosyl_..._p_1ef41989_predicted" → strip "_p_1ef41989" before comparing
       const normalize = (s) => String(s || '')
         .replace(/_predicted$/i, '')
         .replace(/_annotated$/i, '')
+        .replace(/_[0-9a-f]{8}$/i, '')         // strip bare 8-char hex hash suffix
+        .replace(/[_\s]+[0-9a-f]{8}$/i, '')    // strip hash with separator
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, ' ')
         .replace(/\s+/g, ' ')
@@ -185,6 +189,7 @@ router.get('/api/multiplicity/:taskId/:molId', (req, res) => {
         // Same robust normalizer as Try 2
         const normalizeAlt = (s) => String(s || '')
           .replace(/_predicted$/i, '').replace(/_annotated$/i, '')
+          .replace(/_[0-9a-f]{8}$/i, '').replace(/[_\s]+[0-9a-f]{8}$/i, '')
           .toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
         const molIdNormAlt = normalizeAlt(molId);
 

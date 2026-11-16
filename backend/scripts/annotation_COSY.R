@@ -44,7 +44,8 @@ params <- list(
     enable_checkpoints = TRUE,
     max_memory_mb = 2048,
     max_pivots = 30,
-    alpha_cost = 0.3
+    alpha_cost = 0.3,
+    near_diagonal_tol = 0.0  # ppm: exclude predicted pairs with |F1-F2| < this (0 = disabled)
 )
 
 # -------------------------------
@@ -197,6 +198,8 @@ enable_checkpoints <- isTRUE(params$enable_checkpoints)
 max_pivots <- as.integer(params$max_pivots)
 if (is.na(max_pivots) || max_pivots < 1) max_pivots <- 30L
 alpha_cost <- as.numeric(params$alpha_cost)
+near_diagonal_tol <- if (is.null(params$near_diagonal_tol)) 0.0 else as.numeric(params$near_diagonal_tol)
+if (is.na(near_diagonal_tol) || near_diagonal_tol < 0) near_diagonal_tol <- 0.0
 correlation_method <- if (is.null(params$correlation_method)) "pearson" else tolower(as.character(params$correlation_method))
 if (!correlation_method %in% c("pearson", "spearman")) correlation_method <- "pearson"
 
@@ -1031,6 +1034,16 @@ tryCatch(
                         tryCatch(
                             {
                                 dt_mol <- tableau_final[Source == src, .(shift_value_F1, shift_value_F2, ECFP4, H1, H2, Bonds, Group1, Group2)]
+                                # Exclude near-diagonal pairs (experimentally undetectable, buried in diagonal noise)
+                                if (near_diagonal_tol > 0) {
+                                    dt_mol <- dt_mol[abs(shift_value_F1 - shift_value_F2) >= near_diagonal_tol]
+                                }
+                                # Deduplicate predicted peaks within 0.05 ppm in both F1 and F2:
+                                # multiple atom pairs mapping to the same 2D coordinate count as 1 signal
+                                dt_mol[, g1 := round(shift_value_F1 / 0.05) * 0.05]
+                                dt_mol[, g2 := round(shift_value_F2 / 0.05) * 0.05]
+                                dt_mol <- dt_mol[!duplicated(dt_mol[, .(g1, g2)])]
+                                dt_mol[, c("g1", "g2") := NULL]
                                 ecfp_str <- paste(unique(dt_mol$ECFP4), collapse = "|")
 
                                 if (!nrow(dt_mol)) {

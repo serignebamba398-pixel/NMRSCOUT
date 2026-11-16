@@ -294,8 +294,10 @@ export const MainView = ({ onMoleculeSelect }) => {
               if (ppmMolIdx >= 0) {
                 const pmol = cleanValues[ppmMolIdx] ?? '';
                 if (pmol && pmol !== 'NA') {
+                  // For 2D (COSY/TOCSY): deduplicate by exact coordinate string
+                  // e.g. CH3 has 3H × 1H = 3 atom pairs but only 1 unique (δ,δ') coordinate
                   const count = is2D
-                    ? pmol.split('||').filter(Boolean).length
+                    ? new Set(pmol.split('||').filter(Boolean)).size
                     : pmol.split('|').filter(Boolean).length;
                   if (count > 0) mol.signals[type] = count;
                 }

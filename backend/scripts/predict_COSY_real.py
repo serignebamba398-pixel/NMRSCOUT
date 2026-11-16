@@ -8,7 +8,7 @@ import argparse
 import traceback
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict, deque
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor as ProcessPoolExecutor, as_completed
 import multiprocessing
 import numpy as np
 import pandas as pd
@@ -533,10 +533,6 @@ def dataframe_for_sdf(
         filename = os.path.basename(
             sdf_path
         )
-        progress(
-            10,
-            f"Reading {filename}..."
-        )
         mol = read_molecule_keepH(
             sdf_path
         )
@@ -554,10 +550,6 @@ def dataframe_for_sdf(
                 f"[WARN] Shift vector not found: "
                 f"{filename}"
             )
-        progress(
-            30,
-            "Grouping protons..."
-        )
         (
             h2group,
             group2Hs
@@ -595,11 +587,6 @@ def dataframe_for_sdf(
             raise ValueError(
                 f"Unknown experiment: {experiment}"
             )
-        progress(
-            50,
-            f"Computing {experiment} correlations "
-            f"({len(pairs)} pairs)..."
-        )
         signal_map = make_signal_map_per_H(
             shifts,
             h2group,
@@ -624,6 +611,11 @@ def dataframe_for_sdf(
                 h2,
                 float('nan')
             )
+            # Treat pairs with identical or near-identical chemical shifts as
+            # diagonal / near-diagonal peaks (experimentally undetectable).
+            if not include_diagonal and np.isfinite(d1) and np.isfinite(d2):
+                if abs(d1 - d2) <= 0.05:
+                    continue
             row = {
                 'Filename':
                     filename,
@@ -667,10 +659,6 @@ def dataframe_for_sdf(
             if experiment == 'TOCSY':
                 row['MaxBonds'] = max_bonds
             rows.append(row)
-        progress(
-            70,
-            "Building DataFrame..."
-        )
         df = pd.DataFrame(
             rows
         )
@@ -734,6 +722,20 @@ def dataframe_for_sdf(
             file=sys.stdout
         )
         return pd.DataFrame()
+
+# ----------------------------- Parallel worker (module-level for pickling) ----
+def _worker_cosy(args_tuple):
+    sdf_path, experiment, min_bonds, max_bonds, include_diagonal = args_tuple
+    try:
+        return dataframe_for_sdf(sdf_path, experiment=experiment,
+                                 min_bonds=min_bonds, max_bonds=max_bonds,
+                                 include_diagonal=include_diagonal)
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
+        traceback.print_exc()
+        return pd.DataFrame()
+
 
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -873,30 +875,11 @@ def main():
         num_workers = max(1, min(multiprocessing.cpu_count(), 8))
         progress(5, f"Starting parallel {experiment} extraction ({num_workers} workers, {total} files)...")
 
-        _exp = experiment
-        _min_bonds = args.min_bonds
-        _max_bonds = args.max_bonds
-        _include_diagonal = args.include_diagonal
-
-        def _worker_cosy(sdf_path):
-            try:
-                df = dataframe_for_sdf(
-                    sdf_path,
-                    experiment=_exp,
-                    min_bonds=_min_bonds,
-                    max_bonds=_max_bonds,
-                    include_diagonal=_include_diagonal,
-                )
-                return df
-            except Exception as e:
-                print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
-                return pd.DataFrame()
-
         frames: List[pd.DataFrame] = []
         done = 0
 
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_worker_cosy, sdf): sdf for sdf in files}
+            futures = {executor.submit(_worker_cosy, (sdf, experiment, args.min_bonds, args.max_bonds, args.include_diagonal)): sdf for sdf in files}
             for future in as_completed(futures):
                 done += 1
                 if done % 50 == 0 or done == total:

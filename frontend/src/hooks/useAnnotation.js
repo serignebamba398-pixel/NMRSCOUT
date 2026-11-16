@@ -346,26 +346,17 @@ export const useAnnotation = ({
               return;
             }
 
-            // Calculate number of completed molecules for this method
-            // R sends current (source index) and total (total sources)
-            const cur = Number(data?.current);
-            const tot = Number(data?.total);
-            
-            if (Number.isFinite(cur) && Number.isFinite(tot) && tot > 0) {
-              // Update total if not yet received via total_sources
-              if (totalSourcesByMethod[type] === 0) {
-                totalSourcesByMethod[type] = tot;
+            // Use the percent already correctly calculated by the backend
+            const pct = Number(data?.percent);
+            if (Number.isFinite(pct) && pct >= 0) {
+              progressByMethod[type] = pct;
+              const total = totalSourcesByMethod[type] || 0;
+              if (total > 0) {
+                completedByMethod[type] = Math.round((pct / 100) * total);
               }
-              // Calculate number of completed annotations (cur represents % from 0-100)
-              // So we convert to number of sources
-              const completedCount = Math.round((cur / 100) * totalSourcesByMethod[type]);
-              completedByMethod[type] = completedCount;
-              progressByMethod[type] = cur; // cur is already in % (0-100)
             }
-            
-            // Recalculate and display global progression
-            const methodProgress = Number.isFinite(cur) ? cur : progressByMethod[type];
-            updateGlobalProgress(`${type}: ${data?.message || 'In progress…'}`, type, methodProgress);
+
+            updateGlobalProgress(`${type}: ${data?.message || 'In progress…'}`, type, progressByMethod[type]);
           },
           onLog: (msg) => addLog(`[${type}] ${msg}`),
           onError: (err) => {

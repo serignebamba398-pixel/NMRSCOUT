@@ -293,9 +293,13 @@ function SpectrumDetailModal({
         })
         .catch(err => {
           console.warn('[SpectrumDetailModal] Failed to fetch multiplicity data:', err);
-          const errorMsg = err.response?.data?.error || err.message || 'Unknown error';
-          const errorDetails = err.response?.data ? JSON.stringify(err.response.data, null, 2) : '';
-          setMultiplicityError(`${errorMsg}${errorDetails ? '\n\nDetails:\n' + errorDetails : ''}`);
+          const serverError = err.response?.data?.error || err.message || 'Unknown error';
+          // If molecule not found in predictions, show a clean message (not the full available list)
+          const isNotFound = err.response?.status === 404 || serverError.toLowerCase().includes('not found');
+          const errorMsg = isNotFound
+            ? `Spectrum not available: this molecule was not predicted (too complex or prediction failed).`
+            : serverError;
+          setMultiplicityError(errorMsg);
           setFetchedMultiplicityData(null);
           setLoadingMultiplicity(false);
         });

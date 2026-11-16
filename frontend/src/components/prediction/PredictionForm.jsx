@@ -182,6 +182,32 @@ export const PredictionForm = ({
               }
               disabled={running}
             />
+            <ParameterInput
+              label="Min MW (Da)"
+              value={options.min_mw ?? ""}
+              type="number"
+              placeholder="e.g. 50"
+              onChange={(e) =>
+                setPredictionState((prev) => ({
+                  ...prev,
+                  options: { ...prev.options, min_mw: e.target.value },
+                }))
+              }
+              disabled={running}
+            />
+            <ParameterInput
+              label="Max MW (Da)"
+              value={options.max_mw ?? ""}
+              type="number"
+              placeholder="e.g. 500"
+              onChange={(e) =>
+                setPredictionState((prev) => ({
+                  ...prev,
+                  options: { ...prev.options, max_mw: e.target.value },
+                }))
+              }
+              disabled={running}
+            />
           </div>
         </div>
       )}

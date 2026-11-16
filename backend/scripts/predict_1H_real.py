@@ -9,7 +9,7 @@ import argparse
 import traceback
 from typing import Dict, List, Tuple, Iterable, Optional
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor as ProcessPoolExecutor, as_completed
 import multiprocessing
 
 import pandas as pd

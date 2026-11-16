@@ -8,7 +8,7 @@ import argparse
 import collections
 import traceback
 from typing import List, Dict, Tuple
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor as ProcessPoolExecutor, as_completed
 import multiprocessing
 
 import numpy as np
@@ -458,7 +458,6 @@ def fold_13C_shift(vi: float, low: float, high: float) -> float:
 def build_hsqc_table_from_sdf(sdf_path: str, do_fold: bool, fold_low: float, fold_high: float) -> pd.DataFrame:
     """Builds the HSQC table for a single SDF (optional 13C F1 folding)."""
     try:
-        progress(10, f"Reading {os.path.basename(sdf_path)}...")  # [NEW]
         mol = read_molecule_keepH(sdf_path)
         if mol is None:
             log(f"[ERROR] Unreadable molecule: {os.path.basename(sdf_path)}")
@@ -471,18 +470,15 @@ def build_hsqc_table_from_sdf(sdf_path: str, do_fold: bool, fold_low: float, fol
             return pd.DataFrame()
 
         # C–H connectivity from the SDF
-        progress(25, "Analyzing C–H connectivity...")  # [NEW]
         atom_list, connectivity_list, _, _ = get_molecule_data(sdf_path)
         c_h_connectivity_dict = get_c_h_connectivity(connectivity_list, atom_list)
 
         # symmetry detection (for deduplication of symmetric carbons)
-        progress(40, "Detecting symmetry...")  # [NEW]
         sym_dupl_lists, _, _, _ = run_chiral_and_symmetry_finder(compound_path=sdf_path)
 
         # select shifts - auto-split CH2 if shifts different (diastereotopic already corrected in SDF)
         shifts = selecting_shifts(c_h_connectivity_dict, ml_shifts)
         shifts = perform_deduplication_if_symmetric(shifts, sym_dupl_lists)
-        progress(60, "Computing HSQC correlations...")  # [NEW]
 
         df = generate_ml_dataframe(shifts)
         if df.empty:
@@ -520,6 +516,18 @@ def build_hsqc_table_from_sdf(sdf_path: str, do_fold: bool, fold_low: float, fol
         log(f"[ERROR] Error on {os.path.basename(sdf_path)}: {e}")
         traceback.print_exc(file=sys.stdout)
         return pd.DataFrame()
+
+# ----------------------------- Parallel worker (module-level for pickling) ----
+def _worker_hsqc(args_tuple):
+    sdf_path, do_fold, fold_low, fold_high = args_tuple
+    try:
+        return build_hsqc_table_from_sdf(sdf_path, do_fold, fold_low, fold_high)
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
+        traceback.print_exc()
+        return pd.DataFrame()
+
 
 # ===========================================================
 # 6) CLI (ARGS SERVEUR)
@@ -574,22 +582,11 @@ def main():
         num_workers = max(1, min(multiprocessing.cpu_count(), 8))
         progress(5, f"Starting parallel HSQC extraction ({num_workers} workers, {total} files)...")
 
-        _do_fold = args.fold
-        _fold_low = fold_low
-        _fold_high = fold_high
-
-        def _worker_hsqc(sdf_path):
-            try:
-                return build_hsqc_table_from_sdf(sdf_path, _do_fold, _fold_low, _fold_high)
-            except Exception as e:
-                print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
-                return pd.DataFrame()
-
         all_tables: List[pd.DataFrame] = []
         done = 0
 
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_worker_hsqc, sdf): sdf for sdf in files}
+            futures = {executor.submit(_worker_hsqc, (sdf, args.fold, fold_low, fold_high)): sdf for sdf in files}
             for future in as_completed(futures):
                 done += 1
                 if done % 50 == 0 or done == total:

@@ -387,6 +387,20 @@ def _params_match(old_params: Dict[str, Any], new_params: Dict[str, Any]) -> boo
             return False
     return True
 
+def _load_sidecar_payload(resume_dir: str, mol_id: str) -> Optional[dict]:
+    """Try to load a multiplicity sidecar JSON for mol_id from resume_dir."""
+    if not resume_dir:
+        return None
+    sidecar_path = os.path.join(resume_dir, f"{sanitize_filename(mol_id)}_multiplicity.json")
+    if os.path.exists(sidecar_path):
+        try:
+            with open(sidecar_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return None
+
+
 def _copy_sdf_to_output(src_path: str, dest_dir: str) -> str:
     """Copy an SDF file and upgrade legacy 2D coordinates for the 3D viewer."""
     if not os.path.exists(src_path):
@@ -2019,7 +2033,7 @@ def _run_csv_threaded(
     since GNN forward passes are not thread-safe."""
 
     lock = threading.Lock()
-    completed_count = [0]
+    completed_count = [0]  # mutable container for thread-safe increment
 
     def process_one(mol_data):
         mol_id = mol_data['mol_id']
@@ -2034,6 +2048,7 @@ def _run_csv_threaded(
                     sim_params=sim_params,
                     return_payload=True,
                 )
+                # Update shared model bundle in-place
                 models.net_1h = updated_models.net_1h
                 models.net_13c = updated_models.net_13c
                 models.mean_std_1h = updated_models.mean_std_1h
@@ -2045,6 +2060,8 @@ def _run_csv_threaded(
                 _GLOBAL_MOLECULE_COUNTER["done"] += 1
 
             if payload is not None:
+                # Write sidecar to disk so it survives interruptions
+                _write_multiplicity_json(out_dir, mol_id, payload)
                 with lock:
                     all_multiplicity_payloads.append(payload)
 
@@ -2176,6 +2193,8 @@ def run_csv(
     sim_params: Optional[dict] = None,
     num_workers: int = 1,
     resume_from_dir: Optional[str] = None,
+    min_mw: Optional[float] = None,
+    max_mw: Optional[float] = None,
 ) -> None:
     ensure_dir(out_dir)
 
@@ -2247,6 +2266,34 @@ def run_csv(
             all_molecules.append({'mol_id': mol_id, 'smiles': smi, 'index': idx})
     if duplicates > 0:
         send_log(f"[DEDUP] {duplicates} doublons ignores ({len(all_molecules)} molecules uniques sur {len(all_molecules) + duplicates})")
+
+    # Molecular weight filter (passed as parameters)
+    if min_mw is not None or max_mw is not None:
+        from rdkit.Chem import Descriptors
+        filtered = []
+        skipped_mw = 0
+        for mol_data in all_molecules:
+            smi = mol_data.get('smiles', '')
+            mol_obj = None
+            if smi:
+                try:
+                    mol_obj = Chem.MolFromSmiles(smi)
+                except Exception:
+                    pass
+            if mol_obj is None:
+                filtered.append(mol_data)
+                continue
+            mw = Descriptors.ExactMolWt(mol_obj)
+            if min_mw is not None and mw < min_mw:
+                skipped_mw += 1
+                continue
+            if max_mw is not None and mw > max_mw:
+                skipped_mw += 1
+                continue
+            filtered.append(mol_data)
+        send_log(f"[MW FILTER] min={min_mw} max={max_mw} Da — {skipped_mw} molécules ignorées, {len(filtered)} retenues")
+        all_molecules = filtered
+
     total = len(all_molecules)
 
     _GLOBAL_MOLECULE_COUNTER["total"] = total
@@ -2283,8 +2330,9 @@ def run_csv(
                         "reused": True,
                     })
 
-                    if "payload" in existing and existing["payload"]:
-                        reused_payloads.append(existing["payload"])
+                    payload = existing.get("payload") or _load_sidecar_payload(resume_from_dir, mol_id)
+                    if payload:
+                        reused_payloads.append(payload)
 
                     if current_done % 100 == 0 or current_done == total:
                         send_log(f"[RESUME] [OK] {current_done}/{total} molécules réutilisées (paramètres identiques)")
@@ -2314,10 +2362,11 @@ def run_csv(
                         "error": "",
                         "reused": True,
                     })
-                    # Try to recover payload from all_multiplicities.json
+                    # Try to recover payload from all_multiplicities.json, then sidecar file
                     existing_fallback = existing_mol_data.get(mol_id, {})
-                    if "payload" in existing_fallback and existing_fallback["payload"]:
-                        reused_payloads.append(existing_fallback["payload"])
+                    payload = existing_fallback.get("payload") or _load_sidecar_payload(resume_from_dir, mol_id)
+                    if payload:
+                        reused_payloads.append(payload)
                     if current_done % 100 == 0 or current_done == total:
                         send_log(f"[RESUME] [OK] {current_done}/{total} molécules réutilisées depuis disque (SDF existant)")
                     continue
@@ -2397,6 +2446,7 @@ def run_csv(
                 ok += 1
 
                 if payload is not None:
+                    _write_multiplicity_json(out_dir, mol_id, payload)
                     all_multiplicity_payloads.append(payload)
 
                 _GLOBAL_MOLECULE_COUNTER["done"] += 1
@@ -2497,6 +2547,11 @@ def build_argparser() -> argparse.ArgumentParser:
 
     ap.add_argument("--property_key", default="(1)", help="Clé de propriété SDF pour stocker la liste de shifts")
     ap.add_argument("--task_id", default=None, help="ID de tâche externe (optionnel, pour logs)")
+
+    ap.add_argument("--min_mw", type=float, default=None,
+                    help="Poids moléculaire minimum (Da) — molécules plus légères ignorées")
+    ap.add_argument("--max_mw", type=float, default=None,
+                    help="Poids moléculaire maximum (Da) — molécules plus lourdes ignorées")
 
     ap.add_argument("--resume-from-dir", default=None, dest="resume_from_dir",
                     help="Dossier d'une prédiction précédente pour reprise incrémentale. "
@@ -2612,7 +2667,9 @@ def main(argv: Optional[List[str]] = None) -> None:
                 multiplicity_mod=multiplicity_mod,
                 sim_params=sim_params,
                 num_workers=getattr(args, 'workers', 0),
-                resume_from_dir=getattr(args, 'resume_from_dir', None)
+                resume_from_dir=getattr(args, 'resume_from_dir', None),
+                min_mw=getattr(args, 'min_mw', None),
+                max_mw=getattr(args, 'max_mw', None),
             )
     except Exception as e:
         send_error("Erreur fatale", error=str(e), traceback=traceback.format_exc())

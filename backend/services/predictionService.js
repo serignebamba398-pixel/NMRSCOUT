@@ -158,7 +158,7 @@ function handlePrediction(req, res) {
     const sdfFile = req.body?.sdfFile ? path.basename(req.body.sdfFile) : null;
     const csvFile = req.body?.csvFile ? path.basename(req.body.csvFile) : null;
 
-    const selectedMethods = req.body?.methods || req.body?.kinds || ['1H', '13C', 'COSY', 'HSQC'];
+    const selectedMethods = req.body?.methods || req.body?.kinds || ['1H', '13C', 'COSY', 'TOCSY', 'HSQC'];
     const projectId = req.body?.projectId;
 
     if (!mode) {
@@ -540,6 +540,10 @@ function handlePrediction(req, res) {
       if (options.batch_size) args.push('--batch_size', String(options.batch_size));
       if (options.mol_id) args.push('--mol_id', String(options.mol_id));
       if (options.nb_cores && parseInt(options.nb_cores) > 1) args.push('--workers', String(parseInt(options.nb_cores)));
+
+      // Molecular weight filter
+      if (options.min_mw != null && options.min_mw !== '') args.push('--min_mw', String(Number(options.min_mw)));
+      if (options.max_mw != null && options.max_mw !== '') args.push('--max_mw', String(Number(options.max_mw)));
 
       // Experimental parameters for multiplicity JSON generation
       const freqMhz = Number(options.freq_mhz) || 700;

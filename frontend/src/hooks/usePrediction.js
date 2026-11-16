@@ -389,12 +389,13 @@ export const usePrediction = ({
       nMol = 1;
     }
 
+    const isResuming = !!(options.resumeFromDir);
     totalMoleculesRef.current = nMol;
     completedMoleculesRef.current = 0;
     setTotalMolecules(nMol);
     setCompletedMolecules(0);
-    setProgress(0);
-    setProgressMessage(`Starting… (~${nMol} molecules)`);
+    if (!isResuming) setProgress(0);
+    setProgressMessage(isResuming ? `Resuming… (~${nMol} molecules)` : `Starting… (~${nMol} molecules)`);
 
     setPredictionState((prev) => ({
       ...prev,
@@ -474,6 +475,9 @@ export const usePrediction = ({
             solvent: solvent,
             temperature_k: temperatureK,
             ph: pH,
+            // Molecular weight filter
+            min_mw: options.min_mw !== '' && options.min_mw != null ? Number(options.min_mw) : undefined,
+            max_mw: options.max_mw !== '' && options.max_mw != null ? Number(options.max_mw) : undefined,
             extractors: {
               cosy: { min_bonds: normalizedMin, max_bonds: normalizedMax, include_diagonal: options.cosy?.include_diagonal ?? true },
               tocsy: selectedPredMethods.includes('TOCSY') ? tocsyPredictionOptions(options.tocsy) : undefined,

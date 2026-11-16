@@ -8,7 +8,7 @@ import json
 import argparse
 import traceback
 from typing import List
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor as ProcessPoolExecutor, as_completed
 import multiprocessing
 
 import pandas as pd
@@ -116,7 +116,6 @@ def carbon_h_neighbors(mol, c_idx: int) -> List[int]:
 def dataframe_for_sdf(sdf_path: str, carbon_mode: str = "nonquaternary") -> pd.DataFrame:
     
     try:
-        progress(10, f"Reading {os.path.basename(sdf_path)}...")  # [NEW]
         mol = read_molecule_keepH(sdf_path)
         if mol is None:
             log(f"[ERROR] Unreadable SDF: {os.path.basename(sdf_path)}")
@@ -135,8 +134,6 @@ def dataframe_for_sdf(sdf_path: str, carbon_mode: str = "nonquaternary") -> pd.D
             c_indices = get_all_carbons(mol)
         else:
             c_indices = get_protonated_carbons(mol)
-
-        progress(40, f"Extracting carbons ({len(c_indices)} found)...")  # [NEW]
 
         rows = []
         for c_idx in c_indices:
@@ -158,12 +155,56 @@ def dataframe_for_sdf(sdf_path: str, carbon_mode: str = "nonquaternary") -> pd.D
                 "ECFP4":     fp,
             })
 
-        progress(70, "Building DataFrame...")  # [NEW]
         return pd.DataFrame(rows)
 
     except Exception as e:
         log(f"[ERROR] Error on {os.path.basename(sdf_path)}: {e}")
         traceback.print_exc(file=sys.stdout)
+        return pd.DataFrame()
+
+
+# ----------------------------- Parallel worker (module-level for pickling) ----
+def _worker_13c(args_tuple):
+    sdf_path, carbon_mode = args_tuple
+    try:
+        from ml_sdf_utils import read_molecule_keepH, get_atom_shift_vector, ecfp4_bitstring
+        from rdkit import RDLogger
+        import os, pandas as pd
+        RDLogger.DisableLog('rdApp.*')
+        mol = read_molecule_keepH(sdf_path)
+        if mol is None:
+            return pd.DataFrame()
+        shifts = get_atom_shift_vector(sdf_path)
+        fp = ecfp4_bitstring(mol)
+        if carbon_mode == "all":
+            c_indices = [a.GetIdx() for a in mol.GetAtoms() if a.GetSymbol() == 'C']
+        else:
+            c_indices = [a.GetIdx() for a in mol.GetAtoms()
+                         if a.GetSymbol() == 'C' and
+                         any(nb.GetSymbol() == 'H' for nb in a.GetNeighbors())]
+        rows = []
+        for c_idx in c_indices:
+            delta = None
+            if shifts and 0 <= c_idx < len(shifts):
+                try:
+                    delta = round(float(shifts[c_idx]), 3)
+                except Exception:
+                    delta = None
+            h_idx_list = [nb.GetIdx() for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors()
+                          if nb.GetSymbol() == 'H']
+            rows.append({
+                "Filename":  os.path.basename(sdf_path),
+                "C_index":   c_idx,
+                "Nb_H":      len(h_idx_list),
+                "H_indices": "|".join(map(str, h_idx_list)) if h_idx_list else "",
+                "Delta_ppm": delta,
+                "ECFP4":     fp,
+            })
+        return pd.DataFrame(rows)
+    except Exception as e:
+        import traceback
+        print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
+        traceback.print_exc()
         return pd.DataFrame()
 
 
@@ -205,47 +246,9 @@ def main():
         done = 0
 
         carbon_mode = args.carbon_mode
-        def _worker_13c(sdf_path):
-            try:
-                from ml_sdf_utils import read_molecule_keepH, get_atom_shift_vector, ecfp4_bitstring
-                from rdkit import RDLogger
-                RDLogger.DisableLog('rdApp.*')
-                mol = read_molecule_keepH(sdf_path)
-                if mol is None:
-                    return pd.DataFrame()
-                shifts = get_atom_shift_vector(sdf_path)
-                fp = ecfp4_bitstring(mol)
-                if carbon_mode == "all":
-                    c_indices = [a.GetIdx() for a in mol.GetAtoms() if a.GetSymbol() == 'C']
-                else:
-                    c_indices = [a.GetIdx() for a in mol.GetAtoms()
-                                 if a.GetSymbol() == 'C' and
-                                 any(nb.GetSymbol() == 'H' for nb in a.GetNeighbors())]
-                rows = []
-                for c_idx in c_indices:
-                    delta = None
-                    if shifts and 0 <= c_idx < len(shifts):
-                        try:
-                            delta = round(float(shifts[c_idx]), 3)
-                        except Exception:
-                            delta = None
-                    h_idx_list = [nb.GetIdx() for nb in mol.GetAtomWithIdx(c_idx).GetNeighbors()
-                                  if nb.GetSymbol() == 'H']
-                    rows.append({
-                        "Filename":  os.path.basename(sdf_path),
-                        "C_index":   c_idx,
-                        "Nb_H":      len(h_idx_list),
-                        "H_indices": "|".join(map(str, h_idx_list)) if h_idx_list else "",
-                        "Delta_ppm": delta,
-                        "ECFP4":     fp,
-                    })
-                return pd.DataFrame(rows)
-            except Exception as e:
-                print(f"[ERROR] Error on {sdf_path}: {e}", flush=True)
-                return pd.DataFrame()
 
         with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = {executor.submit(_worker_13c, sdf): sdf for sdf in files}
+            futures = {executor.submit(_worker_13c, (sdf, carbon_mode)): sdf for sdf in files}
             for future in as_completed(futures):
                 done += 1
                 if done % 50 == 0 or done == total:

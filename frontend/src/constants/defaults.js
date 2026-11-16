@@ -74,6 +74,8 @@ export const DEFAULT_PREDICTION_OPTIONS = {
   solvent: "CDCl3",
   temperature_k: 298,
   ph: 7.4,
+  min_mw: "",
+  max_mw: "",
 };
 
 /**

@@ -283,6 +283,26 @@ export const TabbedPredictionInterface = ({ inModal = false, onClose }) => {
                 disabled={running}
               />
             </div>
+            <div className="form-field">
+              <label>Min MW (Da)</label>
+              <input
+                type="number"
+                value={options.min_mw ?? ''}
+                onChange={(e) => updateOption('min_mw', e.target.value)}
+                disabled={running}
+                placeholder="e.g. 50"
+              />
+            </div>
+            <div className="form-field">
+              <label>Max MW (Da)</label>
+              <input
+                type="number"
+                value={options.max_mw ?? ''}
+                onChange={(e) => updateOption('max_mw', e.target.value)}
+                disabled={running}
+                placeholder="e.g. 500"
+              />
+            </div>
           </div>
 
           {/* Incremental prediction - resume from existing task */}

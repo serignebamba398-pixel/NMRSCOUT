@@ -151,12 +151,19 @@ const AppContent = () => {
     }
   }, [currentProject, setCurrentProject, addLog]);
 
+  // Strip non-serializable objects (File instances) before sending via Electron IPC
+  const serializableState = useCallback(() => {
+    const { matrixFiles: _mf, ...safeAnnotation } = annotationState;
+    const { csvLocalFile: _cf, ...safePrediction } = predictionState;
+    return { predictionState: safePrediction, annotationState: safeAnnotation, viewerData, customColors };
+  }, [annotationState, predictionState, viewerData, customColors]);
+
   const handleSaveProject = useCallback(async () => {
     if (!currentProject) return;
     setLoading(true);
     try {
       if (IS_ELECTRON) {
-        const state = { predictionState, annotationState, viewerData, customColors };
+        const state = serializableState();
         const r = await window.electronAPI.saveProjectState(state);
         if (!r?.success) {
           console.warn('Project save: failed', r?.error);
@@ -192,7 +199,7 @@ const AppContent = () => {
     if (IS_ELECTRON) {
       setLoading(true);
       try {
-        const state = { predictionState, annotationState, viewerData, customColors };
+        const state = serializableState();
         const result = await window.electronAPI.saveProjectAs(state);
         if (!result) { addLog('Save As: No response from system', 'error'); return; }
         if (result.cancelled) return;
@@ -244,7 +251,7 @@ const AppContent = () => {
     } finally {
       setLoading(false);
     }
-  }, [saveAsName, currentProject, predictionState, annotationState, viewerData, customColors, setCurrentProject, addLog]);
+  }, [saveAsName, currentProject, serializableState, setCurrentProject, addLog]);
 
   // ========== HANDLERS COMPUTE ==========
   const handleComputePrediction = useCallback(() => {

@@ -1181,6 +1181,7 @@ export const getDefaultParameters = (annotationType) =>
       coverage_threshold_subchain: 0,
       coverage_threshold_ransy: 0,
       max_missing_ransy: 50,
+      near_diagonal_tol: 0.0,
       nb_cores: 4,
     },
     TOCSY: {
@@ -1198,6 +1199,7 @@ export const getDefaultParameters = (annotationType) =>
       coverage_threshold_subchain: 0,
       coverage_threshold_ransy: 0,
       max_missing_ransy: 50,
+      near_diagonal_tol: 0.0,
       nb_cores: 4,
     },
     HSQC: {

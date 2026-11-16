@@ -1418,7 +1418,11 @@ tryCatch(
 
                 rows <- rbindlist(lapply(all_results, function(best) {
                   coverage_sub_ratio <- calculer_coverage_sub_ratio(best$sub_chain, mppm, tol_match)
-                  ransy_all <- as.numeric(best$ransy_ppms)
+                  ransy_all <- as.numeric(
+                    if (!is.null(best$ransy_ppms)) best$ransy_ppms
+                    else if (!is.null(best$RANSY_signals_all)) best$RANSY_signals_all
+                    else numeric(0)
+                  )
                   ransy_means <- vapply(ransy_all, get_mean_intensity_for_ppm, numeric(1))
 
                   pairs <- best$matched_pairs

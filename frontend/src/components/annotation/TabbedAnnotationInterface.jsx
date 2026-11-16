@@ -465,6 +465,19 @@ export const TabbedAnnotationInterface = ({ inModal = false, onClose }) => {
                 disabled={allRunning || typeParams.use_ransy === false}
               />
             </div>
+            {!is1D && (
+              <div className="param-row">
+                <label>Near-diagonal tolerance (ppm):</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={typeParams.near_diagonal_tol ?? 0}
+                  onChange={(e) => updateParameter(type, 'near_diagonal_tol', parseFloat(e.target.value) || 0)}
+                  disabled={allRunning}
+                />
+              </div>
+            )}
             <div className="param-row">
               <label>Number of cores (nb_cores):</label>
               <input
