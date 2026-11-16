@@ -90,10 +90,8 @@ RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     pyyaml \
     "pydantic<2"
 
-# DGL 2.2.1 (compatible torch 2.2.x CPU)
-# Le repo DGL contient des roues pour plusieurs arch ; on réutilise la même URL.
-RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
-    dgl==2.2.1 -f https://data.dgl.ai/wheels/torch-2.2/repo.html
+# DGL CPU — install from PyPI (data.dgl.ai wheel URL was deprecated)
+RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir dgl==2.2.1
 
 # Outils spectre
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
