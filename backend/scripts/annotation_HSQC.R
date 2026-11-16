@@ -1017,6 +1017,12 @@ tryCatch(
                         tryCatch(
                             {
                                 dt_mol <- tableau_final[Source == src, .(shift_value_F1, shift_value_F2, ECFP4, C_index, F1_ppm, F1_folded, Direction, Nb_H, H_indices, Method)]
+                                # Deduplicate predicted peaks: pairs within 0.5 ppm (F1/13C) AND
+                                # 0.05 ppm (F2/1H) count as 1 signal (e.g. CH3 gives 3 identical HSQC spots)
+                                dt_mol[, g1 := round(shift_value_F1 / 0.5) * 0.5]
+                                dt_mol[, g2 := round(shift_value_F2 / 0.05) * 0.05]
+                                dt_mol <- dt_mol[!duplicated(dt_mol[, .(g1, g2)])]
+                                dt_mol[, c("g1", "g2") := NULL]
                                 ecfp_str <- paste(unique(dt_mol$ECFP4), collapse = "|")
 
                                 if (!nrow(dt_mol)) {
