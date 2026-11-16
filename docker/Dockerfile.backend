@@ -90,8 +90,9 @@ RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     pyyaml \
     "pydantic<2"
 
-# DGL CPU — install from PyPI (data.dgl.ai wheel URL was deprecated)
-RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir dgl==2.2.1
+# DGL CPU — conda-forge has multi-arch wheels (amd64 + arm64)
+RUN micromamba install -y -n nmr -c conda-forge "dgl>=2.2,<2.3" && \
+    micromamba clean --all --yes
 
 # Outils spectre
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
