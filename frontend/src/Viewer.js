@@ -205,6 +205,11 @@ async function resolveMolForSource(csvUrl, sourceName, taskId = null) {
         `${base}${baseName}.mol`,
         `${base}${encodeURIComponent(baseName)}.sdf`,
         `${base}${encodeURIComponent(baseName)}.mol`,
+        // Also try with _predicted suffix in case source was normalized
+        `${base}${baseName}_predicted.sdf`,
+        `${base}${baseName}_predicted.mol`,
+        `${base}${encodeURIComponent(baseName + '_predicted')}.sdf`,
+        `${base}${encodeURIComponent(baseName + '_predicted')}.mol`,
       ];
       debugLog('[resolveMolForSource] Trying taskId candidates:', cand);
       for (const u of cand) {
@@ -234,6 +239,11 @@ async function resolveMolForSource(csvUrl, sourceName, taskId = null) {
       `${csvDir}${baseName}.mol`,
       `${csvDir}${baseName}.SDF`,
       `${csvDir}${baseName}.MOL`,
+      // Also try with _predicted suffix
+      `${csvDir}${baseName}_predicted.sdf`,
+      `${csvDir}${baseName}_predicted.mol`,
+      `${csvDir}${encodeURIComponent(baseName + '_predicted')}.sdf`,
+      `${csvDir}${encodeURIComponent(baseName + '_predicted')}.mol`,
     ];
     for (const u of cand) {
       const txt = await tryFetchText(u);
