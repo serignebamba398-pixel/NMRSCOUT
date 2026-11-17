@@ -2071,7 +2071,15 @@ export default function Viewer({
   const sortedSourcesWithScore = useMemo(() => {
     const union = new Set();
     Object.values(mapsByType).forEach(m => {
-      for (const s of m.keys()) union.add(s);
+      for (const s of m.keys()) {
+        // Normalize key so raw Source ("D-Alanine_predicted") and its stripped
+        // alias ("D-Alanine") both resolve to the same entry in the union.
+        const norm = s
+          .replace(/\.sdf$/i, '')
+          .replace(/_predicted$/i, '')
+          .replace(/^NMR_/i, '');
+        union.add(norm);
+      }
     });
     const arr = [...union];
 

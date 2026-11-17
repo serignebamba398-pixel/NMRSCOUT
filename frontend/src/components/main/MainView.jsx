@@ -149,6 +149,16 @@ export const MainView = ({ onMoleculeSelect }) => {
     return filtered;
   }, [molecules, filterQuery, coverageMin, coverageMax, signalPerMethod]);
 
+  // When sort or filters change, keep selectedMolecule in sync:
+  // if the current selection is no longer in the filtered list, move to the top.
+  useEffect(() => {
+    if (filteredMolecules.length === 0) return;
+    const stillVisible = filteredMolecules.some(m => m.source === selectedMolecule?.source);
+    if (!stillVisible) {
+      setSelectedMolecule(filteredMolecules[0]);
+    }
+  }, [filteredMolecules]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Load molecules from annotation CSVs
   useEffect(() => {
     const loadMolecules = async () => {
