@@ -93,7 +93,7 @@ RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
 # torchdata.datapipes API required by DGL.
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     "torchdata>=0.7,<0.8" && \
-    /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+    /opt/conda/envs/nmr/bin/pip install --no-cache-dir --retries 10 --timeout 60 \
     dgl==2.2.1 -f https://data.dgl.ai/wheels/torch-2.2/repo.html
 RUN /opt/conda/envs/nmr/bin/python -c \
     "import torch; from torchdata.datapipes.iter import IterDataPipe; import dgl; print('torch=' + torch.__version__ + ', dgl=' + dgl.__version__)"
