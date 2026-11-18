@@ -89,15 +89,14 @@ RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     pyyaml \
     "pydantic<2"
 
-# DGL CPU — arch-conditional install
-# amd64: official DGL wheel from new repo URL
-# arm64: latest DGL from PyPI (no arch-specific wheel needed)
-RUN if [ "${TARGETARCH}" = "arm64" ]; then \
-    /opt/conda/envs/nmr/bin/pip install --no-cache-dir dgl; \
-    else \
+# DGL 2.2.1 for PyTorch 2.2.x; torchdata 0.7.x provides the
+# torchdata.datapipes API required by DGL.
+RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+    "torchdata>=0.7,<0.8" && \
     /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
-        dgl -f https://data.dgl.ai/wheels/repo.html; \
-    fi
+    dgl==2.2.1 -f https://data.dgl.ai/wheels/torch-2.2/repo.html
+RUN /opt/conda/envs/nmr/bin/python -c \
+    "import torch; from torchdata.datapipes.iter import IterDataPipe; import dgl; print('torch=' + torch.__version__ + ', dgl=' + dgl.__version__)"
 
 # Outils spectre
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
