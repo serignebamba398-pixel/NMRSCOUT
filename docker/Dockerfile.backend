@@ -72,13 +72,13 @@ RUN if [ -f "backend/requirements.cpu.txt" ]; then \
     fi
 
 # ------------------------------------------
-# 5) Stack ML CPU – PyTorch/torchdata/DGL conditionnels
-#    arm64: torch==2.2.2 (sans +cpu) ; amd64: torch==2.2.2+cpu
+# 5) Stack ML CPU — PyTorch 2.1.x / DGL 2.1.x, aligned with Electron
+#    arm64: torch==2.1.2 (sans +cpu) ; amd64: torch==2.1.2+cpu
 # ------------------------------------------
 RUN if [ "${TARGETARCH}" = "arm64" ]; then \
-    TORCH_SPEC="torch==2.2.2"; \
+    TORCH_SPEC="torch==2.1.2"; \
     else \
-    TORCH_SPEC="torch==2.2.2+cpu"; \
+    TORCH_SPEC="torch==2.1.2+cpu"; \
     fi && \
     echo ">>> TARGETARCH=${TARGETARCH}  TORCH:${TORCH_SPEC}" && \
     /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
@@ -86,26 +86,28 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
     ${TORCH_SPEC}
 
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
-    "torchdata>=0.7,<0.8" \
     pyyaml \
     "pydantic<2"
 
-# DGL 2.2.1 (compatible torch 2.2.x CPU)
-# Le repo DGL contient des roues pour plusieurs arch ; on réutilise la même URL.
-RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
-    dgl==2.2.1 -f https://data.dgl.ai/wheels/torch-2.2/repo.html
+# Keep the PyTorch 2.1.2 pin; torchdata 0.7.0 metadata otherwise pins 2.1.0.
+RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir --no-deps \
+    torchdata==0.7.0
+RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir dgl==2.1.0
 
 # Outils spectre
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     nmrglue matplotlib pillow
 
-# Vérif rapide des versions
+# Vérif rapide des dépendances Python principales.
 RUN /opt/conda/envs/nmr/bin/python - <<'PY'
-import importlib, torch
+import torch
+from torchdata.datapipes.iter import IterDataPipe
+import dgl
+import nmrglue as ng
 print("Torch:", torch.__version__)
-dgl = importlib.import_module("dgl"); print("DGL:", dgl.__version__)
-td = importlib.import_module("torchdata"); print("torchdata:", td.__version__)
-import nmrglue as ng; print("nmrglue:", getattr(ng, "__version__", "ok"))
+print("DGL:", dgl.__version__)
+print("torchdata:", __import__("torchdata").__version__)
+print("nmrglue:", getattr(ng, "__version__", "ok"))
 PY
 
 # ------------------------------------------
