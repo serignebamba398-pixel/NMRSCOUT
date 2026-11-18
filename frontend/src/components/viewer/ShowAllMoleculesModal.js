@@ -1,7 +1,7 @@
 // src/components/viewer/ShowAllMoleculesModal.js
 // Modal to display all molecules of a project in a paginated grid
 
-import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import { loadRDKitFromCDN } from "../../utils/cdnLoaders";
 import { extractFirstMolBlockPreserving, tryFetchText, stripExplicitHFromMolblock } from "../../utils/molParser";
 import { debugLog, debugError } from "../../utils/debug";
@@ -22,7 +22,6 @@ function ShowAllMoleculesModal({
   const [page, setPage] = useState(Math.floor(currentIndex / ITEMS_PER_PAGE));
   const [molBlocks, setMolBlocks] = useState({});
   const [svgCache, setSvgCache] = useState({});
-  const generatedRef = useRef(new Set()); // track which filenames have been SVG-rendered
   const [loading, setLoading] = useState(false);
 
   // Loading RDKit
@@ -102,8 +101,7 @@ function ShowAllMoleculesModal({
 
     for (const m of pageItems) {
       const mol = m.molBlock || molBlocks[m.filename];
-      if (!mol || generatedRef.current.has(m.filename)) continue;
-      generatedRef.current.add(m.filename);
+      if (!mol || svgCache[m.filename]) continue;
 
       try {
         const { molblock: cleanMol } = stripExplicitHFromMolblock(mol);
@@ -135,7 +133,7 @@ function ShowAllMoleculesModal({
         debugError(`SVG gen failed for ${m.filename}:`, e);
       }
     }
-  }, [rdkit, pageItems, molBlocks]);
+  }, [rdkit, pageItems, molBlocks, svgCache]);
 
   const handleSelect = useCallback(
     (idx) => {
