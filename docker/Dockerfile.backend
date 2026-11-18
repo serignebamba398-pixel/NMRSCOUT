@@ -86,22 +86,27 @@ RUN if [ "${TARGETARCH}" = "arm64" ]; then \
     ${TORCH_SPEC}
 
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
+    "torchdata>=0.7,<0.8" \
     pyyaml \
     "pydantic<2"
 
-# DGL 2.2.1 for PyTorch 2.2.x; torchdata 0.7.x provides the
-# torchdata.datapipes API required by DGL.
+# DGL 2.2.1 (compatible torch 2.2.x CPU)
+# Le repo DGL contient des roues pour plusieurs arch ; on réutilise la même URL.
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
-    "torchdata>=0.7,<0.8" && \
-    /opt/conda/envs/nmr/bin/pip install --no-cache-dir --retries 10 --timeout 60 \
     dgl==2.2.1 -f https://data.dgl.ai/wheels/torch-2.2/repo.html
-RUN /opt/conda/envs/nmr/bin/python -c \
-    "import torch; from torchdata.datapipes.iter import IterDataPipe; import dgl; print('torch=' + torch.__version__ + ', dgl=' + dgl.__version__)"
 
 # Outils spectre
 RUN /opt/conda/envs/nmr/bin/pip install --no-cache-dir \
     nmrglue matplotlib pillow
 
+# Vérif rapide des versions
+RUN /opt/conda/envs/nmr/bin/python - <<'PY'
+import importlib, torch
+print("Torch:", torch.__version__)
+dgl = importlib.import_module("dgl"); print("DGL:", dgl.__version__)
+td = importlib.import_module("torchdata"); print("torchdata:", td.__version__)
+import nmrglue as ng; print("nmrglue:", getattr(ng, "__version__", "ok"))
+PY
 
 # ------------------------------------------
 # 6) Packages R
