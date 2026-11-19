@@ -166,7 +166,7 @@ function StickChart({
       ctx.strokeStyle = COLOR_THEORY;
       ctx.lineWidth = 2.5;
       for (const ppm of theory) {
-        const x = Math.round(ppmToX(ppm)) + 0.5;
+        const x = ppmToX(ppm);
         ctx.beginPath();
         ctx.moveTo(x, PAD + gridH);
         ctx.lineTo(x, PAD + gridH * 0.95);
@@ -179,7 +179,7 @@ function StickChart({
       ctx.strokeStyle = COLOR_EXP;
       ctx.lineWidth = 2.5;
       for (const { x: ppm } of expSeries) {
-        const xv = Math.round(ppmToX(ppm)) + 0.5;
+        const xv = ppmToX(ppm);
         ctx.beginPath();
         ctx.moveTo(xv, PAD + gridH);
         ctx.lineTo(xv, PAD + gridH * 0.95);
@@ -195,7 +195,8 @@ function StickChart({
       const t = i / ticks;
       const ppm = range.minX + t * (range.maxX - range.minX);
       const x = PAD + (reverse ? 1 - t : t) * gridW;
-      ctx.fillText(ppm.toFixed(2), x - 14, H - 8);
+      ctx.textAlign = "center";
+      ctx.fillText(String(ppm), x, H - 8);
     }
 
     // Zoom selection rectangle

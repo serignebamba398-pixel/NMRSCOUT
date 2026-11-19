@@ -206,7 +206,7 @@ function Scatter2D({
       const t = i / nGridX;
       const f2 = ranges.f2[1] - t * f2Range;
       const x = PAD_LEFT + t * gridW;
-      ctx.fillText(f2.toFixed(1), x, H - 8);
+      ctx.fillText(String(f2), x, H - 8);
     }
     ctx.fillText("F2 (ppm)", PAD_LEFT + gridW / 2, H - 1);
 
@@ -215,7 +215,7 @@ function Scatter2D({
       const t = i / nGridY;
       const f1 = ranges.f1[0] + t * f1Range;
       const y = PAD_TOP + t * gridH;
-      ctx.fillText(f1.toFixed(1), PAD_LEFT - 3, y + 3);
+      ctx.fillText(String(f1), PAD_LEFT - 3, y + 3);
     }
     ctx.save();
     ctx.translate(8, PAD_TOP + gridH / 2);
