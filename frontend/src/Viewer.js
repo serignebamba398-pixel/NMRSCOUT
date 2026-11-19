@@ -155,6 +155,26 @@ function parseAtomSymbolsFromMolblock(molblock) {
   return atoms;
 }
 
+const DEFAULT_RDK_COLORS = {
+  H1: [0, 0.72, 0.66],
+  C13: [0.23, 0.05, 0.64],
+  COSY: [1, 0.69, 0],
+  TOCSY: [0, 0.66, 0.47],
+  HSQC: [0.97, 0.15, 0.52],
+};
+const DEFAULT_3D_COLORS = {
+  H1: "#00B8A9",
+  C13: "#3A0CA3",
+  COSY: "#FFB000",
+  TOCSY: "#00A878",
+  HSQC: "#F72585",
+};
+
+const getSafeRgb = (customColors, key) =>
+  customColors?.[key]?.rgb || DEFAULT_RDK_COLORS[key] || [0, 0.5, 0.5];
+const getSafeHex = (customColors, key) =>
+  customColors?.[key]?.hex || DEFAULT_3D_COLORS[key] || "#008080";
+
 async function tryFetchText(url) {
   try {
     const r = await fetch(url, { method: "GET" });
@@ -327,28 +347,21 @@ function MoleculePane({
   const div3DRef = useRef(null);
   const viewerRef = useRef(null);
 
-  // Safe accessors — customColors may come from sessionStorage with missing fields
-  const defaultRgb = { H1: [0, 0.72, 0.66], C13: [0.23, 0.05, 0.64], COSY: [1, 0.69, 0], TOCSY: [0, 0.66, 0.47], HSQC: [0.97, 0.15, 0.52] };
-  const defaultHex = { H1: '#00B8A9', C13: '#3A0CA3', COSY: '#FFB000', TOCSY: '#00A878', HSQC: '#F72585' };
-  const safeRgb = (key) => customColors?.[key]?.rgb || defaultRgb[key] || [0, 0.5, 0.5];
-  const safeHex = (key) => customColors?.[key]?.hex || defaultHex[key] || '#008080';
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const COLORS_RDK = {
-    H1:  safeRgb('H1'),
-    C13: safeRgb('C13'),
-    COSY:safeRgb('COSY'),
-    TOCSY:safeRgb('TOCSY'),
-    HSQC:safeRgb('HSQC'),
-  };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const COLORS_3D = {
-    H1:  safeHex('H1'),
-    C13: safeHex('C13'),
-    COSY:safeHex('COSY'),
-    TOCSY:safeHex('TOCSY'),
-    HSQC:safeHex('HSQC'),
-  };
+  // Keep palette references stable because the render callbacks drive loading effects.
+  const COLORS_RDK = useMemo(() => ({
+    H1: getSafeRgb(customColors, "H1"),
+    C13: getSafeRgb(customColors, "C13"),
+    COSY: getSafeRgb(customColors, "COSY"),
+    TOCSY: getSafeRgb(customColors, "TOCSY"),
+    HSQC: getSafeRgb(customColors, "HSQC"),
+  }), [customColors]);
+  const COLORS_3D = useMemo(() => ({
+    H1: getSafeHex(customColors, "H1"),
+    C13: getSafeHex(customColors, "C13"),
+    COSY: getSafeHex(customColors, "COSY"),
+    TOCSY: getSafeHex(customColors, "TOCSY"),
+    HSQC: getSafeHex(customColors, "HSQC"),
+  }), [customColors]);
 
   // HSQC C–H bond highlighting in 2D.
   const computeMultiHighlights = useCallback((resolved, rowsByType) => {
@@ -1096,11 +1109,11 @@ function MoleculePane({
       {showLocalToggles && (
         <div style={{ marginTop:8, display:"flex", gap:10, flexWrap:"wrap", alignItems:"center", fontSize:12 }}>
           {[
-            ["H1", safeHex('H1')],
-            ["C13", safeHex('C13')],
-            ["COSY", safeHex('COSY')],
-            ["TOCSY", safeHex('TOCSY')],
-            ["HSQC", safeHex('HSQC')],
+            ["H1", getSafeHex(customColors, "H1")],
+            ["C13", getSafeHex(customColors, "C13")],
+            ["COSY", getSafeHex(customColors, "COSY")],
+            ["TOCSY", getSafeHex(customColors, "TOCSY")],
+            ["HSQC", getSafeHex(customColors, "HSQC")],
           ].filter(([k]) => isMethodAvailable(k) && multi?.rowsByType?.[k === "H1" ? "1H" : k === "C13" ? "13C" : k]).map(([k,hex]) => (
             <label key={k}
               style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"4px 8px",
